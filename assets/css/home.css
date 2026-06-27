@@ -1,4 +1,4 @@
-/* ===== OUKEI HUB Home Layout (Ver1.5.8.24) ===== */
+/* ===== OUKEI HUB Home Layout (Ver1.5.8.25) ===== */
 /* ホーム画面専用CSS — 微調整はこのファイルを編集してください */
 
 /* --- Legacy compat (index.html から移行) --- */
@@ -758,18 +758,15 @@
 }
 
 .homeCalLegendMark.isFilled {
-  background: #3b82f6;
-  border-radius: 50%;
-  width: 6px;
-  height: 6px;
+  background: rgba(255, 255, 255, .16);
+  border: 1px solid rgba(255, 255, 255, .12);
+  border-radius: 3px;
 }
 
 .homeCalLegendMark.isEmpty {
-  background: rgba(42, 66, 100, .55);
-  border: 1px solid rgba(58, 82, 118, .7);
-  border-radius: 50%;
-  width: 6px;
-  height: 6px;
+  background: rgba(8, 16, 32, .95);
+  border: 1px solid rgba(36, 58, 90, .85);
+  border-radius: 3px;
 }
 
 .homeCalDayLabel.isSun { color: #f87171; }
@@ -875,16 +872,19 @@
   }
 
   .homeCalDay {
-    min-height: 38px;
-    aspect-ratio: 1;
+    min-height: 44px;
+    aspect-ratio: unset;
     font-size: 11px;
     border-radius: 10px;
-    padding: 5px 2px 4px;
+    padding: 5px 3px 4px;
   }
 
-  .homeCalDayDot {
-    width: 5px;
-    height: 5px;
+  .homeCalDayNum {
+    font-size: 11px;
+  }
+
+  .homeCalDayAmt {
+    font-size: 9px;
   }
 
   .homeCalDayLabel {
@@ -1093,40 +1093,54 @@
 }
 
 .homeCalDay {
-  aspect-ratio: 1;
-  min-height: 34px;
+  aspect-ratio: unset;
+  min-height: 40px;
   border-radius: 10px;
   border: 1px solid rgba(36, 58, 90, .85);
   background: rgba(8, 16, 32, .95);
-  color: #dce8f8;
+  color: #eef4fc;
   font-size: 11px;
   font-weight: 800;
   cursor: pointer;
-  padding: 4px 2px 3px;
+  padding: 5px 3px 4px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 3px;
-  transition: border-color .15s, box-shadow .15s;
+  justify-content: space-between;
+  gap: 2px;
+  transition: background .15s, border-color .15s, box-shadow .15s;
+  overflow: hidden;
 }
 
 .homeCalDayNum {
-  line-height: 1;
+  line-height: 1.1;
+  font-size: 12px;
+  font-weight: 800;
+  color: #f0f6ff;
 }
 
-.homeCalDayDot {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  background: transparent;
+.homeCalDayAmt {
+  line-height: 1.1;
+  font-size: 9px;
+  font-weight: 800;
+  color: #60a5fa;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  letter-spacing: -.01em;
+}
+
+.homeCalDayAmt.isDash {
+  color: #5a7290;
+  font-weight: 700;
 }
 
 .homeCalDay--blank {
   background: transparent;
   border-color: transparent;
   pointer-events: none;
+  min-height: 0;
 }
 
 .homeCalDay.isEmpty {
@@ -1134,34 +1148,29 @@
   border-color: rgba(36, 58, 90, .85);
 }
 
-.homeCalDay.isEmpty .homeCalDayDot {
-  background: rgba(58, 82, 118, .45);
-}
-
 .homeCalDay.isFilled {
-  background: rgba(8, 16, 32, .95);
-  border-color: rgba(36, 58, 90, .85);
-  color: #eef7ff;
-}
-
-.homeCalDay.isFilled .homeCalDayDot {
-  background: #3b82f6;
-  box-shadow: 0 0 6px rgba(59, 130, 246, .45);
+  background: rgba(255, 255, 255, .11);
+  border-color: rgba(255, 255, 255, .1);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .06);
 }
 
 .homeCalDay.isToday {
   border-color: var(--gold);
-  box-shadow: 0 0 0 1px rgba(251, 191, 36, .45);
+  box-shadow: 0 0 0 1px rgba(251, 191, 36, .5);
 }
 
 .homeCalDay.isToday.isFilled {
   border-color: var(--gold);
-  background: rgba(10, 18, 34, .98);
-  box-shadow: 0 0 0 1px rgba(251, 191, 36, .5), inset 0 0 10px rgba(251, 191, 36, .06);
+  background: rgba(255, 255, 255, .13);
+  box-shadow:
+    0 0 0 1px rgba(251, 191, 36, .55),
+    inset 0 0 12px rgba(251, 191, 36, .05);
 }
 
-.homeCalDay.isToday.isFilled .homeCalDayDot {
-  background: #3b82f6;
+.homeCalDay.isToday.isEmpty {
+  border-color: var(--gold);
+  background: rgba(8, 16, 32, .95);
+  box-shadow: 0 0 0 1px rgba(251, 191, 36, .5);
 }
 
 .homeCalDay:active {

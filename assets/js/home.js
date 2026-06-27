@@ -1,4 +1,4 @@
-/* OUKEI HUB Home UI — Ver1.5.8.24 */
+/* OUKEI HUB Home UI — Ver1.5.8.25 */
 let homeCalView = { y: new Date().getFullYear(), m: new Date().getMonth() };
 
 function ensureRevenueLog() {
@@ -152,6 +152,11 @@ function fallbackProjectAmount(proj, sAll, mode) {
   return 0;
 }
 
+function formatCalDayAmount(entry) {
+  if (!entry) return '–';
+  return money(entry.total || 0);
+}
+
 function renderHomeCalendar() {
   if (typeof homeCalendar === 'undefined') return;
   ensureRevenueLog();
@@ -177,9 +182,10 @@ function renderHomeCalendar() {
     if (isToday) cls.push('isToday');
     if (entry) cls.push('isFilled');
     else cls.push('isEmpty');
-    cells += '<button type="button" class="' + cls.join(' ') + '" onclick="showRevenueDayDetail(\'' + key + '\')" aria-label="' + (m + 1) + '月' + d + '日">' +
+    let amtCls = entry ? 'homeCalDayAmt' : 'homeCalDayAmt isDash';
+    cells += '<button type="button" class="' + cls.join(' ') + '" onclick="showRevenueDayDetail(\'' + key + '\')" aria-label="' + (m + 1) + '月' + d + '日 ' + formatCalDayAmount(entry) + '">' +
       '<span class="homeCalDayNum">' + d + '</span>' +
-      '<span class="homeCalDayDot" aria-hidden="true"></span></button>';
+      '<span class="' + amtCls + '">' + formatCalDayAmount(entry) + '</span></button>';
   }
 
   homeCalendar.innerHTML =
