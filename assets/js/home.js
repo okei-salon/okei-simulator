@@ -1,4 +1,4 @@
-/* OUKEI HUB Home UI — Ver1.5.8.19 */
+/* OUKEI HUB Home UI — Ver1.5.8.20 */
 let homeCalView = { y: new Date().getFullYear(), m: new Date().getMonth() };
 
 function ensureRevenueLog() {

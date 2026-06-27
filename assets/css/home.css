@@ -1,4 +1,4 @@
-/* ===== OUKEI HUB Home Layout (Ver1.5.8.19) ===== */
+/* ===== OUKEI HUB Home Layout (Ver1.5.8.20) ===== */
 /* ホーム画面専用CSS — 微調整はこのファイルを編集してください */
 
 /* --- Legacy compat (index.html から移行) --- */
@@ -267,77 +267,33 @@
   text-align: left;
 }
 
-/* --- homeMainGrid / cards (Mac: 3段レイアウト) --- */
+/* --- homeMainGrid / cards --- */
 .homeMainGrid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  grid-template-rows: auto auto auto;
   gap: 10px;
-  align-items: stretch;
 }
 
-.homeInputCard {
-  grid-column: 1;
-  grid-row: 1;
+.homeInputCard,
+.homeCalendarCard,
+.homeMonthlyCard,
+.homeTodayCard,
+.homeChartCard {
   padding: 12px;
-  text-align: center;
-  justify-content: flex-start;
   min-height: 0;
-  height: auto;
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
 }
 
+.homeInputCard {
+  text-align: center;
+  justify-content: flex-start;
+}
+
 .homeInputBtnWrap {
-  flex: 1;
   display: flex;
   align-items: stretch;
   min-height: 0;
   margin-bottom: 6px;
-}
-
-.homeCalendarCard {
-  grid-column: 2;
-  grid-row: 1 / 3;
-  padding: 12px;
-  min-height: 0;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  box-sizing: border-box;
-}
-
-.homeMonthlyCard {
-  grid-column: 1;
-  grid-row: 2;
-  padding: 12px;
-  min-height: 0;
-  height: auto;
-  display: flex;
-  flex-direction: column;
-  box-sizing: border-box;
-}
-
-.homeTodayCard {
-  grid-column: 1;
-  grid-row: 3;
-  padding: 12px;
-  min-height: 0;
-  height: auto;
-  display: flex;
-  flex-direction: column;
-  box-sizing: border-box;
-}
-
-.homeChartCard {
-  grid-column: 2;
-  grid-row: 3;
-  padding: 12px;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  box-sizing: border-box;
 }
 
 .homeChartArea {
@@ -416,25 +372,70 @@
   color: var(--gold);
 }
 
-/* Mac版: 実績入力カードを1段分に収める */
+/* Mac版: 3段2列レイアウト */
 @media (min-width: 901px) {
+  .homeMainGrid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-rows: auto auto auto;
+    gap: 10px;
+    align-items: start;
+  }
+
+  .homeInputCard {
+    grid-column: 1;
+    grid-row: 1;
+    align-self: start;
+    width: 100%;
+  }
+
+  .homeMonthlyCard {
+    grid-column: 1;
+    grid-row: 2;
+    align-self: start;
+    width: 100%;
+  }
+
+  .homeTodayCard {
+    grid-column: 1;
+    grid-row: 3;
+    align-self: start;
+    width: 100%;
+  }
+
+  .homeCalendarCard {
+    grid-column: 2;
+    grid-row: 1 / 3;
+    align-self: stretch;
+    width: 100%;
+    min-height: 0;
+  }
+
+  .homeChartCard {
+    grid-column: 2;
+    grid-row: 3;
+    align-self: start;
+    width: 100%;
+  }
+
   .homeInputBtnWrap {
     flex: 0 0 auto;
   }
 
   .homeInputBtn--premium {
-    flex: none;
-    min-height: 92px;
-    height: 92px;
-    padding: 14px 16px;
+    flex: none !important;
+    min-height: 84px;
+    height: 84px;
+    max-height: 84px;
+    padding: 12px 14px;
   }
 
   .homeInputBtn--premium .homeInputBtnIcon {
-    font-size: 30px;
+    font-size: 28px;
   }
 
   .homeInputBtn--premium .homeInputBtnText {
-    font-size: 16px;
+    font-size: 15px;
   }
 
   .homeSummaryMain {
@@ -888,8 +889,15 @@
 
   .homeInputCard { order: 1; min-height: 0; }
 
+  .homeInputBtnWrap {
+    flex: 1;
+  }
+
   .homeInputBtn--premium {
+    flex: 1;
     min-height: 118px;
+    height: auto;
+    max-height: none;
     padding: 18px 14px;
   }
 
@@ -941,28 +949,29 @@
 
 /* --- おーちゃん部屋 --- */
 .ochanRoomPage {
-  max-width: 760px;
+  max-width: 640px;
   margin: 0 auto;
-  padding: 24px 12px 48px;
+  padding: 20px 12px 40px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 20px;
+  gap: 16px;
 }
 
 .ochanRoomHead {
   text-align: center;
+  flex-shrink: 0;
 }
 
 .ochanRoomTitle {
-  font-size: 26px;
+  font-size: 24px;
   font-weight: 900;
   margin: 0;
 }
 
 .ochanRoomStatus {
-  margin: 10px 0 0;
-  font-size: 15px;
+  margin: 8px 0 0;
+  font-size: 14px;
   font-weight: 800;
   color: #9db4d0;
   letter-spacing: .08em;
@@ -970,28 +979,53 @@
 
 .ochanRoomStage {
   width: 100%;
-  min-height: 340px;
+  max-width: 360px;
+  min-height: 0;
+  max-height: min(240px, 36vh);
   display: flex;
   align-items: center;
   justify-content: center;
   background: linear-gradient(180deg, rgba(37, 99, 235, .1) 0%, rgba(8, 20, 38, .4) 100%);
   border: 1px solid #2a4264;
-  border-radius: 22px;
-  padding: 28px 20px;
+  border-radius: 20px;
+  padding: 20px 24px;
+  overflow: hidden;
 }
 
 .ochanRoomAvatar {
-  width: min(300px, 72vw);
+  width: min(130px, 38vw);
+  max-height: min(180px, 28vh);
   height: auto;
   object-fit: contain;
-  filter: drop-shadow(0 16px 36px rgba(0, 0, 0, .32));
+  object-position: center bottom;
+  filter: drop-shadow(0 10px 24px rgba(0, 0, 0, .28));
 }
 
 .ochanRoomFuture {
   width: 100%;
   text-align: center;
+  flex-shrink: 0;
 }
 
 .ochanRoomActions {
-  margin-top: 4px;
+  margin-top: 0;
+  flex-shrink: 0;
+}
+
+@media (max-width: 900px) {
+  .ochanRoomPage {
+    padding: 16px 12px 32px;
+    gap: 14px;
+  }
+
+  .ochanRoomStage {
+    max-width: 280px;
+    max-height: min(200px, 32vh);
+    padding: 16px 18px;
+  }
+
+  .ochanRoomAvatar {
+    width: min(110px, 34vw);
+    max-height: min(150px, 24vh);
+  }
 }
