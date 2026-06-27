@@ -119,7 +119,7 @@ function updateHomeInputStats() {
   if (rateEl) rateEl.textContent = detail.rate + '%';
   if (detailEl) detailEl.textContent = detail.filled + ' / ' + detail.elapsed + '日';
   if (ringEl) {
-    let c = 2 * Math.PI * 15;
+    let c = 2 * Math.PI * 47;
     ringEl.setAttribute('stroke-dasharray', c.toFixed(2));
     ringEl.setAttribute('stroke-dashoffset', (c * (1 - detail.rate / 100)).toFixed(2));
   }

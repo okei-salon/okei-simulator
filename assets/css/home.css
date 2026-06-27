@@ -352,6 +352,7 @@
 
 .homeInputStatBlock--rate {
   gap: 10px;
+  margin-left: 12px;
 }
 
 .homeInputStatIcon {
@@ -411,27 +412,29 @@
 
 .homeInputRateRing {
   position: relative;
-  width: 48px;
-  height: 48px;
+  width: 100px;
+  height: 100px;
   flex-shrink: 0;
 }
 
-.homeInputRateRing svg {
-  width: 48px;
-  height: 48px;
+.homeInputRateRing svg,
+.homeInputRateSvg {
+  width: 100px;
+  height: 100px;
+  display: block;
   transform: rotate(-90deg);
 }
 
 .homeRateRingTrack {
   fill: none;
   stroke: rgba(42, 66, 100, .85);
-  stroke-width: 3.5;
+  stroke-width: 6;
 }
 
 .homeRateRingFill {
   fill: none;
   stroke: #3b82f6;
-  stroke-width: 3.5;
+  stroke-width: 6;
   stroke-linecap: round;
   transition: stroke-dashoffset .35s ease;
 }
@@ -442,7 +445,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 11px;
+  font-size: 20px;
   font-weight: 900;
   color: var(--text);
 }
@@ -902,17 +905,19 @@
   }
 
   .homeInputRateRing {
-    width: 54px;
-    height: 54px;
+    width: 100px;
+    height: 100px;
   }
 
-  .homeInputRateRing svg {
-    width: 54px;
-    height: 54px;
+  .homeInputRateRing svg,
+  .homeInputRateSvg {
+    width: 100px;
+    height: 100px;
+    display: block;
   }
 
   .homeInputRatePct {
-    font-size: 12px;
+    font-size: 20px;
   }
 
   .homeInputStatBody--streak .homeInputStatVal {
