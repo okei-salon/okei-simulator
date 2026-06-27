@@ -1,4 +1,4 @@
-/* ===== OUKEI HUB Home Layout (Ver1.5.8.22) ===== */
+/* ===== OUKEI HUB Home Layout (Ver1.5.8.23) ===== */
 /* ホーム画面専用CSS — 微調整はこのファイルを編集してください */
 
 /* --- Legacy compat (index.html から移行) --- */
@@ -276,17 +276,23 @@
 .homeCalendarCard,
 .homeMonthlyCard,
 .homeTodayCard {
-  padding: 12px;
+  padding: 14px;
   min-height: 0;
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
+  border-radius: 16px;
+  border: 1px solid rgba(96, 165, 250, .14);
+  background: linear-gradient(165deg, rgba(18, 32, 52, .98) 0%, rgba(8, 18, 32, .96) 100%);
+  box-shadow:
+    0 10px 32px rgba(0, 0, 0, .28),
+    inset 0 1px 0 rgba(255, 255, 255, .05);
 }
 
 .homeInputCard {
   text-align: center;
   justify-content: center;
-  gap: 10px;
+  gap: 12px;
 }
 
 .homeInputBtnWrap {
@@ -296,78 +302,209 @@
 }
 
 .homeInputStats {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
   width: 100%;
 }
 
-.homeInputStatRow {
+.homeInputStatBlock {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 8px;
-  padding: 7px 10px;
-  background: #081426;
-  border: 1px solid #2a4264;
-  border-radius: 10px;
-  font-size: 12px;
+  padding: 10px;
+  background: rgba(8, 20, 38, .72);
+  border: 1px solid rgba(42, 66, 100, .65);
+  border-radius: 12px;
+  text-align: left;
+  min-width: 0;
+}
+
+.homeInputStatIcon {
+  font-size: 18px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.homeInputStatBody {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
 }
 
 .homeInputStatLabel {
-  color: #9db4d0;
-  font-weight: 800;
+  color: #8fa8c5;
+  font-weight: 700;
+  font-size: 10px;
+  line-height: 1.3;
 }
 
 .homeInputStatVal {
   color: var(--text);
   font-weight: 900;
+  font-size: 18px;
+  line-height: 1.2;
+}
+
+.homeInputStatSub {
+  color: #9db4d0;
+  font-weight: 800;
+  font-size: 11px;
+}
+
+.homeInputRateRing {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+}
+
+.homeInputRateRing svg {
+  width: 44px;
+  height: 44px;
+  transform: rotate(-90deg);
+}
+
+.homeRateRingTrack {
+  fill: none;
+  stroke: rgba(42, 66, 100, .8);
+  stroke-width: 3;
+}
+
+.homeRateRingFill {
+  fill: none;
+  stroke: #3b82f6;
+  stroke-width: 3;
+  stroke-linecap: round;
+  transition: stroke-dashoffset .35s ease;
+}
+
+.homeInputRatePct {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 900;
+  color: var(--text);
 }
 
 .homeHeroCard {
-  background: linear-gradient(180deg, rgba(37, 99, 235, .08) 0%, rgba(15, 29, 49, .92) 100%);
-  border: 1px solid rgba(96, 165, 250, .22);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .04);
+  background: linear-gradient(165deg, rgba(22, 38, 62, .98) 0%, rgba(10, 20, 36, .97) 100%);
+  border-color: rgba(96, 165, 250, .2);
+  box-shadow:
+    0 12px 36px rgba(0, 0, 0, .32),
+    inset 0 1px 0 rgba(255, 255, 255, .06);
+}
+
+.homeHeroLabel,
+.homeTodayHeroLabel {
+  display: block;
+  font-size: 11px;
+  font-weight: 800;
+  color: #8fa8c5;
+  letter-spacing: .04em;
+  margin-bottom: 4px;
+}
+
+.homeHeroAmountRow {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+}
+
+.homeHeroYen {
+  margin: 0;
+  font-size: 14px;
+  color: #9db4d0;
 }
 
 .homeHeroAmount {
-  margin-top: 2px;
+  margin-top: 0;
 }
 
 .homeHeroCard .homeSummaryMain {
   font-size: 30px;
-  letter-spacing: -.01em;
+  letter-spacing: -.02em;
+  line-height: 1.15;
+}
+
+.homeChartBlock {
+  margin-top: 12px;
+}
+
+.homeChartBlockHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.homeChartBlockTitle {
+  font-size: 11px;
+  font-weight: 800;
+  color: #9db4d0;
+}
+
+.homeChartUnit {
+  font-size: 10px;
+  font-weight: 700;
+  color: #6b849f;
 }
 
 .homeLineChartArea {
-  margin-top: 10px;
-  background: #081426;
-  border: 1px solid #2a4264;
+  margin-top: 0;
+  background: rgba(6, 14, 28, .85);
+  border: 1px solid rgba(42, 66, 100, .75);
   border-radius: 12px;
-  padding: 8px 8px 4px;
+  padding: 8px 6px 4px;
   overflow: hidden;
 }
 
-.homeLineChartShell {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+.homeLineChartInner {
+  position: relative;
+}
+
+.homeLineChartTip {
+  position: absolute;
+  z-index: 2;
+  pointer-events: none;
+  padding: 4px 8px;
+  border-radius: 8px;
+  background: rgba(12, 24, 42, .96);
+  border: 1px solid rgba(96, 165, 250, .35);
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--text);
+  white-space: nowrap;
+  opacity: 0;
+  transform: translateY(2px);
+  transition: opacity .15s ease, transform .15s ease;
+}
+
+.homeLineChartTip.isVisible {
+  opacity: 1;
+  transform: translateY(0);
 }
 
 .homeLineChartSvg {
   width: 100%;
-  height: 82px;
+  height: 96px;
   display: block;
 }
 
 .homeLineGrid {
-  stroke: rgba(42, 66, 100, .5);
+  stroke: rgba(255, 255, 255, .06);
   stroke-width: 1;
-  stroke-dasharray: 2 3;
 }
 
-.homeLineYLabel {
-  fill: #7f97b3;
+.homeLineYLabel,
+.homeLineXLabel {
+  fill: #6b849f;
   font-size: 7px;
   font-weight: 700;
   font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic", Meiryo, sans-serif;
@@ -376,7 +513,7 @@
 .homeLineChartLine {
   fill: none;
   stroke: #60a5fa;
-  stroke-width: 2;
+  stroke-width: 1.5;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
@@ -384,99 +521,164 @@
 .homeLineChartFill {
   fill: url(#homeLineGrad);
   stroke: none;
-  opacity: .85;
+  opacity: 1;
+}
+
+.homeLineHit {
+  fill: transparent;
+  cursor: pointer;
 }
 
 .homeLineDot {
   fill: #93c5fd;
+  pointer-events: none;
 }
 
 .homeLineDot.isToday {
   fill: var(--gold);
-  stroke: rgba(251, 191, 36, .5);
-  stroke-width: 1.5;
+  stroke: rgba(251, 191, 36, .45);
+  stroke-width: 1.2;
 }
 
-.homeLineChartAxis {
-  display: flex;
-  justify-content: space-between;
-  font-size: 9px;
+.homeProjSection {
+  margin-top: 12px;
+}
+
+.homeProjSectionTitle {
+  font-size: 11px;
   font-weight: 800;
-  color: #7f97b3;
-  padding: 0 2px;
+  color: #8fa8c5;
+  margin-bottom: 8px;
 }
 
 .homeProjGrid {
   display: grid;
   grid-template-columns: repeat(var(--proj-cols, 1), minmax(0, 1fr));
   gap: 8px;
-  margin-top: 10px;
 }
 
 .homeProjCard {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
+  align-items: flex-start;
+  gap: 3px;
   min-width: 0;
-  padding: 10px 8px;
-  background: #081426;
-  border: 1px solid #2a4264;
+  padding: 10px 10px 8px;
+  background: rgba(8, 20, 38, .78);
+  border: 1px solid rgba(42, 66, 100, .7);
   border-radius: 12px;
-  text-align: center;
 }
 
-.homeProjCard--ram { border-color: rgba(59, 130, 246, .35); }
-.homeProjCard--orca { border-color: rgba(139, 92, 246, .35); }
-.homeProjCard--cary { border-color: rgba(245, 158, 11, .35); }
+.homeProjCardTop {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+}
+
+.homeProjCardDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: #3b82f6;
+}
+
+.homeProjCard--orca .homeProjCardDot { background: #8b5cf6; }
+.homeProjCard--cary .homeProjCardDot { background: #f59e0b; }
+
+.homeProjCard--ram { border-color: rgba(59, 130, 246, .28); }
+.homeProjCard--orca { border-color: rgba(139, 92, 246, .28); }
+.homeProjCard--cary { border-color: rgba(245, 158, 11, .28); }
 
 .homeProjCardName {
   font-size: 11px;
   font-weight: 800;
-  color: #9db4d0;
+  color: #b8cce4;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 100%;
 }
 
 .homeProjCardAmt {
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 900;
   color: var(--text);
+  line-height: 1.2;
+}
+
+.homeProjCardPct {
+  font-size: 10px;
+  font-weight: 800;
+  color: #7f97b3;
+}
+
+.homeProjCardBar {
+  width: 100%;
+  height: 3px;
+  margin-top: 4px;
+  background: rgba(42, 66, 100, .55);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.homeProjCardBarFill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #3b82f6, #60a5fa);
+  transition: width .25s ease;
+}
+
+.homeProjCard--orca .homeProjCardBarFill {
+  background: linear-gradient(90deg, #7c3aed, #a78bfa);
+}
+
+.homeProjCard--cary .homeProjCardBarFill {
+  background: linear-gradient(90deg, #d97706, #fbbf24);
 }
 
 .homeTodayHero {
-  margin-top: 2px;
+  margin-top: 0;
+}
+
+.homeTodayHero .homeSummaryMain {
+  font-size: 28px;
+  line-height: 1.15;
+}
+
+.homeTodayYen {
+  display: block;
+  margin-top: 4px;
+  font-size: 13px;
+  color: #9db4d0;
 }
 
 .homeTodayCompare {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 8px;
-  margin-top: 10px;
+  margin-top: 12px;
 }
 
 .homeTodayCompareItem {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  padding: 10px;
-  background: #081426;
-  border: 1px solid #2a4264;
+  padding: 10px 12px;
+  background: rgba(8, 20, 38, .72);
+  border: 1px solid rgba(42, 66, 100, .65);
   border-radius: 12px;
 }
 
 .homeTodayCompareItem--today {
-  border-color: rgba(96, 165, 250, .35);
-  background: linear-gradient(180deg, rgba(37, 99, 235, .12), #081426);
+  border-color: rgba(96, 165, 250, .32);
+  background: linear-gradient(180deg, rgba(37, 99, 235, .14), rgba(8, 20, 38, .82));
 }
 
 .homeTodayCompareLabel {
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 800;
-  color: #9db4d0;
+  color: #8fa8c5;
 }
 
 .homeTodayCompareVal {
@@ -492,6 +694,49 @@
 .homePanelHead--compact {
   margin-bottom: 8px;
 }
+
+.homeCalLegend {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px 12px;
+  margin-top: 6px;
+  padding-top: 4px;
+}
+
+.homeCalLegendItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 9px;
+  font-weight: 700;
+  color: #7f97b3;
+}
+
+.homeCalLegendMark {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  font-style: normal;
+}
+
+.homeCalLegendMark.isToday {
+  border: 1px solid var(--gold);
+  background: transparent;
+}
+
+.homeCalLegendMark.isFilled {
+  background: rgba(255, 255, 255, .22);
+}
+
+.homeCalLegendMark.isEmpty {
+  background: #081426;
+  border: 1px solid #2a4264;
+}
+
+.homeCalDayLabel.isSun { color: #f87171; }
+.homeCalDayLabel.isSat { color: #60a5fa; }
 
 /* Mac版: 4カード・2×2ダッシュボード */
 @media (min-width: 901px) {
@@ -513,7 +758,7 @@
     grid-column: 2;
     grid-row: 1;
     align-self: start;
-    padding: 8px 10px;
+    padding: 10px 12px;
   }
 
   .homeMonthlyCard {
@@ -554,12 +799,12 @@
   .homeCalendarPlaceholder {
     flex: 0 0 auto;
     min-height: 0;
-    padding: 4px 5px;
+    padding: 5px 6px;
     margin-bottom: 0;
   }
 
   .homeCalShell {
-    gap: 3px;
+    gap: 4px;
   }
 
   .homeCalHead {
@@ -568,7 +813,7 @@
   }
 
   .homePanelHead--compact {
-    margin-bottom: 4px;
+    margin-bottom: 6px;
   }
 
   .homePanelHead--compact .homePanelTitle {
@@ -576,35 +821,43 @@
   }
 
   .homeCalTitle {
-    font-size: 11px;
+    font-size: 12px;
   }
 
   .homeCalNavBtn {
-    width: 20px;
-    height: 20px;
-    font-size: 14px;
-    border-radius: 7px;
+    width: 22px;
+    height: 22px;
+    font-size: 15px;
+    border-radius: 8px;
   }
 
   .homeCalGrid {
-    gap: 2px;
+    gap: 3px;
     flex: 0 0 auto;
     align-content: start;
   }
 
   .homeCalDay {
     aspect-ratio: unset;
-    height: 17px;
-    min-height: 17px;
-    max-height: 17px;
-    font-size: 8px;
-    border-radius: 4px;
+    height: 22px;
+    min-height: 22px;
+    max-height: 22px;
+    font-size: 9px;
+    border-radius: 5px;
   }
 
   .homeCalDayLabel {
-    font-size: 7px;
-    padding: 0;
-    line-height: 1.1;
+    font-size: 8px;
+    padding: 1px 0;
+    line-height: 1.15;
+  }
+
+  .homeCalLegend {
+    margin-top: 4px;
+  }
+
+  .homeInputStatVal {
+    font-size: 17px;
   }
 
   .homeHeroCard .homeSummaryMain {

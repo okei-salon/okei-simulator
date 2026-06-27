@@ -1,4 +1,4 @@
-/* OUKEI HUB Home UI — Ver1.5.8.22 */
+/* OUKEI HUB Home UI — Ver1.5.8.23 */
 let homeCalView = { y: new Date().getFullYear(), m: new Date().getMonth() };
 
 function ensureRevenueLog() {
@@ -71,7 +71,7 @@ function calcInputStreak() {
   return streak;
 }
 
-function calcMonthInputRate() {
+function calcMonthInputDetail() {
   ensureRevenueLog();
   let now = new Date();
   let y = now.getFullYear();
@@ -81,7 +81,48 @@ function calcMonthInputRate() {
   for (let d = 1; d <= elapsed; d++) {
     if (getRevenueEntry(revenueDateKey(y, m, d))) filled++;
   }
-  return elapsed ? Math.round((filled / elapsed) * 100) : 0;
+  let rate = elapsed ? Math.round((filled / elapsed) * 100) : 0;
+  return { filled: filled, elapsed: elapsed, rate: rate };
+}
+
+function calcMonthInputRate() {
+  return calcMonthInputDetail().rate;
+}
+
+function renderProjectGrid(containerId, projects, getAmount, totalHint) {
+  let el = document.getElementById(containerId);
+  if (!el) return;
+  let n = Math.max(projects.length, 1);
+  el.style.setProperty('--proj-cols', n);
+  el.setAttribute('data-count', n);
+  let amounts = projects.map(function (p) { return getAmount(p); });
+  let total = typeof totalHint === 'number' ? totalHint : amounts.reduce(function (s, v) { return s + v; }, 0);
+  el.innerHTML = projects.map(function (p, i) {
+    let amt = amounts[i];
+    let pct = total > 0 ? Math.round((amt / total) * 1000) / 10 : 0;
+    return '<div class="homeProjCard homeProjCard--' + p.dot + '">' +
+      '<div class="homeProjCardTop"><span class="homeProjCardDot"></span><span class="homeProjCardName">' + p.name + '</span></div>' +
+      '<span class="homeProjCardAmt">' + money(amt) + '</span>' +
+      '<span class="homeProjCardPct">' + pct + '%</span>' +
+      '<div class="homeProjCardBar"><div class="homeProjCardBarFill" style="width:' + pct + '%"></div></div>' +
+      '</div>';
+  }).join('');
+}
+
+function updateHomeInputStats() {
+  let streakEl = document.getElementById('homeInputStreak');
+  let rateEl = document.getElementById('homeInputRate');
+  let detailEl = document.getElementById('homeInputRateDetail');
+  let ringEl = document.getElementById('homeInputRateRing');
+  let detail = calcMonthInputDetail();
+  if (streakEl) streakEl.textContent = calcInputStreak() + '日';
+  if (rateEl) rateEl.textContent = detail.rate + '%';
+  if (detailEl) detailEl.textContent = detail.filled + ' / ' + detail.elapsed + '日';
+  if (ringEl) {
+    let c = 2 * Math.PI * 15;
+    ringEl.setAttribute('stroke-dasharray', c.toFixed(2));
+    ringEl.setAttribute('stroke-dashoffset', (c * (1 - detail.rate / 100)).toFixed(2));
+  }
 }
 
 function sumMonthRevenueLog(y, m) {
@@ -111,27 +152,6 @@ function fallbackProjectAmount(proj, sAll, mode) {
   return 0;
 }
 
-function renderProjectGrid(containerId, projects, getAmount) {
-  let el = document.getElementById(containerId);
-  if (!el) return;
-  let n = Math.max(projects.length, 1);
-  el.style.setProperty('--proj-cols', n);
-  el.setAttribute('data-count', n);
-  el.innerHTML = projects.map(function (p) {
-    return '<div class="homeProjCard homeProjCard--' + p.dot + '">' +
-      '<span class="homeProjCardName">' + p.name + '</span>' +
-      '<span class="homeProjCardAmt">' + money(getAmount(p)) + '</span>' +
-      '</div>';
-  }).join('');
-}
-
-function updateHomeInputStats() {
-  let streakEl = document.getElementById('homeInputStreak');
-  let rateEl = document.getElementById('homeInputRate');
-  if (streakEl) streakEl.textContent = calcInputStreak() + '日';
-  if (rateEl) rateEl.textContent = calcMonthInputRate() + '%';
-}
-
 function renderHomeCalendar() {
   if (typeof homeCalendar === 'undefined') return;
   ensureRevenueLog();
@@ -142,7 +162,10 @@ function renderHomeCalendar() {
   let daysInMonth = new Date(y, m + 1, 0).getDate();
   let today = new Date();
   let weekdays = ['日', '月', '火', '水', '木', '金', '土'];
-  let cells = weekdays.map(function (w) { return '<div class="homeCalDayLabel">' + w + '</div>'; }).join('');
+  let cells = weekdays.map(function (w, i) {
+    let cls = 'homeCalDayLabel' + (i === 0 ? ' isSun' : i === 6 ? ' isSat' : '');
+    return '<div class="' + cls + '">' + w + '</div>';
+  }).join('');
 
   for (let i = 0; i < start; i++) cells += '<div class="homeCalDay homeCalDay--blank"></div>';
 
@@ -165,7 +188,11 @@ function renderHomeCalendar() {
     '<button type="button" class="homeCalNavBtn" onclick="homeCalNextMonth()" aria-label="次の月">›</button>' +
     '</div>' +
     '<div class="homeCalGrid">' + cells + '</div>' +
-    '</div>';
+    '<div class="homeCalLegend">' +
+    '<span class="homeCalLegendItem"><i class="homeCalLegendMark isToday"></i>今日</span>' +
+    '<span class="homeCalLegendItem"><i class="homeCalLegendMark isFilled"></i>入力済</span>' +
+    '<span class="homeCalLegendItem"><i class="homeCalLegendMark isEmpty"></i>未入力</span>' +
+    '</div></div>';
 }
 
 function homeCalPrevMonth() {
@@ -217,12 +244,48 @@ function chartAxisTicks(axisMax, steps) {
   return ticks;
 }
 
+function chartXLabels(daysInMonth, monthNum) {
+  let marks = [1];
+  [5, 10, 15, 20, 25, 30].forEach(function (d) {
+    if (d <= daysInMonth && d !== 1) marks.push(d);
+  });
+  if (marks[marks.length - 1] !== daysInMonth) marks.push(daysInMonth);
+  return marks.map(function (d) { return { d: d, label: monthNum + '/' + d }; });
+}
+
+function bindLineChartTooltip(container, points) {
+  let tip = container.querySelector('.homeLineChartTip');
+  if (!tip) return;
+  container.querySelectorAll('.homeLineHit').forEach(function (node) {
+    node.addEventListener('mouseenter', function () {
+      let idx = Number(node.getAttribute('data-idx'));
+      let p = points[idx];
+      if (!p) return;
+      tip.textContent = (homeCalView.m + 1) + '/' + p.d + '  ' + money(p.val);
+      tip.classList.add('isVisible');
+      let rect = container.getBoundingClientRect();
+      let cx = Number(node.getAttribute('cx'));
+      let cy = Number(node.getAttribute('cy'));
+      let svg = container.querySelector('.homeLineChartSvg');
+      let vb = svg.viewBox.baseVal;
+      let left = ((cx / vb.width) * svg.clientWidth) - tip.offsetWidth / 2;
+      let top = ((cy / vb.height) * svg.clientHeight) - 34;
+      tip.style.left = Math.max(4, Math.min(left, svg.clientWidth - tip.offsetWidth - 4)) + 'px';
+      tip.style.top = Math.max(4, top) + 'px';
+    });
+    node.addEventListener('mouseleave', function () {
+      tip.classList.remove('isVisible');
+    });
+  });
+}
+
 function renderHomeMonthlyLineChart() {
   let el = document.getElementById('homeMonthlyLineChart');
   if (!el) return;
   ensureRevenueLog();
   let y = homeCalView.y;
   let m = homeCalView.m;
+  let monthNum = m + 1;
   let daysInMonth = new Date(y, m + 1, 0).getDate();
   let today = new Date();
   let vals = [];
@@ -237,20 +300,27 @@ function renderHomeMonthlyLineChart() {
 
   let axisMax = niceChartAxisMax(dataMax);
   let ticks = chartAxisTicks(axisMax, 5);
+  let xMarks = chartXLabels(daysInMonth, monthNum);
 
-  let w = 340;
-  let h = 82;
-  let yAxisW = 40;
-  let padRight = 6;
-  let padY = 6;
+  let w = 360;
+  let h = 96;
+  let yAxisW = 42;
+  let padRight = 8;
+  let padBottom = 16;
+  let padY = 8;
   let chartLeft = yAxisW;
   let innerW = w - chartLeft - padRight;
-  let innerH = h - padY * 2;
+  let innerH = h - padY - padBottom;
 
   let gridSvg = ticks.map(function (t) {
     let yPos = padY + innerH - (t / axisMax) * innerH;
     return '<line class="homeLineGrid" x1="' + chartLeft + '" y1="' + yPos.toFixed(1) + '" x2="' + (w - padRight) + '" y2="' + yPos.toFixed(1) + '"></line>' +
-      '<text class="homeLineYLabel" x="' + (chartLeft - 5) + '" y="' + (yPos + 3).toFixed(1) + '" text-anchor="end">' + formatAxisDollar(t) + '</text>';
+      '<text class="homeLineYLabel" x="' + (chartLeft - 6) + '" y="' + (yPos + 3).toFixed(1) + '" text-anchor="end">' + formatAxisDollar(t) + '</text>';
+  }).join('');
+
+  let xSvg = xMarks.map(function (mark) {
+    let x = chartLeft + (daysInMonth <= 1 ? innerW / 2 : ((mark.d - 1) / (daysInMonth - 1)) * innerW);
+    return '<text class="homeLineXLabel" x="' + x.toFixed(1) + '" y="' + (h - 4) + '" text-anchor="middle">' + mark.label + '</text>';
   }).join('');
 
   let pts = vals.map(function (v, i) {
@@ -265,22 +335,25 @@ function renderHomeMonthlyLineChart() {
     let x = chartLeft + (daysInMonth <= 1 ? innerW / 2 : (i / (daysInMonth - 1)) * innerW);
     let yPos = padY + innerH - (v.val / axisMax) * innerH;
     let cls = v.isToday ? 'homeLineDot isToday' : 'homeLineDot';
-    return '<circle class="' + cls + '" cx="' + x.toFixed(1) + '" cy="' + yPos.toFixed(1) + '" r="' + (v.isToday ? '3.5' : '2') + '"></circle>';
+    return '<g class="homeLinePoint">' +
+      '<circle class="homeLineHit" data-idx="' + i + '" cx="' + x.toFixed(1) + '" cy="' + yPos.toFixed(1) + '" r="7"></circle>' +
+      '<circle class="' + cls + '" cx="' + x.toFixed(1) + '" cy="' + yPos.toFixed(1) + '" r="' + (v.isToday ? '3' : '2') + '"></circle></g>';
   }).join('');
 
   el.innerHTML =
-    '<div class="homeLineChartShell">' +
+    '<div class="homeLineChartInner">' +
+    '<div class="homeLineChartTip"></div>' +
     '<svg class="homeLineChartSvg" viewBox="0 0 ' + w + ' ' + h + '" preserveAspectRatio="xMidYMid meet" aria-hidden="true">' +
     '<defs><linearGradient id="homeLineGrad" x1="0" y1="0" x2="0" y2="1">' +
-    '<stop offset="0%" stop-color="rgba(96,165,250,.35)"/><stop offset="100%" stop-color="rgba(96,165,250,0)"/>' +
+    '<stop offset="0%" stop-color="rgba(96,165,250,.22)"/><stop offset="100%" stop-color="rgba(96,165,250,0)"/>' +
     '</linearGradient></defs>' +
-    gridSvg +
+    gridSvg + xSvg +
     '<polyline class="homeLineChartFill" points="' + fillPts + '"></polyline>' +
     '<polyline class="homeLineChartLine" points="' + pts + '"></polyline>' +
     dots +
-    '</svg>' +
-    '<div class="homeLineChartAxis"><span>1</span><span>' + daysInMonth + '</span></div>' +
-    '</div>';
+    '</svg></div>';
+
+  bindLineChartTooltip(el, vals);
 }
 
 function updateHomeMonthlyProjects(sAll) {
@@ -289,10 +362,11 @@ function updateHomeMonthlyProjects(sAll) {
   let projects = getEnabledHomeProjects();
   let now = new Date();
   let monthLog = sumMonthRevenueLog(now.getFullYear(), now.getMonth());
+  let monthTotal = monthLog.hasLog ? monthLog.total : sAll.monthly;
   renderProjectGrid('homeMonthlyProjGrid', projects, function (p) {
     if (monthLog.hasLog) return projectAmountFromEntry({ total: monthLog.total, ram: monthLog.ram, orca: monthLog.orca, genesis: monthLog.genesis, cary: monthLog.cary }, p);
     return fallbackProjectAmount(p, sAll, 'monthly');
-  });
+  }, monthTotal);
 }
 
 function updateHomeTodaySection(sAll) {
@@ -307,14 +381,14 @@ function updateHomeTodaySection(sAll) {
   let compareEl = document.getElementById('homeTodayCompare');
   if (compareEl) {
     compareEl.innerHTML =
-      '<div class="homeTodayCompareItem"><span class="homeTodayCompareLabel">昨日</span><span class="homeTodayCompareVal">' + money(yesterdayTotal) + '</span></div>' +
-      '<div class="homeTodayCompareItem homeTodayCompareItem--today"><span class="homeTodayCompareLabel">本日</span><span class="homeTodayCompareVal">' + money(todayTotal) + '</span></div>';
+      '<div class="homeTodayCompareItem"><span class="homeTodayCompareLabel">昨日の収益</span><span class="homeTodayCompareVal">' + money(yesterdayTotal) + '</span></div>' +
+      '<div class="homeTodayCompareItem homeTodayCompareItem--today"><span class="homeTodayCompareLabel">本日の収益</span><span class="homeTodayCompareVal">' + money(todayTotal) + '</span></div>';
   }
 
   renderProjectGrid('homeDailyProjGrid', projects, function (p) {
     if (todayEntry) return projectAmountFromEntry(todayEntry, p);
     return fallbackProjectAmount(p, sAll, 'daily');
-  });
+  }, todayTotal);
 }
 
 function updateHomeDashboard(sAll) {
