@@ -902,21 +902,23 @@
   }
 
   .homeInputRateRing {
-    width: 54px;
-    height: 54px;
+    width: 70px;
+    height: 70px;
   }
 
   .homeInputRateRing svg {
-    width: 54px;
-    height: 54px;
+    width: 70px;
+    height: 70px;
   }
 
   .homeInputRatePct {
-    font-size: 12px;
-  }
+      font-size: 18px;
+      font-weight: 700;
+  }  
 
   .homeInputStatBody--streak .homeInputStatVal {
-    font-size: 16px;
+    font-size: 26px;
+font-weight: 700;
   }
 
   .homeCalendarPlaceholder {
