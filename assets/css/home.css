@@ -1,4 +1,4 @@
-/* ===== OUKEI HUB Home Layout (Ver1.5.8.25) ===== */
+/* ===== OUKEI HUB Home Layout (Ver1.5.8.26) ===== */
 /* ホーム画面専用CSS — 微調整はこのファイルを編集してください */
 
 /* --- Legacy compat (index.html から移行) --- */
@@ -267,7 +267,13 @@
   text-align: left;
 }
 
-/* --- homeMainGrid / cards --- */
+/* --- homeMainGrid / cards ---
+ * レイアウト決定の優先順位（調査メモ）:
+ * 1) Mac 901px+: @media (min-width:901px) .homeMainGrid → display:grid
+ * 2) Mobile: @media (max-width:900px) .homeMainGrid → display:flex（grid-template-rows は無効）
+ * 3) 実績カード高さ: align-self + justify-content + .homeInputBtn--premium の height/min-height
+ * 4) index.html 内 .panel { padding:12px } は home.css の .homeInputCard 等で上書き
+ */
 .homeMainGrid {
   gap: 10px;
 }
@@ -289,10 +295,20 @@
     inset 0 1px 0 rgba(255, 255, 255, .05);
 }
 
+/* index.html 内 .panel より優先 */
+.panel.homeInputCard,
+.panel.homeCalendarCard,
+.panel.homeMonthlyCard,
+.panel.homeTodayCard {
+  padding: 14px;
+  border-radius: 16px;
+  background: linear-gradient(165deg, rgba(18, 32, 52, .98) 0%, rgba(8, 18, 32, .96) 100%);
+  border: 1px solid rgba(96, 165, 250, .14);
+}
+
 .homeInputCard {
   text-align: center;
-  justify-content: center;
-  gap: 12px;
+  gap: 10px;
 }
 
 .homeInputBtnWrap {
@@ -777,7 +793,7 @@
   .homeMainGrid {
     display: grid;
     grid-template-columns: 4fr 5fr;
-    grid-template-rows: 250px 390px;
+    grid-template-rows: auto auto;
     gap: 10px;
     align-items: stretch;
   }
@@ -785,19 +801,23 @@
   .homeInputCard {
     grid-column: 1;
     grid-row: 1;
-    align-self: start;
+    align-self: stretch;
+    justify-content: space-between;
+    padding: 12px 14px;
+    gap: 8px;
   }
 
   .homeCalendarCard {
     grid-column: 2;
     grid-row: 1;
-    align-self: start;
+    align-self: stretch;
     padding: 10px 12px;
   }
 
   .homeMonthlyCard {
     grid-column: 1;
     grid-row: 2;
+    align-self: stretch;
   }
 
   .homeTodayCard {
@@ -810,12 +830,17 @@
     flex: 0 0 auto;
   }
 
+  .homeInputStats {
+    flex: 0 0 auto;
+    margin-top: auto;
+  }
+
   .homeInputBtn--premium {
     flex: none !important;
-    min-height: 68px;
-    height: 68px;
-    max-height: 68px;
-    padding: 10px 14px;
+    min-height: 72px;
+    height: auto;
+    max-height: none;
+    padding: 12px 14px;
   }
 
   .homeInputBtn--premium .homeInputBtnIcon {
@@ -1390,7 +1415,7 @@
 
   .homeTaskProgress { text-align: left; }
 
-  .homeInputCard { order: 1; min-height: 0; }
+  .homeInputCard { order: 1; min-height: 0; justify-content: flex-start; gap: 10px; }
 
   .homeInputBtnWrap {
     flex: 1;
