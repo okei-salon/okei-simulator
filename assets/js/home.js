@@ -1,4 +1,4 @@
-/* OUKEI HUB Home UI — Ver1.5.8.21 */
+/* OUKEI HUB Home UI — Ver1.5.8.22 */
 let homeCalView = { y: new Date().getFullYear(), m: new Date().getMonth() };
 
 function ensureRevenueLog() {
@@ -184,6 +184,39 @@ function homeCalNextMonth() {
   updateHomeMonthlyProjects(typeof allOrgSummary === 'function' ? allOrgSummary() : null);
 }
 
+function formatAxisDollar(n) {
+  n = Math.round(n * 100) / 100;
+  if (n >= 1000) return '$' + Math.round(n).toLocaleString();
+  if (Number.isInteger(n)) return '$' + n;
+  return '$' + n.toFixed(1);
+}
+
+function niceChartAxisMax(rawMax) {
+  if (rawMax <= 0) return 20;
+  let padded = rawMax * 1.08;
+  let mag = Math.pow(10, Math.floor(Math.log10(padded)));
+  let norm = padded / mag;
+  let nice = 10;
+  if (norm <= 1) nice = 1;
+  else if (norm <= 1.2) nice = 1.2;
+  else if (norm <= 1.5) nice = 1.5;
+  else if (norm <= 2) nice = 2;
+  else if (norm <= 2.5) nice = 2.5;
+  else if (norm <= 3) nice = 3;
+  else if (norm <= 4) nice = 4;
+  else if (norm <= 5) nice = 5;
+  else if (norm <= 6) nice = 6;
+  else if (norm <= 8) nice = 8;
+  return nice * mag;
+}
+
+function chartAxisTicks(axisMax, steps) {
+  steps = steps || 5;
+  let ticks = [];
+  for (let i = 0; i < steps; i++) ticks.push((axisMax / (steps - 1)) * i);
+  return ticks;
+}
+
 function renderHomeMonthlyLineChart() {
   let el = document.getElementById('homeMonthlyLineChart');
   if (!el) return;
@@ -193,43 +226,56 @@ function renderHomeMonthlyLineChart() {
   let daysInMonth = new Date(y, m + 1, 0).getDate();
   let today = new Date();
   let vals = [];
-  let maxVal = 0;
+  let dataMax = 0;
 
   for (let d = 1; d <= daysInMonth; d++) {
     let entry = getRevenueEntry(revenueDateKey(y, m, d));
     let val = entry ? (entry.total || 0) : 0;
     vals.push({ d: d, val: val, isToday: today.getFullYear() === y && today.getMonth() === m && today.getDate() === d });
-    if (val > maxVal) maxVal = val;
+    if (val > dataMax) dataMax = val;
   }
 
-  if (maxVal <= 0) maxVal = 1;
+  let axisMax = niceChartAxisMax(dataMax);
+  let ticks = chartAxisTicks(axisMax, 5);
 
-  let w = 320;
-  let h = 72;
-  let padX = 6;
-  let padY = 8;
-  let innerW = w - padX * 2;
+  let w = 340;
+  let h = 82;
+  let yAxisW = 40;
+  let padRight = 6;
+  let padY = 6;
+  let chartLeft = yAxisW;
+  let innerW = w - chartLeft - padRight;
   let innerH = h - padY * 2;
+
+  let gridSvg = ticks.map(function (t) {
+    let yPos = padY + innerH - (t / axisMax) * innerH;
+    return '<line class="homeLineGrid" x1="' + chartLeft + '" y1="' + yPos.toFixed(1) + '" x2="' + (w - padRight) + '" y2="' + yPos.toFixed(1) + '"></line>' +
+      '<text class="homeLineYLabel" x="' + (chartLeft - 5) + '" y="' + (yPos + 3).toFixed(1) + '" text-anchor="end">' + formatAxisDollar(t) + '</text>';
+  }).join('');
+
   let pts = vals.map(function (v, i) {
-    let x = padX + (daysInMonth <= 1 ? innerW / 2 : (i / (daysInMonth - 1)) * innerW);
-    let yPos = padY + innerH - (v.val / maxVal) * innerH;
+    let x = chartLeft + (daysInMonth <= 1 ? innerW / 2 : (i / (daysInMonth - 1)) * innerW);
+    let yPos = padY + innerH - (v.val / axisMax) * innerH;
     return x.toFixed(1) + ',' + yPos.toFixed(1);
   }).join(' ');
 
+  let fillPts = pts + ' ' + (chartLeft + innerW).toFixed(1) + ',' + (padY + innerH).toFixed(1) + ' ' + chartLeft + ',' + (padY + innerH).toFixed(1);
+
   let dots = vals.map(function (v, i) {
-    let x = padX + (daysInMonth <= 1 ? innerW / 2 : (i / (daysInMonth - 1)) * innerW);
-    let yPos = padY + innerH - (v.val / maxVal) * innerH;
+    let x = chartLeft + (daysInMonth <= 1 ? innerW / 2 : (i / (daysInMonth - 1)) * innerW);
+    let yPos = padY + innerH - (v.val / axisMax) * innerH;
     let cls = v.isToday ? 'homeLineDot isToday' : 'homeLineDot';
     return '<circle class="' + cls + '" cx="' + x.toFixed(1) + '" cy="' + yPos.toFixed(1) + '" r="' + (v.isToday ? '3.5' : '2') + '"></circle>';
   }).join('');
 
   el.innerHTML =
     '<div class="homeLineChartShell">' +
-    '<svg class="homeLineChartSvg" viewBox="0 0 ' + w + ' ' + h + '" preserveAspectRatio="none" aria-hidden="true">' +
+    '<svg class="homeLineChartSvg" viewBox="0 0 ' + w + ' ' + h + '" preserveAspectRatio="xMidYMid meet" aria-hidden="true">' +
     '<defs><linearGradient id="homeLineGrad" x1="0" y1="0" x2="0" y2="1">' +
     '<stop offset="0%" stop-color="rgba(96,165,250,.35)"/><stop offset="100%" stop-color="rgba(96,165,250,0)"/>' +
     '</linearGradient></defs>' +
-    '<polyline class="homeLineChartFill" points="' + pts + ' ' + (padX + innerW) + ',' + (padY + innerH) + ' ' + padX + ',' + (padY + innerH) + '"></polyline>' +
+    gridSvg +
+    '<polyline class="homeLineChartFill" points="' + fillPts + '"></polyline>' +
     '<polyline class="homeLineChartLine" points="' + pts + '"></polyline>' +
     dots +
     '</svg>' +
