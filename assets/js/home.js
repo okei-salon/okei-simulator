@@ -1,4 +1,4 @@
-/* OUKEI HUB Home UI — Ver1.5.8.18 */
+/* OUKEI HUB Home UI — Ver1.5.8.19 */
 let homeCalView = { y: new Date().getFullYear(), m: new Date().getMonth() };
 
 function ensureRevenueLog() {
@@ -82,12 +82,51 @@ function homeCalPrevMonth() {
   homeCalView.m--;
   if (homeCalView.m < 0) { homeCalView.m = 11; homeCalView.y--; }
   renderHomeCalendar();
+  if (typeof renderHomeMonthlyChart === 'function') renderHomeMonthlyChart();
 }
 
 function homeCalNextMonth() {
   homeCalView.m++;
   if (homeCalView.m > 11) { homeCalView.m = 0; homeCalView.y++; }
   renderHomeCalendar();
+  if (typeof renderHomeMonthlyChart === 'function') renderHomeMonthlyChart();
+}
+
+function renderHomeMonthlyChart() {
+  if (typeof homeMonthlyChart === 'undefined') return;
+  ensureRevenueLog();
+  let y = homeCalView.y;
+  let m = homeCalView.m;
+  let daysInMonth = new Date(y, m + 1, 0).getDate();
+  let today = new Date();
+  let maxVal = 0;
+  let bars = [];
+
+  for (let d = 1; d <= daysInMonth; d++) {
+    let key = revenueDateKey(y, m, d);
+    let entry = getRevenueEntry(key);
+    let val = entry ? (entry.total || 0) : 0;
+    if (val > maxVal) maxVal = val;
+    let isToday = today.getFullYear() === y && today.getMonth() === m && today.getDate() === d;
+    bars.push({ d: d, val: val, isToday: isToday, hasEntry: !!entry });
+  }
+
+  if (maxVal <= 0) maxVal = 1;
+
+  let cols = bars.map(function (b) {
+    let pct = b.hasEntry ? Math.max(6, Math.round((b.val / maxVal) * 100)) : 0;
+    let barCls = ['homeChartBar'];
+    if (b.isToday) barCls.push('isToday');
+    if (!b.hasEntry) barCls.push('isEmpty');
+    let colCls = 'homeChartCol' + (b.isToday ? ' isTodayCol' : '');
+    let tip = b.d + '日: ' + (b.hasEntry ? money(b.val) : '未入力');
+    return '<div class="' + colCls + '" title="' + tip + '">' +
+      '<div class="homeChartBarWrap"><div class="' + barCls.join(' ') + '" style="height:' + pct + '%"></div></div>' +
+      '<span class="homeChartDay">' + b.d + '</span></div>';
+  }).join('');
+
+  homeMonthlyChart.innerHTML =
+    '<div class="homeChartShell"><div class="homeChartBars">' + cols + '</div></div>';
 }
 
 function showRevenueDayDetail(key) {
@@ -169,3 +208,15 @@ function updateHomeLastInput() {
   let last = settings.revenueLog[keys[0]];
   homeLastInput.textContent = last.savedAt || keys[0];
 }
+
+document.addEventListener('DOMContentLoaded', function () {
+  let avatar = document.querySelector('.ochanAvatar');
+  if (avatar) {
+    avatar.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        showPage('ochanRoom');
+      }
+    });
+  }
+});

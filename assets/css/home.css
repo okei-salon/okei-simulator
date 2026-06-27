@@ -1,4 +1,4 @@
-/* ===== OUKEI HUB Home Layout (Ver1.5.8.18) ===== */
+/* ===== OUKEI HUB Home Layout (Ver1.5.8.19) ===== */
 /* ホーム画面専用CSS — 微調整はこのファイルを編集してください */
 
 /* --- Legacy compat (index.html から移行) --- */
@@ -204,7 +204,20 @@
   object-fit: contain;
   object-position: bottom left;
   background: transparent;
-  pointer-events: none;
+  pointer-events: auto;
+  cursor: pointer;
+  transition: transform .15s ease, filter .15s ease;
+}
+
+.ochanAvatar:hover {
+  filter: drop-shadow(0 4px 14px rgba(96, 165, 250, .35));
+  transform: scale(1.02);
+}
+
+.ochanAvatar:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 4px;
+  border-radius: 12px;
 }
 
 .ochanSpeechBubble {
@@ -254,11 +267,11 @@
   text-align: left;
 }
 
-/* --- homeMainGrid / cards --- */
+/* --- homeMainGrid / cards (Mac: 3段レイアウト) --- */
 .homeMainGrid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  grid-template-rows: auto auto;
+  grid-template-rows: auto auto auto;
   gap: 10px;
   align-items: stretch;
 }
@@ -269,8 +282,8 @@
   padding: 12px;
   text-align: center;
   justify-content: flex-start;
-  min-height: 228px;
-  height: 100%;
+  min-height: 0;
+  height: auto;
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
@@ -286,32 +299,158 @@
 
 .homeCalendarCard {
   grid-column: 2;
-  grid-row: 1;
+  grid-row: 1 / 3;
   padding: 12px;
-  min-height: 228px;
+  min-height: 0;
   height: 100%;
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
 }
 
-.homeSummaryGrid {
-  grid-column: 1 / -1;
+.homeMonthlyCard {
+  grid-column: 1;
   grid-row: 2;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-  align-items: stretch;
-}
-
-.homeMonthlyCard,
-.homeTodayCard {
   padding: 12px;
-  min-height: 208px;
-  height: 100%;
+  min-height: 0;
+  height: auto;
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
+}
+
+.homeTodayCard {
+  grid-column: 1;
+  grid-row: 3;
+  padding: 12px;
+  min-height: 0;
+  height: auto;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+}
+
+.homeChartCard {
+  grid-column: 2;
+  grid-row: 3;
+  padding: 12px;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+}
+
+.homeChartArea {
+  flex: 1;
+  min-height: 148px;
+  background: #081426;
+  border: 1px solid #2a4264;
+  border-radius: 12px;
+  padding: 8px 6px 4px;
+  overflow: hidden;
+}
+
+.homeChartShell {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 128px;
+}
+
+.homeChartBars {
+  flex: 1;
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  min-height: 96px;
+}
+
+.homeChartCol {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 0;
+  height: 100%;
+}
+
+.homeChartBarWrap {
+  flex: 1;
+  width: 100%;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  min-height: 72px;
+}
+
+.homeChartBar {
+  width: 100%;
+  max-width: 12px;
+  border-radius: 4px 4px 2px 2px;
+  background: linear-gradient(180deg, #60a5fa 0%, #2563eb 100%);
+  min-height: 0;
+  transition: height .2s ease;
+}
+
+.homeChartBar.isToday {
+  background: linear-gradient(180deg, #fde68a 0%, #f59e0b 55%, #d97706 100%);
+  box-shadow: 0 0 10px rgba(251, 191, 36, .42);
+}
+
+.homeChartBar.isEmpty {
+  height: 2px !important;
+  background: rgba(42, 66, 100, .55);
+  box-shadow: none;
+}
+
+.homeChartDay {
+  font-size: 8px;
+  font-weight: 800;
+  color: #7f97b3;
+  margin-top: 4px;
+  line-height: 1;
+}
+
+.homeChartCol.isTodayCol .homeChartDay {
+  color: var(--gold);
+}
+
+/* Mac版: 実績入力カードを1段分に収める */
+@media (min-width: 901px) {
+  .homeInputBtnWrap {
+    flex: 0 0 auto;
+  }
+
+  .homeInputBtn--premium {
+    flex: none;
+    min-height: 92px;
+    height: 92px;
+    padding: 14px 16px;
+  }
+
+  .homeInputBtn--premium .homeInputBtnIcon {
+    font-size: 30px;
+  }
+
+  .homeInputBtn--premium .homeInputBtnText {
+    font-size: 16px;
+  }
+
+  .homeSummaryMain {
+    font-size: 24px;
+  }
+
+  .homeMonthlyCard .homeSummaryList,
+  .homeTodayCard .homeSummaryList {
+    margin-top: 8px;
+    gap: 4px;
+  }
+
+  .homeSummaryRow {
+    padding: 6px 8px;
+    font-size: 11px;
+  }
 }
 
 .homeInputBtn {
@@ -756,21 +895,18 @@
 
   .homeCalendarCard { order: 2; min-height: 0; }
 
-  .homeSummaryGrid {
-    order: 3;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-  }
-
-  .homeMonthlyCard { order: 1; min-height: 0; }
-  .homeTodayCard { order: 2; min-height: 0; }
+  .homeMonthlyCard { order: 3; min-height: 0; }
+  .homeTodayCard { order: 4; min-height: 0; }
+  .homeChartCard { order: 5; min-height: 0; }
 
   .homeInputCard,
   .homeCalendarCard,
   .homeMonthlyCard,
-  .homeTodayCard {
+  .homeTodayCard,
+  .homeChartCard {
     min-height: 0;
+    grid-column: auto;
+    grid-row: auto;
   }
 
   .ochanContainer {
@@ -801,4 +937,61 @@
     line-height: 1.55;
     max-width: 100%;
   }
+}
+
+/* --- おーちゃん部屋 --- */
+.ochanRoomPage {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 24px 12px 48px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+}
+
+.ochanRoomHead {
+  text-align: center;
+}
+
+.ochanRoomTitle {
+  font-size: 26px;
+  font-weight: 900;
+  margin: 0;
+}
+
+.ochanRoomStatus {
+  margin: 10px 0 0;
+  font-size: 15px;
+  font-weight: 800;
+  color: #9db4d0;
+  letter-spacing: .08em;
+}
+
+.ochanRoomStage {
+  width: 100%;
+  min-height: 340px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(180deg, rgba(37, 99, 235, .1) 0%, rgba(8, 20, 38, .4) 100%);
+  border: 1px solid #2a4264;
+  border-radius: 22px;
+  padding: 28px 20px;
+}
+
+.ochanRoomAvatar {
+  width: min(300px, 72vw);
+  height: auto;
+  object-fit: contain;
+  filter: drop-shadow(0 16px 36px rgba(0, 0, 0, .32));
+}
+
+.ochanRoomFuture {
+  width: 100%;
+  text-align: center;
+}
+
+.ochanRoomActions {
+  margin-top: 4px;
 }
