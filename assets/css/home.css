@@ -175,7 +175,7 @@
 /* --- ochanArea (位置調整: .ochanContainer または .ochanAvatar) --- */
 .ochanArea {
   margin: 2px 0 10px;
-  padding-top: 72px;
+  padding-top: 35px;
   padding-left: 112px;
   position: relative;
   overflow: visible;
