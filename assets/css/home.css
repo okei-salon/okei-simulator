@@ -175,7 +175,7 @@
 /* --- ochanArea (位置調整: .ochanContainer または .ochanAvatar) --- */
 .ochanArea {
   margin: 2px 0 10px;
-  padding-top: 35px;
+  padding-top: 15px;
   padding-left: 112px;
   position: relative;
   overflow: visible;
@@ -428,9 +428,10 @@
 
   .ochanArea {
     order: 3;
-    padding-top: 20px;
+    padding-top: 10px;
     padding-left: 82px;
     min-height: 50px;
+  
   }
 
   .homeMainGrid {
