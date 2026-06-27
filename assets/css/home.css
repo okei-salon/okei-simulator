@@ -1,4 +1,4 @@
-/* ===== OUKEI HUB Home Layout (Ver1.5.8.26) ===== */
+/* ===== OUKEI HUB Home Layout (Ver1.5.8.27) ===== */
 /* ホーム画面専用CSS — 微調整はこのファイルを編集してください */
 
 /* --- Legacy compat (index.html から移行) --- */
@@ -801,10 +801,10 @@
   .homeInputCard {
     grid-column: 1;
     grid-row: 1;
-    align-self: stretch;
-    justify-content: space-between;
+    align-self: start;
+    justify-content: flex-start;
     padding: 12px 14px;
-    gap: 8px;
+    gap: 10px;
   }
 
   .homeCalendarCard {
@@ -832,7 +832,6 @@
 
   .homeInputStats {
     flex: 0 0 auto;
-    margin-top: auto;
   }
 
   .homeInputBtn--premium {
