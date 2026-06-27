@@ -1,4 +1,4 @@
-/* ===== OUKEI HUB Home Layout (Ver1.5.8.28) ===== */
+/* ===== OUKEI HUB Home Layout (Ver1.5.8.29) ===== */
 /* ホーム画面専用CSS — 微調整はこのファイルを編集してください */
 
 /* --- Legacy compat (index.html から移行) --- */
@@ -1029,8 +1029,6 @@
   position: relative;
   overflow: hidden;
   width: 100%;
-  flex: 1;
-  min-height: 132px;
   padding: 22px 18px;
   border-radius: 18px;
   border: 1px solid rgba(147, 197, 253, .42);
@@ -1042,6 +1040,28 @@
   color: #fff;
   cursor: pointer;
   transition: transform .15s ease, box-shadow .15s ease;
+}
+
+.homeInputCard .homeInputBtn--premium {
+  flex: 0 0 auto;
+  min-height: 0;
+  padding: 16px 12px;
+}
+
+.homeInputCard .homeInputBtn--premium .homeInputBtnIcon {
+  font-size: 28px;
+  filter: drop-shadow(0 2px 6px rgba(15, 23, 42, .25));
+}
+
+.homeInputCard .homeInputBtn--premium .homeInputBtnText {
+  font-size: 15px;
+  line-height: 1.35;
+  text-shadow: 0 1px 2px rgba(15, 23, 42, .2);
+}
+
+.homeInputCard .homeInputBtn--premium .homeInputBtnText small {
+  font-size: 11px;
+  opacity: .92;
 }
 
 .homeInputBtn--premium::before,
@@ -1074,22 +1094,6 @@
 .homeInputBtn--premium:active,
 .mobileNavCenterBtn:active {
   transform: translateY(1px) scale(.985);
-}
-
-.homeInputBtn--premium .homeInputBtnIcon {
-  font-size: 36px;
-  filter: drop-shadow(0 2px 6px rgba(15, 23, 42, .25));
-}
-
-.homeInputBtn--premium .homeInputBtnText {
-  font-size: 17px;
-  line-height: 1.4;
-  text-shadow: 0 1px 2px rgba(15, 23, 42, .2);
-}
-
-.homeInputBtn--premium .homeInputBtnText small {
-  font-size: 12px;
-  opacity: .92;
 }
 
 .homeInputBtnIcon {
@@ -1621,5 +1625,69 @@
   .ochanRoomAvatar {
     width: min(110px, 34vw);
     max-height: min(150px, 24vh);
+  }
+}
+
+/* ===== 実績入力カード（cascade fix — ファイル末尾・Mac 901px+） ===== */
+@media (min-width: 901px) {
+  .homeInputCard {
+    display: grid;
+    grid-template-rows: minmax(0, 58fr) minmax(0, 42fr);
+    align-self: stretch;
+    height: 100%;
+    min-height: 0;
+    padding: 10px 12px;
+    gap: 8px;
+  }
+
+  .homeInputBtnWrap {
+    min-height: 0;
+    height: 100%;
+  }
+
+  .homeInputCard .homeInputBtn--premium {
+    height: 100%;
+    min-height: 0;
+    max-height: none;
+    padding: 10px 12px;
+  }
+
+  .homeInputCard .homeInputBtn--premium .homeInputBtnIcon {
+    font-size: 22px;
+  }
+
+  .homeInputCard .homeInputBtn--premium .homeInputBtnText {
+    font-size: 13px;
+  }
+
+  .homeInputCard .homeInputBtn--premium .homeInputBtnText small {
+    font-size: 10px;
+  }
+
+  .homeInputStats {
+    min-height: 0;
+    height: 100%;
+    grid-template-rows: 1fr;
+    align-content: stretch;
+  }
+
+  .homeInputStatBlock {
+    height: 100%;
+    min-height: 0;
+    padding: 6px 8px;
+  }
+
+  .homeInputRateRing {
+    width: 54px;
+    height: 54px;
+  }
+
+  .homeInputRateRing svg {
+    width: 54px;
+    height: 54px;
+  }
+
+  .homeInputRatePct {
+    font-size: 12px;
   }
 }
