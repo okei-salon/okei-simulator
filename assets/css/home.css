@@ -1,4 +1,4 @@
-/* ===== OUKEI HUB Home Layout (Ver1.5.8.23) ===== */
+/* ===== OUKEI HUB Home Layout (Ver1.5.8.24) ===== */
 /* ホーム画面専用CSS — 微調整はこのファイルを編集してください */
 
 /* --- Legacy compat (index.html から移行) --- */
@@ -355,14 +355,14 @@
 
 .homeInputRateRing {
   position: relative;
-  width: 44px;
-  height: 44px;
+  width: 38px;
+  height: 38px;
   flex-shrink: 0;
 }
 
 .homeInputRateRing svg {
-  width: 44px;
-  height: 44px;
+  width: 38px;
+  height: 38px;
   transform: rotate(-90deg);
 }
 
@@ -450,18 +450,12 @@
   color: #9db4d0;
 }
 
-.homeChartUnit {
-  font-size: 10px;
-  font-weight: 700;
-  color: #6b849f;
-}
-
 .homeLineChartArea {
   margin-top: 0;
-  background: rgba(6, 14, 28, .85);
-  border: 1px solid rgba(42, 66, 100, .75);
+  background: rgba(5, 12, 24, .92);
+  border: 1px solid rgba(36, 58, 90, .85);
   border-radius: 12px;
-  padding: 8px 6px 4px;
+  padding: 10px 8px 6px;
   overflow: hidden;
 }
 
@@ -469,14 +463,26 @@
   position: relative;
 }
 
+.homeLineChartUnit {
+  position: absolute;
+  top: 2px;
+  right: 4px;
+  z-index: 2;
+  font-size: 9px;
+  font-weight: 700;
+  color: #6b849f;
+  pointer-events: none;
+}
+
 .homeLineChartTip {
   position: absolute;
-  z-index: 2;
+  z-index: 3;
   pointer-events: none;
-  padding: 4px 8px;
+  padding: 5px 9px;
   border-radius: 8px;
-  background: rgba(12, 24, 42, .96);
-  border: 1px solid rgba(96, 165, 250, .35);
+  background: rgba(10, 20, 36, .98);
+  border: 1px solid rgba(96, 165, 250, .4);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, .35);
   font-size: 10px;
   font-weight: 800;
   color: var(--text);
@@ -491,9 +497,20 @@
   transform: translateY(0);
 }
 
+.homeLineChartTip::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: -5px;
+  transform: translateX(-50%);
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 5px solid rgba(96, 165, 250, .4);
+}
+
 .homeLineChartSvg {
   width: 100%;
-  height: 96px;
+  height: 108px;
   display: block;
 }
 
@@ -512,10 +529,17 @@
 
 .homeLineChartLine {
   fill: none;
-  stroke: #60a5fa;
-  stroke-width: 1.5;
+  stroke: #5eb0ff;
+  stroke-width: 1.6;
   stroke-linecap: round;
   stroke-linejoin: round;
+  filter: drop-shadow(0 0 4px rgba(96, 165, 250, .25));
+}
+
+.homeLineDot.isActive {
+  fill: #fff;
+  stroke: #60a5fa;
+  stroke-width: 2;
 }
 
 .homeLineChartFill {
@@ -560,13 +584,15 @@
 .homeProjCard {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  gap: 3px;
+  align-items: stretch;
+  gap: 2px;
   min-width: 0;
-  padding: 10px 10px 8px;
-  background: rgba(8, 20, 38, .78);
-  border: 1px solid rgba(42, 66, 100, .7);
-  border-radius: 12px;
+  min-height: 78px;
+  padding: 9px 10px 8px;
+  background: rgba(7, 16, 30, .88);
+  border: 1px solid rgba(36, 58, 90, .8);
+  border-radius: 11px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .03);
 }
 
 .homeProjCardTop {
@@ -584,12 +610,13 @@
   background: #3b82f6;
 }
 
-.homeProjCard--orca .homeProjCardDot { background: #8b5cf6; }
-.homeProjCard--cary .homeProjCardDot { background: #f59e0b; }
+.homeProjCard--orca .homeProjCardDot { background: #14b8a6; }
+
+.homeProjCard--cary .homeProjCardDot { background: #a855f7; }
 
 .homeProjCard--ram { border-color: rgba(59, 130, 246, .28); }
-.homeProjCard--orca { border-color: rgba(139, 92, 246, .28); }
-.homeProjCard--cary { border-color: rgba(245, 158, 11, .28); }
+.homeProjCard--orca { border-color: rgba(20, 184, 166, .28); }
+.homeProjCard--cary { border-color: rgba(168, 85, 247, .28); }
 
 .homeProjCardName {
   font-size: 11px;
@@ -630,11 +657,11 @@
 }
 
 .homeProjCard--orca .homeProjCardBarFill {
-  background: linear-gradient(90deg, #7c3aed, #a78bfa);
+  background: linear-gradient(90deg, #0d9488, #2dd4bf);
 }
 
 .homeProjCard--cary .homeProjCardBarFill {
-  background: linear-gradient(90deg, #d97706, #fbbf24);
+  background: linear-gradient(90deg, #9333ea, #c084fc);
 }
 
 .homeTodayHero {
@@ -642,8 +669,10 @@
 }
 
 .homeTodayHero .homeSummaryMain {
-  font-size: 28px;
-  line-height: 1.15;
+  font-size: 30px;
+  line-height: 1.12;
+  color: var(--blue);
+  text-shadow: 0 0 24px rgba(96, 165, 250, .18);
 }
 
 .homeTodayYen {
@@ -701,7 +730,8 @@
   justify-content: center;
   gap: 8px 12px;
   margin-top: 6px;
-  padding-top: 4px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(36, 58, 90, .45);
 }
 
 .homeCalLegendItem {
@@ -722,17 +752,24 @@
 }
 
 .homeCalLegendMark.isToday {
-  border: 1px solid var(--gold);
-  background: transparent;
+  border: 1.5px solid var(--gold);
+  background: rgba(251, 191, 36, .08);
+  border-radius: 3px;
 }
 
 .homeCalLegendMark.isFilled {
-  background: rgba(255, 255, 255, .22);
+  background: #3b82f6;
+  border-radius: 50%;
+  width: 6px;
+  height: 6px;
 }
 
 .homeCalLegendMark.isEmpty {
-  background: #081426;
-  border: 1px solid #2a4264;
+  background: rgba(42, 66, 100, .55);
+  border: 1px solid rgba(58, 82, 118, .7);
+  border-radius: 50%;
+  width: 6px;
+  height: 6px;
 }
 
 .homeCalDayLabel.isSun { color: #f87171; }
@@ -799,12 +836,12 @@
   .homeCalendarPlaceholder {
     flex: 0 0 auto;
     min-height: 0;
-    padding: 5px 6px;
+    padding: 6px 7px;
     margin-bottom: 0;
   }
 
   .homeCalShell {
-    gap: 4px;
+    gap: 5px;
   }
 
   .homeCalHead {
@@ -825,35 +862,45 @@
   }
 
   .homeCalNavBtn {
-    width: 22px;
-    height: 22px;
-    font-size: 15px;
+    width: 24px;
+    height: 24px;
+    font-size: 16px;
     border-radius: 8px;
   }
 
   .homeCalGrid {
-    gap: 3px;
+    gap: 4px;
     flex: 0 0 auto;
     align-content: start;
   }
 
   .homeCalDay {
-    aspect-ratio: unset;
-    height: 22px;
-    min-height: 22px;
-    max-height: 22px;
-    font-size: 9px;
-    border-radius: 5px;
+    min-height: 38px;
+    aspect-ratio: 1;
+    font-size: 11px;
+    border-radius: 10px;
+    padding: 5px 2px 4px;
+  }
+
+  .homeCalDayDot {
+    width: 5px;
+    height: 5px;
   }
 
   .homeCalDayLabel {
-    font-size: 8px;
-    padding: 1px 0;
+    font-size: 9px;
+    padding: 2px 0;
     line-height: 1.15;
   }
 
   .homeCalLegend {
-    margin-top: 4px;
+    margin-top: 6px;
+    padding-top: 6px;
+    border-top: 1px solid rgba(36, 58, 90, .45);
+  }
+
+  .homeChartBlockHead .homeChartUnit {
+    display: none;
   }
 
   .homeInputStatVal {
@@ -1032,7 +1079,7 @@
 .homeCalGrid {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
-  gap: 3px;
+  gap: 4px;
   flex: 1;
   align-content: start;
 }
@@ -1047,46 +1094,74 @@
 
 .homeCalDay {
   aspect-ratio: 1;
-  min-height: 0;
-  border-radius: 8px;
-  border: 1px solid transparent;
-  background: #081426;
-  color: #c9d9ec;
+  min-height: 34px;
+  border-radius: 10px;
+  border: 1px solid rgba(36, 58, 90, .85);
+  background: rgba(8, 16, 32, .95);
+  color: #dce8f8;
   font-size: 11px;
   font-weight: 800;
   cursor: pointer;
-  padding: 0;
+  padding: 4px 2px 3px;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  transition: background .15s, border-color .15s;
+  gap: 3px;
+  transition: border-color .15s, box-shadow .15s;
+}
+
+.homeCalDayNum {
+  line-height: 1;
+}
+
+.homeCalDayDot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: transparent;
 }
 
 .homeCalDay--blank {
   background: transparent;
+  border-color: transparent;
   pointer-events: none;
 }
 
 .homeCalDay.isEmpty {
-  background: #081426;
-  border-color: #2a4264;
+  background: rgba(8, 16, 32, .95);
+  border-color: rgba(36, 58, 90, .85);
+}
+
+.homeCalDay.isEmpty .homeCalDayDot {
+  background: rgba(58, 82, 118, .45);
 }
 
 .homeCalDay.isFilled {
-  background: rgba(255, 255, 255, .14);
-  border-color: rgba(255, 255, 255, .12);
+  background: rgba(8, 16, 32, .95);
+  border-color: rgba(36, 58, 90, .85);
   color: #eef7ff;
+}
+
+.homeCalDay.isFilled .homeCalDayDot {
+  background: #3b82f6;
+  box-shadow: 0 0 6px rgba(59, 130, 246, .45);
 }
 
 .homeCalDay.isToday {
   border-color: var(--gold);
-  box-shadow: 0 0 0 1px rgba(251, 191, 36, .35);
+  box-shadow: 0 0 0 1px rgba(251, 191, 36, .45);
 }
 
 .homeCalDay.isToday.isFilled {
   border-color: var(--gold);
-  background: rgba(255, 255, 255, .16);
-  box-shadow: 0 0 0 1px rgba(251, 191, 36, .4), inset 0 0 12px rgba(251, 191, 36, .08);
+  background: rgba(10, 18, 34, .98);
+  box-shadow: 0 0 0 1px rgba(251, 191, 36, .5), inset 0 0 10px rgba(251, 191, 36, .06);
+}
+
+.homeCalDay.isToday.isFilled .homeCalDayDot {
+  background: #3b82f6;
 }
 
 .homeCalDay:active {

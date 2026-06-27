@@ -1,4 +1,4 @@
-/* OUKEI HUB Home UI — Ver1.5.8.23 */
+/* OUKEI HUB Home UI — Ver1.5.8.24 */
 let homeCalView = { y: new Date().getFullYear(), m: new Date().getMonth() };
 
 function ensureRevenueLog() {
@@ -177,7 +177,9 @@ function renderHomeCalendar() {
     if (isToday) cls.push('isToday');
     if (entry) cls.push('isFilled');
     else cls.push('isEmpty');
-    cells += '<button type="button" class="' + cls.join(' ') + '" onclick="showRevenueDayDetail(\'' + key + '\')" aria-label="' + (m + 1) + '月' + d + '日">' + d + '</button>';
+    cells += '<button type="button" class="' + cls.join(' ') + '" onclick="showRevenueDayDetail(\'' + key + '\')" aria-label="' + (m + 1) + '月' + d + '日">' +
+      '<span class="homeCalDayNum">' + d + '</span>' +
+      '<span class="homeCalDayDot" aria-hidden="true"></span></button>';
   }
 
   homeCalendar.innerHTML =
@@ -190,7 +192,7 @@ function renderHomeCalendar() {
     '<div class="homeCalGrid">' + cells + '</div>' +
     '<div class="homeCalLegend">' +
     '<span class="homeCalLegendItem"><i class="homeCalLegendMark isToday"></i>今日</span>' +
-    '<span class="homeCalLegendItem"><i class="homeCalLegendMark isFilled"></i>入力済</span>' +
+    '<span class="homeCalLegendItem"><i class="homeCalLegendMark isFilled"></i>入力済み</span>' +
     '<span class="homeCalLegendItem"><i class="homeCalLegendMark isEmpty"></i>未入力</span>' +
     '</div></div>';
 }
@@ -253,30 +255,42 @@ function chartXLabels(daysInMonth, monthNum) {
   return marks.map(function (d) { return { d: d, label: monthNum + '/' + d }; });
 }
 
-function bindLineChartTooltip(container, points) {
+function bindLineChartTooltip(container, points, monthNum) {
   let tip = container.querySelector('.homeLineChartTip');
-  if (!tip) return;
+  let svg = container.querySelector('.homeLineChartSvg');
+  if (!tip || !svg) return;
+
+  function showTip(node, p) {
+    if (!p) return;
+    tip.textContent = monthNum + '/' + p.d + '  ' + money(p.val);
+    tip.classList.add('isVisible');
+    let cx = Number(node.getAttribute('cx'));
+    let cy = Number(node.getAttribute('cy'));
+    let vb = svg.viewBox.baseVal;
+    let left = ((cx / vb.width) * svg.clientWidth) - tip.offsetWidth / 2;
+    let top = ((cy / vb.height) * svg.clientHeight) - 38;
+    tip.style.left = Math.max(4, Math.min(left, svg.clientWidth - tip.offsetWidth - 4)) + 'px';
+    tip.style.top = Math.max(2, top) + 'px';
+    container.querySelectorAll('.homeLineDot').forEach(function (d) { d.classList.remove('isActive'); });
+    let dot = node.parentNode ? node.parentNode.querySelector('.homeLineDot') : null;
+    if (dot) dot.classList.add('isActive');
+  }
+
   container.querySelectorAll('.homeLineHit').forEach(function (node) {
     node.addEventListener('mouseenter', function () {
-      let idx = Number(node.getAttribute('data-idx'));
-      let p = points[idx];
-      if (!p) return;
-      tip.textContent = (homeCalView.m + 1) + '/' + p.d + '  ' + money(p.val);
-      tip.classList.add('isVisible');
-      let rect = container.getBoundingClientRect();
-      let cx = Number(node.getAttribute('cx'));
-      let cy = Number(node.getAttribute('cy'));
-      let svg = container.querySelector('.homeLineChartSvg');
-      let vb = svg.viewBox.baseVal;
-      let left = ((cx / vb.width) * svg.clientWidth) - tip.offsetWidth / 2;
-      let top = ((cy / vb.height) * svg.clientHeight) - 34;
-      tip.style.left = Math.max(4, Math.min(left, svg.clientWidth - tip.offsetWidth - 4)) + 'px';
-      tip.style.top = Math.max(4, top) + 'px';
+      showTip(node, points[Number(node.getAttribute('data-idx'))]);
     });
     node.addEventListener('mouseleave', function () {
       tip.classList.remove('isVisible');
+      container.querySelectorAll('.homeLineDot').forEach(function (d) { d.classList.remove('isActive'); });
     });
   });
+
+  let todayIdx = points.findIndex(function (p) { return p.isToday; });
+  if (todayIdx >= 0) {
+    let todayHit = container.querySelector('.homeLineHit[data-idx="' + todayIdx + '"]');
+    if (todayHit) showTip(todayHit, points[todayIdx]);
+  }
 }
 
 function renderHomeMonthlyLineChart() {
@@ -303,11 +317,11 @@ function renderHomeMonthlyLineChart() {
   let xMarks = chartXLabels(daysInMonth, monthNum);
 
   let w = 360;
-  let h = 96;
-  let yAxisW = 42;
-  let padRight = 8;
-  let padBottom = 16;
-  let padY = 8;
+  let h = 108;
+  let yAxisW = 44;
+  let padRight = 10;
+  let padBottom = 18;
+  let padY = 10;
   let chartLeft = yAxisW;
   let innerW = w - chartLeft - padRight;
   let innerH = h - padY - padBottom;
@@ -342,10 +356,11 @@ function renderHomeMonthlyLineChart() {
 
   el.innerHTML =
     '<div class="homeLineChartInner">' +
+    '<span class="homeLineChartUnit">単位：USD</span>' +
     '<div class="homeLineChartTip"></div>' +
     '<svg class="homeLineChartSvg" viewBox="0 0 ' + w + ' ' + h + '" preserveAspectRatio="xMidYMid meet" aria-hidden="true">' +
     '<defs><linearGradient id="homeLineGrad" x1="0" y1="0" x2="0" y2="1">' +
-    '<stop offset="0%" stop-color="rgba(96,165,250,.22)"/><stop offset="100%" stop-color="rgba(96,165,250,0)"/>' +
+    '<stop offset="0%" stop-color="rgba(96,165,250,.28)"/><stop offset="100%" stop-color="rgba(96,165,250,0)"/>' +
     '</linearGradient></defs>' +
     gridSvg + xSvg +
     '<polyline class="homeLineChartFill" points="' + fillPts + '"></polyline>' +
@@ -353,7 +368,7 @@ function renderHomeMonthlyLineChart() {
     dots +
     '</svg></div>';
 
-  bindLineChartTooltip(el, vals);
+  bindLineChartTooltip(el, vals, monthNum);
 }
 
 function updateHomeMonthlyProjects(sAll) {
