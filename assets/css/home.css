@@ -360,6 +360,17 @@
   box-shadow: none;
 }
 
+.homeChartBar.isOutOfMonth,
+.homeChartCol.isOutOfMonthCol .homeChartDay {
+  opacity: .35;
+}
+
+.homeChartCol.isOutOfMonthCol .homeChartBar.isEmpty {
+  background: transparent;
+  border: none;
+  height: 0 !important;
+}
+
 .homeChartDay {
   font-size: 8px;
   font-weight: 800;
@@ -372,70 +383,69 @@
   color: var(--gold);
 }
 
-/* Mac版: 3段2列レイアウト */
+/* Mac版: 2列3段タイルレイアウト */
 @media (min-width: 901px) {
   .homeMainGrid {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    grid-template-rows: 170px auto auto;
+    grid-template-rows: auto minmax(0, 1fr) minmax(0, 1fr);
     gap: 10px;
-    align-items: start;
+    align-items: stretch;
   }
 
   .homeInputCard {
     grid-column: 1;
     grid-row: 1;
-    align-self: start;
-    width: 100%;
+    justify-content: center;
+    gap: 8px;
   }
 
   .homeMonthlyCard {
     grid-column: 1;
     grid-row: 2;
-    align-self: start;
-    width: 100%;
   }
 
   .homeTodayCard {
     grid-column: 1;
     grid-row: 3;
-    align-self: start;
-    width: 100%;
   }
 
   .homeCalendarCard {
     grid-column: 2;
     grid-row: 1 / 3;
-    align-self: stretch;
-    width: 100%;
     min-height: 0;
   }
 
   .homeChartCard {
     grid-column: 2;
     grid-row: 3;
-    align-self: start;
-    width: 100%;
+    min-height: 0;
   }
 
   .homeInputBtnWrap {
     flex: 0 0 auto;
+    justify-content: center;
   }
 
   .homeInputBtn--premium {
     flex: none !important;
-    min-height: 84px;
-    height: 84px;
-    max-height: 84px;
-    padding: 12px 14px;
+    min-height: 72px;
+    height: 72px;
+    max-height: 72px;
+    padding: 10px 14px;
   }
 
   .homeInputBtn--premium .homeInputBtnIcon {
-    font-size: 28px;
+    font-size: 26px;
   }
 
   .homeInputBtn--premium .homeInputBtnText {
-    font-size: 15px;
+    font-size: 14px;
+  }
+
+  .homeInputMeta {
+    margin-top: 0;
+    flex-shrink: 0;
   }
 
   .homeSummaryMain {
@@ -451,6 +461,29 @@
   .homeSummaryRow {
     padding: 6px 8px;
     font-size: 11px;
+  }
+
+  .homeCalendarPlaceholder {
+    flex: 1;
+    min-height: 0;
+  }
+
+  .homeChartArea {
+    flex: 1;
+    min-height: 0;
+  }
+
+  .homeChartShell {
+    min-height: 0;
+    height: 100%;
+  }
+
+  .homeChartBars {
+    min-height: 0;
+  }
+
+  .homeChartBarWrap {
+    min-height: 0;
   }
 }
 

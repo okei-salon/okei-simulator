@@ -102,13 +102,14 @@ function renderHomeMonthlyChart() {
   let maxVal = 0;
   let bars = [];
 
-  for (let d = 1; d <= daysInMonth; d++) {
-    let key = revenueDateKey(y, m, d);
-    let entry = getRevenueEntry(key);
+  for (let d = 1; d <= 31; d++) {
+    let inMonth = d <= daysInMonth;
+    let key = inMonth ? revenueDateKey(y, m, d) : null;
+    let entry = key ? getRevenueEntry(key) : null;
     let val = entry ? (entry.total || 0) : 0;
     if (val > maxVal) maxVal = val;
-    let isToday = today.getFullYear() === y && today.getMonth() === m && today.getDate() === d;
-    bars.push({ d: d, val: val, isToday: isToday, hasEntry: !!entry });
+    let isToday = inMonth && today.getFullYear() === y && today.getMonth() === m && today.getDate() === d;
+    bars.push({ d: d, val: val, isToday: isToday, hasEntry: !!entry, inMonth: inMonth });
   }
 
   if (maxVal <= 0) maxVal = 1;
@@ -118,8 +119,9 @@ function renderHomeMonthlyChart() {
     let barCls = ['homeChartBar'];
     if (b.isToday) barCls.push('isToday');
     if (!b.hasEntry) barCls.push('isEmpty');
-    let colCls = 'homeChartCol' + (b.isToday ? ' isTodayCol' : '');
-    let tip = b.d + '日: ' + (b.hasEntry ? money(b.val) : '未入力');
+    if (!b.inMonth) barCls.push('isOutOfMonth');
+    let colCls = 'homeChartCol' + (b.isToday ? ' isTodayCol' : '') + (!b.inMonth ? ' isOutOfMonthCol' : '');
+    let tip = !b.inMonth ? '対象外' : (b.d + '日: ' + (b.hasEntry ? money(b.val) : '未入力'));
     return '<div class="' + colCls + '" title="' + tip + '">' +
       '<div class="homeChartBarWrap"><div class="' + barCls.join(' ') + '" style="height:' + pct + '%"></div></div>' +
       '<span class="homeChartDay">' + b.d + '</span></div>';
