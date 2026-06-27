@@ -1,4 +1,4 @@
-/* ===== OUKEI HUB Home Layout (Ver1.5.8.27) ===== */
+/* ===== OUKEI HUB Home Layout (Ver1.5.8.28) ===== */
 /* ホーム画面専用CSS — 微調整はこのファイルを編集してください */
 
 /* --- Legacy compat (index.html から移行) --- */
@@ -296,7 +296,13 @@
 }
 
 /* index.html 内 .panel より優先 */
-.panel.homeInputCard,
+.panel.homeInputCard {
+  padding: 10px 12px;
+  border-radius: 16px;
+  background: linear-gradient(165deg, rgba(18, 32, 52, .98) 0%, rgba(8, 18, 32, .96) 100%);
+  border: 1px solid rgba(96, 165, 250, .14);
+}
+
 .panel.homeCalendarCard,
 .panel.homeMonthlyCard,
 .panel.homeTodayCard {
@@ -307,14 +313,16 @@
 }
 
 .homeInputCard {
+  padding: 10px 12px;
   text-align: center;
-  gap: 10px;
+  gap: 8px;
 }
 
 .homeInputBtnWrap {
   display: flex;
   align-items: stretch;
   min-height: 0;
+  flex: 0 0 auto;
 }
 
 .homeInputStats {
@@ -322,31 +330,55 @@
   grid-template-columns: 1fr 1fr;
   gap: 8px;
   width: 100%;
+  min-height: 0;
 }
 
 .homeInputStatBlock {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 10px;
+  padding: 8px;
   background: rgba(8, 20, 38, .72);
   border: 1px solid rgba(42, 66, 100, .65);
   border-radius: 12px;
-  text-align: left;
   min-width: 0;
+  min-height: 0;
+  height: 100%;
+}
+
+.homeInputStatBlock--streak {
+  justify-content: flex-start;
+}
+
+.homeInputStatBlock--rate {
+  gap: 10px;
 }
 
 .homeInputStatIcon {
-  font-size: 18px;
+  font-size: 20px;
   line-height: 1;
   flex-shrink: 0;
 }
 
-.homeInputStatBody {
+.homeInputStatBody--streak {
+  flex: 1;
   display: flex;
   flex-direction: column;
+  align-items: center;
+  justify-content: center;
   gap: 2px;
   min-width: 0;
+  text-align: center;
+}
+
+.homeInputStatBody--rate {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  min-width: 0;
+  text-align: left;
 }
 
 .homeInputStatLabel {
@@ -359,39 +391,47 @@
 .homeInputStatVal {
   color: var(--text);
   font-weight: 900;
-  font-size: 18px;
+  font-size: 17px;
+  line-height: 1.15;
+}
+
+.homeInputStatBody--streak .homeInputStatSub {
+  color: #9db4d0;
+  font-weight: 800;
+  font-size: 10px;
   line-height: 1.2;
 }
 
-.homeInputStatSub {
-  color: #9db4d0;
-  font-weight: 800;
+.homeInputStatBody--rate .homeInputStatSub {
+  color: var(--text);
+  font-weight: 900;
   font-size: 11px;
+  line-height: 1.2;
 }
 
 .homeInputRateRing {
   position: relative;
-  width: 38px;
-  height: 38px;
+  width: 48px;
+  height: 48px;
   flex-shrink: 0;
 }
 
 .homeInputRateRing svg {
-  width: 38px;
-  height: 38px;
+  width: 48px;
+  height: 48px;
   transform: rotate(-90deg);
 }
 
 .homeRateRingTrack {
   fill: none;
-  stroke: rgba(42, 66, 100, .8);
-  stroke-width: 3;
+  stroke: rgba(42, 66, 100, .85);
+  stroke-width: 3.5;
 }
 
 .homeRateRingFill {
   fill: none;
   stroke: #3b82f6;
-  stroke-width: 3;
+  stroke-width: 3.5;
   stroke-linecap: round;
   transition: stroke-dashoffset .35s ease;
 }
@@ -402,7 +442,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 900;
   color: var(--text);
 }
@@ -801,10 +841,10 @@
   .homeInputCard {
     grid-column: 1;
     grid-row: 1;
-    align-self: start;
+    align-self: stretch;
     justify-content: flex-start;
-    padding: 12px 14px;
-    gap: 10px;
+    padding: 10px 12px;
+    gap: 8px;
   }
 
   .homeCalendarCard {
@@ -827,31 +867,56 @@
   }
 
   .homeInputBtnWrap {
-    flex: 0 0 auto;
+    flex: 0 0 58%;
+    min-height: 0;
   }
 
   .homeInputStats {
-    flex: 0 0 auto;
+    flex: 1 1 0;
+    min-height: 0;
+    align-self: stretch;
   }
 
-  .homeInputBtn--premium {
+  .homeInputCard .homeInputBtn--premium {
     flex: none !important;
-    min-height: 72px;
-    height: auto;
+    height: 100%;
+    min-height: 0;
     max-height: none;
-    padding: 12px 14px;
+    padding: 10px 12px;
   }
 
-  .homeInputBtn--premium .homeInputBtnIcon {
-    font-size: 24px;
+  .homeInputCard .homeInputBtn--premium .homeInputBtnIcon {
+    font-size: 22px;
   }
 
-  .homeInputBtn--premium .homeInputBtnText {
-    font-size: 14px;
+  .homeInputCard .homeInputBtn--premium .homeInputBtnText {
+    font-size: 13px;
   }
 
-  .homeInputBtn--premium .homeInputBtnText small {
-    font-size: 11px;
+  .homeInputCard .homeInputBtn--premium .homeInputBtnText small {
+    font-size: 10px;
+  }
+
+  .homeInputStatBlock {
+    padding: 6px 8px;
+  }
+
+  .homeInputRateRing {
+    width: 54px;
+    height: 54px;
+  }
+
+  .homeInputRateRing svg {
+    width: 54px;
+    height: 54px;
+  }
+
+  .homeInputRatePct {
+    font-size: 12px;
+  }
+
+  .homeInputStatBody--streak .homeInputStatVal {
+    font-size: 16px;
   }
 
   .homeCalendarPlaceholder {
@@ -1414,13 +1479,17 @@
 
   .homeTaskProgress { text-align: left; }
 
-  .homeInputCard { order: 1; min-height: 0; justify-content: flex-start; gap: 10px; }
+  .homeInputCard { order: 1; min-height: 0; justify-content: flex-start; gap: 8px; padding: 10px 12px; }
 
   .homeInputBtnWrap {
-    flex: 1;
+    flex: 0 0 auto;
   }
 
-  .homeInputBtn--premium {
+  .homeInputStats {
+    flex: 0 0 auto;
+  }
+
+  .homeInputCard .homeInputBtn--premium {
     flex: 1;
     min-height: 118px;
     height: auto;
