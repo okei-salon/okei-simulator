@@ -1,4 +1,4 @@
-/* ===== OUKEI HUB Home Layout (Ver1.5.8.20) ===== */
+/* ===== OUKEI HUB Home Layout (Ver1.5.8.21) ===== */
 /* ホーム画面専用CSS — 微調整はこのファイルを編集してください */
 
 /* --- Legacy compat (index.html から移行) --- */
@@ -275,8 +275,7 @@
 .homeInputCard,
 .homeCalendarCard,
 .homeMonthlyCard,
-.homeTodayCard,
-.homeChartCard {
+.homeTodayCard {
   padding: 12px;
   min-height: 0;
   display: flex;
@@ -286,109 +285,207 @@
 
 .homeInputCard {
   text-align: center;
-  justify-content: flex-start;
+  justify-content: center;
+  gap: 10px;
 }
 
 .homeInputBtnWrap {
   display: flex;
   align-items: stretch;
   min-height: 0;
-  margin-bottom: 6px;
 }
 
-.homeChartArea {
-  flex: 1;
-  min-height: 148px;
+.homeInputStats {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+
+.homeInputStatRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 10px;
+  background: #081426;
+  border: 1px solid #2a4264;
+  border-radius: 10px;
+  font-size: 12px;
+}
+
+.homeInputStatLabel {
+  color: #9db4d0;
+  font-weight: 800;
+}
+
+.homeInputStatVal {
+  color: var(--text);
+  font-weight: 900;
+}
+
+.homeHeroCard {
+  background: linear-gradient(180deg, rgba(37, 99, 235, .08) 0%, rgba(15, 29, 49, .92) 100%);
+  border: 1px solid rgba(96, 165, 250, .22);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .04);
+}
+
+.homeHeroAmount {
+  margin-top: 2px;
+}
+
+.homeHeroCard .homeSummaryMain {
+  font-size: 30px;
+  letter-spacing: -.01em;
+}
+
+.homeLineChartArea {
+  margin-top: 10px;
   background: #081426;
   border: 1px solid #2a4264;
   border-radius: 12px;
-  padding: 8px 6px 4px;
+  padding: 8px 8px 4px;
   overflow: hidden;
 }
 
-.homeChartShell {
+.homeLineChartShell {
   display: flex;
   flex-direction: column;
-  height: 100%;
-  min-height: 128px;
+  gap: 4px;
 }
 
-.homeChartBars {
-  flex: 1;
+.homeLineChartSvg {
+  width: 100%;
+  height: 72px;
+  display: block;
+}
+
+.homeLineChartLine {
+  fill: none;
+  stroke: #60a5fa;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.homeLineChartFill {
+  fill: url(#homeLineGrad);
+  stroke: none;
+  opacity: .85;
+}
+
+.homeLineDot {
+  fill: #93c5fd;
+}
+
+.homeLineDot.isToday {
+  fill: var(--gold);
+  stroke: rgba(251, 191, 36, .5);
+  stroke-width: 1.5;
+}
+
+.homeLineChartAxis {
   display: flex;
-  align-items: flex-end;
-  gap: 2px;
-  min-height: 96px;
+  justify-content: space-between;
+  font-size: 9px;
+  font-weight: 800;
+  color: #7f97b3;
+  padding: 0 2px;
 }
 
-.homeChartCol {
-  flex: 1;
+.homeProjGrid {
+  display: grid;
+  grid-template-columns: repeat(var(--proj-cols, 1), minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.homeProjCard {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: flex-end;
-  min-width: 0;
-  height: 100%;
-}
-
-.homeChartBarWrap {
-  flex: 1;
-  width: 100%;
-  display: flex;
-  align-items: flex-end;
   justify-content: center;
-  min-height: 72px;
+  gap: 4px;
+  min-width: 0;
+  padding: 10px 8px;
+  background: #081426;
+  border: 1px solid #2a4264;
+  border-radius: 12px;
+  text-align: center;
 }
 
-.homeChartBar {
-  width: 100%;
-  max-width: 12px;
-  border-radius: 4px 4px 2px 2px;
-  background: linear-gradient(180deg, #60a5fa 0%, #2563eb 100%);
-  min-height: 0;
-  transition: height .2s ease;
-}
+.homeProjCard--ram { border-color: rgba(59, 130, 246, .35); }
+.homeProjCard--orca { border-color: rgba(139, 92, 246, .35); }
+.homeProjCard--cary { border-color: rgba(245, 158, 11, .35); }
 
-.homeChartBar.isToday {
-  background: linear-gradient(180deg, #fde68a 0%, #f59e0b 55%, #d97706 100%);
-  box-shadow: 0 0 10px rgba(251, 191, 36, .42);
-}
-
-.homeChartBar.isEmpty {
-  height: 2px !important;
-  background: rgba(42, 66, 100, .55);
-  box-shadow: none;
-}
-
-.homeChartBar.isOutOfMonth,
-.homeChartCol.isOutOfMonthCol .homeChartDay {
-  opacity: .35;
-}
-
-.homeChartCol.isOutOfMonthCol .homeChartBar.isEmpty {
-  background: transparent;
-  border: none;
-  height: 0 !important;
-}
-
-.homeChartDay {
-  font-size: 8px;
+.homeProjCardName {
+  font-size: 11px;
   font-weight: 800;
-  color: #7f97b3;
-  margin-top: 4px;
-  line-height: 1;
+  color: #9db4d0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
 }
 
-.homeChartCol.isTodayCol .homeChartDay {
-  color: var(--gold);
+.homeProjCardAmt {
+  font-size: 14px;
+  font-weight: 900;
+  color: var(--text);
 }
 
-/* Mac版: 2列3段タイルレイアウト */
+.homeTodayHero {
+  margin-top: 2px;
+}
+
+.homeTodayCompare {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.homeTodayCompareItem {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px;
+  background: #081426;
+  border: 1px solid #2a4264;
+  border-radius: 12px;
+}
+
+.homeTodayCompareItem--today {
+  border-color: rgba(96, 165, 250, .35);
+  background: linear-gradient(180deg, rgba(37, 99, 235, .12), #081426);
+}
+
+.homeTodayCompareLabel {
+  font-size: 11px;
+  font-weight: 800;
+  color: #9db4d0;
+}
+
+.homeTodayCompareVal {
+  font-size: 16px;
+  font-weight: 900;
+  color: var(--text);
+}
+
+.homeTodayCompareItem--today .homeTodayCompareVal {
+  color: var(--blue);
+}
+
+.homePanelHead--compact {
+  margin-bottom: 8px;
+}
+
+/* Mac版: 4カード・2×2ダッシュボード */
 @media (min-width: 901px) {
   .homeMainGrid {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    grid-template-rows: auto minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-columns: 4fr 5fr;
+    grid-template-rows: auto auto;
     gap: 10px;
     align-items: stretch;
   }
@@ -396,8 +493,13 @@
   .homeInputCard {
     grid-column: 1;
     grid-row: 1;
-    justify-content: center;
-    gap: 8px;
+    align-self: start;
+  }
+
+  .homeCalendarCard {
+    grid-column: 2;
+    grid-row: 1;
+    align-self: stretch;
   }
 
   .homeMonthlyCard {
@@ -406,84 +508,76 @@
   }
 
   .homeTodayCard {
-    grid-column: 1;
-    grid-row: 3;
-  }
-
-  .homeCalendarCard {
     grid-column: 2;
-    grid-row: 1 / 3;
-    min-height: 0;
-  }
-
-  .homeChartCard {
-    grid-column: 2;
-    grid-row: 3;
-    min-height: 0;
+    grid-row: 2;
+    align-self: stretch;
   }
 
   .homeInputBtnWrap {
     flex: 0 0 auto;
-    justify-content: center;
   }
 
   .homeInputBtn--premium {
     flex: none !important;
-    min-height: 72px;
-    height: 72px;
-    max-height: 72px;
+    min-height: 68px;
+    height: 68px;
+    max-height: 68px;
     padding: 10px 14px;
   }
 
   .homeInputBtn--premium .homeInputBtnIcon {
-    font-size: 26px;
+    font-size: 24px;
   }
 
   .homeInputBtn--premium .homeInputBtnText {
     font-size: 14px;
   }
 
-  .homeInputMeta {
-    margin-top: 0;
-    flex-shrink: 0;
-  }
-
-  .homeSummaryMain {
-    font-size: 24px;
-  }
-
-  .homeMonthlyCard .homeSummaryList,
-  .homeTodayCard .homeSummaryList {
-    margin-top: 8px;
-    gap: 4px;
-  }
-
-  .homeSummaryRow {
-    padding: 6px 8px;
+  .homeInputBtn--premium .homeInputBtnText small {
     font-size: 11px;
   }
 
   .homeCalendarPlaceholder {
     flex: 1;
     min-height: 0;
+    padding: 6px;
+    margin-bottom: 0;
   }
 
-  .homeChartArea {
-    flex: 1;
-    min-height: 0;
+  .homeCalTitle {
+    font-size: 12px;
   }
 
-  .homeChartShell {
-    min-height: 0;
-    height: 100%;
+  .homeCalNavBtn {
+    width: 24px;
+    height: 24px;
+    font-size: 16px;
   }
 
-  .homeChartBars {
-    min-height: 0;
+  .homeCalGrid {
+    gap: 2px;
   }
 
-  .homeChartBarWrap {
-    min-height: 0;
+  .homeCalDay {
+    font-size: 10px;
+    border-radius: 6px;
+  }
+
+  .homeCalDayLabel {
+    font-size: 8px;
+    padding: 1px 0;
+  }
+
+  .homeHeroCard .homeSummaryMain {
+    font-size: 32px;
+  }
+
+  .homeTodayCard .homeSummaryMain {
+    font-size: 26px;
+  }
+
+  .homeSummaryMain {
+    font-size: 24px;
   }
 }
 
@@ -938,13 +1032,11 @@
 
   .homeMonthlyCard { order: 3; min-height: 0; }
   .homeTodayCard { order: 4; min-height: 0; }
-  .homeChartCard { order: 5; min-height: 0; }
 
   .homeInputCard,
   .homeCalendarCard,
   .homeMonthlyCard,
-  .homeTodayCard,
-  .homeChartCard {
+  .homeTodayCard {
     min-height: 0;
     grid-column: auto;
     grid-row: auto;

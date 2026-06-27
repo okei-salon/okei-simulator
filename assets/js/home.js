@@ -1,4 +1,4 @@
-/* OUKEI HUB Home UI — Ver1.5.8.20 */
+/* OUKEI HUB Home UI — Ver1.5.8.21 */
 let homeCalView = { y: new Date().getFullYear(), m: new Date().getMonth() };
 
 function ensureRevenueLog() {
@@ -14,8 +14,22 @@ function todayKey() {
   return revenueDateKey(t.getFullYear(), t.getMonth(), t.getDate());
 }
 
+function yesterdayKey() {
+  let t = new Date();
+  t.setDate(t.getDate() - 1);
+  return revenueDateKey(t.getFullYear(), t.getMonth(), t.getDate());
+}
+
 function formatCalLabel(y, m) {
   return y + '年' + (m + 1) + '月';
+}
+
+function getEnabledHomeProjects() {
+  let list = [];
+  if (settings.useRAM !== false) list.push({ key: 'ram', name: 'RAM', dot: 'ram' });
+  if (settings.useORCA) list.push({ key: 'orca', name: 'ORCA', dot: 'orca' });
+  if (settings.useCARY) list.push({ key: 'cary', name: 'Cary Pact', dot: 'cary' });
+  return list.length ? list : [{ key: 'ram', name: 'RAM', dot: 'ram' }];
 }
 
 function defaultRevenueEntry() {
@@ -42,6 +56,82 @@ function saveRevenueEntry(key, entry) {
   markActivity();
 }
 
+function calcInputStreak() {
+  ensureRevenueLog();
+  let streak = 0;
+  let d = new Date();
+  let today = todayKey();
+  if (!getRevenueEntry(today)) d.setDate(d.getDate() - 1);
+  for (;;) {
+    let key = revenueDateKey(d.getFullYear(), d.getMonth(), d.getDate());
+    if (!getRevenueEntry(key)) break;
+    streak++;
+    d.setDate(d.getDate() - 1);
+  }
+  return streak;
+}
+
+function calcMonthInputRate() {
+  ensureRevenueLog();
+  let now = new Date();
+  let y = now.getFullYear();
+  let m = now.getMonth();
+  let elapsed = now.getDate();
+  let filled = 0;
+  for (let d = 1; d <= elapsed; d++) {
+    if (getRevenueEntry(revenueDateKey(y, m, d))) filled++;
+  }
+  return elapsed ? Math.round((filled / elapsed) * 100) : 0;
+}
+
+function sumMonthRevenueLog(y, m) {
+  ensureRevenueLog();
+  let daysInMonth = new Date(y, m + 1, 0).getDate();
+  let out = { total: 0, ram: 0, orca: 0, genesis: 0, cary: 0, hasLog: false };
+  for (let d = 1; d <= daysInMonth; d++) {
+    let entry = getRevenueEntry(revenueDateKey(y, m, d));
+    if (!entry) continue;
+    out.hasLog = true;
+    out.total += entry.total || 0;
+    out.ram += entry.ram || 0;
+    out.orca += entry.orca || 0;
+    out.genesis += entry.genesis || 0;
+    out.cary += entry.cary || 0;
+  }
+  return out;
+}
+
+function projectAmountFromEntry(entry, proj) {
+  if (!entry) return 0;
+  return entry[proj.key] || 0;
+}
+
+function fallbackProjectAmount(proj, sAll, mode) {
+  if (proj.key === 'ram') return mode === 'monthly' ? sAll.monthly : sAll.daily;
+  return 0;
+}
+
+function renderProjectGrid(containerId, projects, getAmount) {
+  let el = document.getElementById(containerId);
+  if (!el) return;
+  let n = Math.max(projects.length, 1);
+  el.style.setProperty('--proj-cols', n);
+  el.setAttribute('data-count', n);
+  el.innerHTML = projects.map(function (p) {
+    return '<div class="homeProjCard homeProjCard--' + p.dot + '">' +
+      '<span class="homeProjCardName">' + p.name + '</span>' +
+      '<span class="homeProjCardAmt">' + money(getAmount(p)) + '</span>' +
+      '</div>';
+  }).join('');
+}
+
+function updateHomeInputStats() {
+  let streakEl = document.getElementById('homeInputStreak');
+  let rateEl = document.getElementById('homeInputRate');
+  if (streakEl) streakEl.textContent = calcInputStreak() + '日';
+  if (rateEl) rateEl.textContent = calcMonthInputRate() + '%';
+}
+
 function renderHomeCalendar() {
   if (typeof homeCalendar === 'undefined') return;
   ensureRevenueLog();
@@ -52,7 +142,7 @@ function renderHomeCalendar() {
   let daysInMonth = new Date(y, m + 1, 0).getDate();
   let today = new Date();
   let weekdays = ['日', '月', '火', '水', '木', '金', '土'];
-  let cells = weekdays.map(w => '<div class="homeCalDayLabel">' + w + '</div>').join('');
+  let cells = weekdays.map(function (w) { return '<div class="homeCalDayLabel">' + w + '</div>'; }).join('');
 
   for (let i = 0; i < start; i++) cells += '<div class="homeCalDay homeCalDay--blank"></div>';
 
@@ -82,53 +172,111 @@ function homeCalPrevMonth() {
   homeCalView.m--;
   if (homeCalView.m < 0) { homeCalView.m = 11; homeCalView.y--; }
   renderHomeCalendar();
-  if (typeof renderHomeMonthlyChart === 'function') renderHomeMonthlyChart();
+  renderHomeMonthlyLineChart();
+  updateHomeMonthlyProjects(typeof allOrgSummary === 'function' ? allOrgSummary() : null);
 }
 
 function homeCalNextMonth() {
   homeCalView.m++;
   if (homeCalView.m > 11) { homeCalView.m = 0; homeCalView.y++; }
   renderHomeCalendar();
-  if (typeof renderHomeMonthlyChart === 'function') renderHomeMonthlyChart();
+  renderHomeMonthlyLineChart();
+  updateHomeMonthlyProjects(typeof allOrgSummary === 'function' ? allOrgSummary() : null);
 }
 
-function renderHomeMonthlyChart() {
-  if (typeof homeMonthlyChart === 'undefined') return;
+function renderHomeMonthlyLineChart() {
+  let el = document.getElementById('homeMonthlyLineChart');
+  if (!el) return;
   ensureRevenueLog();
   let y = homeCalView.y;
   let m = homeCalView.m;
   let daysInMonth = new Date(y, m + 1, 0).getDate();
   let today = new Date();
+  let vals = [];
   let maxVal = 0;
-  let bars = [];
 
-  for (let d = 1; d <= 31; d++) {
-    let inMonth = d <= daysInMonth;
-    let key = inMonth ? revenueDateKey(y, m, d) : null;
-    let entry = key ? getRevenueEntry(key) : null;
+  for (let d = 1; d <= daysInMonth; d++) {
+    let entry = getRevenueEntry(revenueDateKey(y, m, d));
     let val = entry ? (entry.total || 0) : 0;
+    vals.push({ d: d, val: val, isToday: today.getFullYear() === y && today.getMonth() === m && today.getDate() === d });
     if (val > maxVal) maxVal = val;
-    let isToday = inMonth && today.getFullYear() === y && today.getMonth() === m && today.getDate() === d;
-    bars.push({ d: d, val: val, isToday: isToday, hasEntry: !!entry, inMonth: inMonth });
   }
 
   if (maxVal <= 0) maxVal = 1;
 
-  let cols = bars.map(function (b) {
-    let pct = b.hasEntry ? Math.max(6, Math.round((b.val / maxVal) * 100)) : 0;
-    let barCls = ['homeChartBar'];
-    if (b.isToday) barCls.push('isToday');
-    if (!b.hasEntry) barCls.push('isEmpty');
-    if (!b.inMonth) barCls.push('isOutOfMonth');
-    let colCls = 'homeChartCol' + (b.isToday ? ' isTodayCol' : '') + (!b.inMonth ? ' isOutOfMonthCol' : '');
-    let tip = !b.inMonth ? '対象外' : (b.d + '日: ' + (b.hasEntry ? money(b.val) : '未入力'));
-    return '<div class="' + colCls + '" title="' + tip + '">' +
-      '<div class="homeChartBarWrap"><div class="' + barCls.join(' ') + '" style="height:' + pct + '%"></div></div>' +
-      '<span class="homeChartDay">' + b.d + '</span></div>';
+  let w = 320;
+  let h = 72;
+  let padX = 6;
+  let padY = 8;
+  let innerW = w - padX * 2;
+  let innerH = h - padY * 2;
+  let pts = vals.map(function (v, i) {
+    let x = padX + (daysInMonth <= 1 ? innerW / 2 : (i / (daysInMonth - 1)) * innerW);
+    let yPos = padY + innerH - (v.val / maxVal) * innerH;
+    return x.toFixed(1) + ',' + yPos.toFixed(1);
+  }).join(' ');
+
+  let dots = vals.map(function (v, i) {
+    let x = padX + (daysInMonth <= 1 ? innerW / 2 : (i / (daysInMonth - 1)) * innerW);
+    let yPos = padY + innerH - (v.val / maxVal) * innerH;
+    let cls = v.isToday ? 'homeLineDot isToday' : 'homeLineDot';
+    return '<circle class="' + cls + '" cx="' + x.toFixed(1) + '" cy="' + yPos.toFixed(1) + '" r="' + (v.isToday ? '3.5' : '2') + '"></circle>';
   }).join('');
 
-  homeMonthlyChart.innerHTML =
-    '<div class="homeChartShell"><div class="homeChartBars">' + cols + '</div></div>';
+  el.innerHTML =
+    '<div class="homeLineChartShell">' +
+    '<svg class="homeLineChartSvg" viewBox="0 0 ' + w + ' ' + h + '" preserveAspectRatio="none" aria-hidden="true">' +
+    '<defs><linearGradient id="homeLineGrad" x1="0" y1="0" x2="0" y2="1">' +
+    '<stop offset="0%" stop-color="rgba(96,165,250,.35)"/><stop offset="100%" stop-color="rgba(96,165,250,0)"/>' +
+    '</linearGradient></defs>' +
+    '<polyline class="homeLineChartFill" points="' + pts + ' ' + (padX + innerW) + ',' + (padY + innerH) + ' ' + padX + ',' + (padY + innerH) + '"></polyline>' +
+    '<polyline class="homeLineChartLine" points="' + pts + '"></polyline>' +
+    dots +
+    '</svg>' +
+    '<div class="homeLineChartAxis"><span>1</span><span>' + daysInMonth + '</span></div>' +
+    '</div>';
+}
+
+function updateHomeMonthlyProjects(sAll) {
+  if (!sAll && typeof allOrgSummary === 'function') sAll = allOrgSummary();
+  if (!sAll) return;
+  let projects = getEnabledHomeProjects();
+  let now = new Date();
+  let monthLog = sumMonthRevenueLog(now.getFullYear(), now.getMonth());
+  renderProjectGrid('homeMonthlyProjGrid', projects, function (p) {
+    if (monthLog.hasLog) return projectAmountFromEntry({ total: monthLog.total, ram: monthLog.ram, orca: monthLog.orca, genesis: monthLog.genesis, cary: monthLog.cary }, p);
+    return fallbackProjectAmount(p, sAll, 'monthly');
+  });
+}
+
+function updateHomeTodaySection(sAll) {
+  if (!sAll && typeof allOrgSummary === 'function') sAll = allOrgSummary();
+  if (!sAll) return;
+  let projects = getEnabledHomeProjects();
+  let todayEntry = getRevenueEntry(todayKey());
+  let yesterdayEntry = getRevenueEntry(yesterdayKey());
+  let todayTotal = todayEntry ? (todayEntry.total || 0) : sAll.daily;
+  let yesterdayTotal = yesterdayEntry ? (yesterdayEntry.total || 0) : sAll.daily;
+
+  let compareEl = document.getElementById('homeTodayCompare');
+  if (compareEl) {
+    compareEl.innerHTML =
+      '<div class="homeTodayCompareItem"><span class="homeTodayCompareLabel">昨日</span><span class="homeTodayCompareVal">' + money(yesterdayTotal) + '</span></div>' +
+      '<div class="homeTodayCompareItem homeTodayCompareItem--today"><span class="homeTodayCompareLabel">本日</span><span class="homeTodayCompareVal">' + money(todayTotal) + '</span></div>';
+  }
+
+  renderProjectGrid('homeDailyProjGrid', projects, function (p) {
+    if (todayEntry) return projectAmountFromEntry(todayEntry, p);
+    return fallbackProjectAmount(p, sAll, 'daily');
+  });
+}
+
+function updateHomeDashboard(sAll) {
+  updateHomeInputStats();
+  renderHomeCalendar();
+  renderHomeMonthlyLineChart();
+  updateHomeMonthlyProjects(sAll);
+  updateHomeTodaySection(sAll);
 }
 
 function showRevenueDayDetail(key) {
@@ -166,7 +314,7 @@ function openRevenueInput() {
     '<button class="btn2" onclick="closeModal()">キャンセル</button>' +
     '<button onclick="saveTodayRevenue()">保存</button></div>';
   modalBg.style.display = 'flex';
-  setTimeout(() => { let el = document.getElementById('revenueInputTotal'); if (el) el.focus(); }, 80);
+  setTimeout(function () { let el = document.getElementById('revenueInputTotal'); if (el) el.focus(); }, 80);
 }
 
 function saveTodayRevenue() {
@@ -190,25 +338,13 @@ function syncMobileNav(page) {
   if (!nav) return;
   let map = { home: 'home', ram: 'ram', settings: 'settings', accountManage: 'ram' };
   let active = map[page] || '';
-  nav.querySelectorAll('[data-nav]').forEach(btn => {
+  nav.querySelectorAll('[data-nav]').forEach(function (btn) {
     btn.classList.toggle('isActive', btn.getAttribute('data-nav') === active);
   });
 }
 
 function openPortfolioNav() {
   alert('ポートフォリオは今後実装予定です');
-}
-
-function updateHomeLastInput() {
-  if (typeof homeLastInput === 'undefined') return;
-  ensureRevenueLog();
-  let keys = Object.keys(settings.revenueLog).sort().reverse();
-  if (!keys.length) {
-    homeLastInput.textContent = settings.lastUpdate && settings.lastUpdate !== '-' ? settings.lastUpdate : '-';
-    return;
-  }
-  let last = settings.revenueLog[keys[0]];
-  homeLastInput.textContent = last.savedAt || keys[0];
 }
 
 document.addEventListener('DOMContentLoaded', function () {
