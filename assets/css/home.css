@@ -1680,16 +1680,19 @@ font-weight: 700;
   }
 
   .homeInputRateRing {
-    width: 54px;
-    height: 54px;
+    width: 70px;
+    height: 70px;
   }
 
-  .homeInputRateRing svg {
-    width: 54px;
-    height: 54px;
+  .homeInputRateRing svg,
+  .homeInputRateSvg {
+    width: 70px;
+    height: 70px;
+    display: block;
   }
 
   .homeInputRatePct {
-    font-size: 12px;
+    font-size: 18px;
+    font-weight: 700;
   }
 }
