@@ -377,7 +377,7 @@
   .homeMainGrid {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    grid-template-rows: auto auto auto;
+    grid-template-rows: 170px auto auto;
     gap: 10px;
     align-items: start;
   }
