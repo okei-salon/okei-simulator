@@ -777,7 +777,7 @@
   .homeMainGrid {
     display: grid;
     grid-template-columns: 4fr 5fr;
-    grid-template-rows: 280px 360px;
+    grid-template-rows: 250px 390px;
     gap: 10px;
     align-items: stretch;
   }
