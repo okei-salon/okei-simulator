@@ -188,7 +188,7 @@
 .ochanContainer {
   position: absolute;
   left: var(--ochan-left, 0);
-  bottom: var(--ochan-bottom, -30px);
+  bottom: var(--ochan-bottom, -40px);
   width: 118px;
   height: 0;
   transform: var(--ochan-transform, none);
