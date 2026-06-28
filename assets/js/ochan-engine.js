@@ -29,7 +29,10 @@ var OCHAN_CONDITIONS = {
   loginMilestone: function (ctx) { return ctx.flags.loginMilestone; },
   monthStart: function (ctx) { return ctx.flags.monthStart; },
   monthEnd: function (ctx) { return ctx.flags.monthEnd; },
-  weekdayGreeting: function (ctx) { return ctx.flags.weekdayGreeting; }
+  weekdayGreeting: function (ctx) { return ctx.flags.weekdayGreeting; },
+  greetingGeneral: function (ctx) { return ctx.flags.greetingGeneral; },
+  seasonGreeting: function (ctx) { return ctx.flags.seasonGreeting; },
+  specialEvent: function (ctx) { return ctx.flags.specialEvent; }
 };
 
 function getOchanDialect() {
@@ -211,6 +214,16 @@ function getPreviousAssetSnapshot() {
   return Number(settings.ochanLastAssetSnapshot) || 0;
 }
 
+function isSeasonGreetingActive(refDate) {
+  if (typeof OCHAN_LINES_BY_CATEGORY === 'undefined') return false;
+  let pool = OCHAN_LINES_BY_CATEGORY.season_greeting || [];
+  return pool.some(function (line) {
+    if (line.active === false) return false;
+    if (!line.activeFrom && !line.activeTo) return false;
+    return isOchanDateInRange(refDate, line.activeFrom, line.activeTo);
+  });
+}
+
 function isHomeInputAllComplete() {
   if (typeof getHomeActionProjects !== 'function') return false;
   let projects = getHomeActionProjects();
@@ -289,9 +302,12 @@ function buildOchanContext() {
     assetMilestone: !!assetMilestoneHit,
     projectAdded: !!projectName,
     loginMilestone: loginMilestoneHit != null,
-    monthStart: day === 1,
-    monthEnd: day === daysInMonth,
+    monthStart: day <= 3,
+    monthEnd: day >= daysInMonth - 4,
     weekdayGreeting: true,
+    greetingGeneral: true,
+    seasonGreeting: isSeasonGreetingActive(refDate),
+    specialEvent: !!(settings.ochanSpecialEventActive),
     events: events
   };
 
@@ -390,6 +406,12 @@ function updateOchanMessage() {
   if (!el) return;
   let ctx = buildOchanContext();
   el.textContent = pickOchanLine(ctx);
+}
+
+function notifyOchanSpecialEvent(on) {
+  settings.ochanSpecialEventActive = !!on;
+  if (typeof markSettingsDirty === 'function') markSettingsDirty();
+  if (typeof updateOchanMessage === 'function') updateOchanMessage();
 }
 
 function notifyOchanProjectAdded(name) {
