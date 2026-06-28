@@ -1,4 +1,4 @@
-/* OUKEI HUB Home UI — Ver1.5.8.31 */
+/* OUKEI HUB Home UI — Ver1.5.8.32 */
 let homeCalView = { y: new Date().getFullYear(), m: new Date().getMonth() };
 
 function ensureRevenueLog() {
@@ -356,19 +356,29 @@ function bindMonthlyChartTooltip(container, points, monthNum) {
   let svg = container.querySelector('.homeMonthlyChartSvg');
   if (!tip || !svg) return;
 
+  function positionTip(node) {
+    let cx = Number(node.getAttribute('cx'));
+    let cy = Number(node.getAttribute('cy'));
+    let vb = svg.viewBox.baseVal;
+    let px = (cx / vb.width) * svg.clientWidth;
+    let ratio = cx / vb.width;
+    let left;
+    if (ratio > 0.82) left = px - tip.offsetWidth + 6;
+    else if (ratio < 0.18) left = px - 6;
+    else left = px - tip.offsetWidth / 2;
+    left = Math.max(4, Math.min(left, svg.clientWidth - tip.offsetWidth - 4));
+    let top = ((cy / vb.height) * svg.clientHeight) - tip.offsetHeight - 12;
+    tip.style.left = left + 'px';
+    tip.style.top = Math.max(4, top) + 'px';
+  }
+
   function showTip(node, p) {
     if (!p) return;
     tip.innerHTML =
       '<span class="homeMonthlyChartTipDate">' + monthNum + '/' + p.d + '</span>' +
       '<span class="homeMonthlyChartTipAmt">' + money(p.val) + '</span>';
     tip.classList.add('isVisible');
-    let cx = Number(node.getAttribute('cx'));
-    let cy = Number(node.getAttribute('cy'));
-    let vb = svg.viewBox.baseVal;
-    let left = ((cx / vb.width) * svg.clientWidth) - tip.offsetWidth / 2;
-    let top = ((cy / vb.height) * svg.clientHeight) - tip.offsetHeight - 12;
-    tip.style.left = Math.max(4, Math.min(left, svg.clientWidth - tip.offsetWidth - 4)) + 'px';
-    tip.style.top = Math.max(4, top) + 'px';
+    positionTip(node);
     container.querySelectorAll('.homeMonthlyChartDot').forEach(function (d) { d.classList.remove('isActive'); });
     let dot = node.parentNode ? node.parentNode.querySelector('.homeMonthlyChartDot') : null;
     if (dot) dot.classList.add('isActive');
@@ -391,6 +401,11 @@ function bindMonthlyChartTooltip(container, points, monthNum) {
     let todayHit = container.querySelector('.homeMonthlyChartHit[data-idx="' + todayIdx + '"]');
     if (todayHit) showTip(todayHit, points[todayIdx]);
   }
+}
+
+function monthlyChartPlotX(index, daysInMonth, chartLeft, plotPadLeft, plotW) {
+  if (daysInMonth <= 1) return chartLeft + plotPadLeft + plotW / 2;
+  return chartLeft + plotPadLeft + (index / (daysInMonth - 1)) * plotW;
 }
 
 function renderHomeMonthlyLineChart() {
@@ -416,37 +431,42 @@ function renderHomeMonthlyLineChart() {
   let ticks = chartAxisTicks(axisMax, 5);
   let xMarks = chartXLabels(daysInMonth, monthNum);
 
-  let w = 380;
+  let w = 400;
   let h = 190;
   let yAxisW = 30;
-  let padRight = 4;
+  let padRight = 24;
   let padBottom = 16;
   let padY = 8;
+  let plotPadLeft = 4;
+  let plotPadRight = 14;
   let chartLeft = yAxisW;
   let innerW = w - chartLeft - padRight;
+  let plotW = innerW - plotPadLeft - plotPadRight;
   let innerH = h - padY - padBottom;
+  let plotRight = chartLeft + plotPadLeft + plotW;
 
   let gridSvg = ticks.map(function (t) {
     let yPos = padY + innerH - (t / axisMax) * innerH;
-    return '<line class="homeMonthlyChartGrid" x1="' + chartLeft + '" y1="' + yPos.toFixed(1) + '" x2="' + (w - padRight) + '" y2="' + yPos.toFixed(1) + '"></line>' +
+    return '<line class="homeMonthlyChartGrid" x1="' + chartLeft + '" y1="' + yPos.toFixed(1) + '" x2="' + plotRight.toFixed(1) + '" y2="' + yPos.toFixed(1) + '"></line>' +
       '<text class="homeMonthlyChartYLabel" x="' + (chartLeft - 4) + '" y="' + (yPos + 3.5).toFixed(1) + '" text-anchor="end">' + formatAxisDollar(t) + '</text>';
   }).join('');
 
   let xSvg = xMarks.map(function (mark) {
-    let x = chartLeft + (daysInMonth <= 1 ? innerW / 2 : ((mark.d - 1) / (daysInMonth - 1)) * innerW);
-    return '<text class="homeMonthlyChartXLabel" x="' + x.toFixed(1) + '" y="' + (h - 4) + '" text-anchor="middle">' + mark.label + '</text>';
+    let x = monthlyChartPlotX(mark.d - 1, daysInMonth, chartLeft, plotPadLeft, plotW);
+    let anchor = mark.d === 1 ? 'start' : (mark.d === daysInMonth ? 'end' : 'middle');
+    return '<text class="homeMonthlyChartXLabel" x="' + x.toFixed(1) + '" y="' + (h - 4) + '" text-anchor="' + anchor + '">' + mark.label + '</text>';
   }).join('');
 
   let pts = vals.map(function (v, i) {
-    let x = chartLeft + (daysInMonth <= 1 ? innerW / 2 : (i / (daysInMonth - 1)) * innerW);
+    let x = monthlyChartPlotX(i, daysInMonth, chartLeft, plotPadLeft, plotW);
     let yPos = padY + innerH - (v.val / axisMax) * innerH;
     return x.toFixed(1) + ',' + yPos.toFixed(1);
   }).join(' ');
 
-  let fillPts = pts + ' ' + (chartLeft + innerW).toFixed(1) + ',' + (padY + innerH).toFixed(1) + ' ' + chartLeft + ',' + (padY + innerH).toFixed(1);
+  let fillPts = pts + ' ' + plotRight.toFixed(1) + ',' + (padY + innerH).toFixed(1) + ' ' + (chartLeft + plotPadLeft).toFixed(1) + ',' + (padY + innerH).toFixed(1);
 
   let dots = vals.map(function (v, i) {
-    let x = chartLeft + (daysInMonth <= 1 ? innerW / 2 : (i / (daysInMonth - 1)) * innerW);
+    let x = monthlyChartPlotX(i, daysInMonth, chartLeft, plotPadLeft, plotW);
     let yPos = padY + innerH - (v.val / axisMax) * innerH;
     let xf = x.toFixed(1);
     let yf = yPos.toFixed(1);

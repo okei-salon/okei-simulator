@@ -1,13 +1,11 @@
 /* ============================================================
- * ホーム画面デモデータ（デザイン確認用）
+ * ホーム画面デモモード（デザイン確認・説明会用）
  *
- * 【OFF にする方法】
- *   1) 下記 HOME_DEMO_MODE を false にする
- *   2) または index.html から home-demo.js の読み込み行を削除
- *
- * 本番の settings.revenueLog には一切書き込みません。
+ * ON/OFF: ホーム画面上部のトグル
+ * 保存: localStorage「oukei_home_demo_mode」のみ（本番データとは分離）
+ * 本番の settings.revenueLog / oukei_hub_v15_data には書き込みません。
  * ============================================================ */
-var HOME_DEMO_MODE = true;
+var HOME_DEMO_STORAGE_KEY = 'oukei_home_demo_mode';
 
 var HOME_DEMO_YEAR = 2026;
 var HOME_DEMO_MONTH = 5; /* 0-indexed: 6月 */
@@ -40,6 +38,22 @@ var HOME_DEMO_LOG = (function () {
   });
   return log;
 })();
+
+var HOME_DEMO_MODE = false;
+
+function loadHomeDemoMode() {
+  try {
+    return localStorage.getItem(HOME_DEMO_STORAGE_KEY) === '1';
+  } catch (e) {
+    return false;
+  }
+}
+
+function persistHomeDemoMode(on) {
+  try {
+    localStorage.setItem(HOME_DEMO_STORAGE_KEY, on ? '1' : '0');
+  } catch (e) {}
+}
 
 function isHomeDemoActive() {
   return !!HOME_DEMO_MODE;
@@ -91,8 +105,17 @@ function getHomeDemoEnabledProjects() {
   ];
 }
 
+function removeHomeDemoBanner() {
+  var banner = document.getElementById('homeDemoBanner');
+  if (banner) banner.remove();
+}
+
 function injectHomeDemoBanner() {
-  if (!isHomeDemoActive() || document.getElementById('homeDemoBanner')) return;
+  if (!isHomeDemoActive()) {
+    removeHomeDemoBanner();
+    return;
+  }
+  if (document.getElementById('homeDemoBanner')) return;
   var card = document.getElementById('homeMonthlyCard');
   if (!card) return;
   var banner = document.createElement('div');
@@ -102,28 +125,71 @@ function injectHomeDemoBanner() {
   card.insertBefore(banner, card.firstChild);
 }
 
-function initHomeDemo() {
-  if (!isHomeDemoActive()) return;
-  homeCalView.y = HOME_DEMO_YEAR;
-  homeCalView.m = HOME_DEMO_MONTH;
-  injectHomeDemoBanner();
+function syncHomeDemoToolbar() {
+  var toolbar = document.getElementById('homeDemoToolbar');
+  var toggle = document.getElementById('homeDemoToggle');
+  if (toggle) toggle.checked = isHomeDemoActive();
+  if (toolbar) toolbar.classList.toggle('isActive', isHomeDemoActive());
+}
+
+function resetHomeCalViewForMode() {
+  if (isHomeDemoActive()) {
+    homeCalView.y = HOME_DEMO_YEAR;
+    homeCalView.m = HOME_DEMO_MONTH;
+    return;
+  }
+  var now = new Date();
+  homeCalView.y = now.getFullYear();
+  homeCalView.m = now.getMonth();
+}
+
+function applyHomeDemoState() {
+  HOME_DEMO_MODE = loadHomeDemoMode();
+  resetHomeCalViewForMode();
+  syncHomeDemoToolbar();
+  if (isHomeDemoActive()) injectHomeDemoBanner();
+  else removeHomeDemoBanner();
+}
+
+function toggleHomeDemoMode(on) {
+  HOME_DEMO_MODE = !!on;
+  persistHomeDemoMode(HOME_DEMO_MODE);
+  resetHomeCalViewForMode();
+  syncHomeDemoToolbar();
+  if (isHomeDemoActive()) injectHomeDemoBanner();
+  else removeHomeDemoBanner();
   if (typeof updateHomeDashboard === 'function') {
     updateHomeDashboard(typeof allOrgSummary === 'function' ? allOrgSummary() : null);
+  } else if (typeof render === 'function') {
+    render();
   }
 }
 
 function patchHomeDemoRender() {
-  if (!isHomeDemoActive() || typeof renderHome !== 'function' || renderHome.__homeDemoPatched) return;
+  if (typeof renderHome !== 'function' || renderHome.__homeDemoPatched) return;
   var orig = renderHome;
   renderHome = function () {
-    homeCalView.y = HOME_DEMO_YEAR;
-    homeCalView.m = HOME_DEMO_MONTH;
+    if (isHomeDemoActive()) {
+      homeCalView.y = HOME_DEMO_YEAR;
+      homeCalView.m = HOME_DEMO_MONTH;
+    }
     orig.apply(this, arguments);
-    injectHomeDemoBanner();
+    syncHomeDemoToolbar();
+    if (isHomeDemoActive()) injectHomeDemoBanner();
+    else removeHomeDemoBanner();
   };
   renderHome.__homeDemoPatched = true;
 }
 
+function initHomeDemo() {
+  applyHomeDemoState();
+  patchHomeDemoRender();
+}
+
 if (typeof document !== 'undefined') {
-  injectHomeDemoBanner();
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initHomeDemo);
+  } else {
+    initHomeDemo();
+  }
 }

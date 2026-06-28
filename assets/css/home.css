@@ -95,12 +95,30 @@
 .homePanelHead {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 9px;
   margin-bottom: 10px;
 }
 
-.homePanelIcon {
-  font-size: 16px;
+.homePanelIcon,
+.homeCardIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 21px;
+  height: 21px;
+  flex-shrink: 0;
+}
+
+.homePanelIcon svg,
+.homeCardIcon svg,
+.homeInputStatIcon svg {
+  width: 21px;
+  height: 21px;
+  stroke: #93c5fd;
+  stroke-width: 2;
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .homePanelTitle {
@@ -351,13 +369,17 @@
 }
 
 .homeInputStatBlock--rate {
-  gap: 10px;
+  gap: 8px;
 }
 
 .homeInputStatIcon {
-  font-size: 20px;
-  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 21px;
+  height: 21px;
   flex-shrink: 0;
+  line-height: 1;
 }
 
 .homeInputStatBody--streak {
@@ -490,6 +512,89 @@
   line-height: 1.15;
 }
 
+/* --- デモモードトグル（ホームのみ） --- */
+.homeDemoToolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 0 0 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(36, 58, 90, .75);
+  background: rgba(7, 16, 30, .72);
+}
+
+.homeDemoToolbar.isActive {
+  border-color: rgba(251, 191, 36, .35);
+  background: rgba(251, 191, 36, .08);
+}
+
+.homeDemoToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.homeDemoToggle input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.homeDemoToggleUi {
+  position: relative;
+  width: 42px;
+  height: 24px;
+  border-radius: 999px;
+  background: rgba(42, 66, 100, .85);
+  border: 1px solid rgba(96, 165, 250, .25);
+  transition: background .2s ease, border-color .2s ease;
+  flex-shrink: 0;
+}
+
+.homeDemoToggleUi::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #cbd5e1;
+  transition: transform .2s ease, background .2s ease;
+}
+
+.homeDemoToggle input:checked + .homeDemoToggleUi {
+  background: rgba(251, 191, 36, .28);
+  border-color: rgba(251, 191, 36, .55);
+}
+
+.homeDemoToggle input:checked + .homeDemoToggleUi::after {
+  transform: translateX(18px);
+  background: #fcd34d;
+}
+
+.homeDemoToggleText {
+  font-size: 12px;
+  font-weight: 800;
+  color: #dbeafe;
+}
+
+.homeDemoToggleNote {
+  font-size: 10px;
+  font-weight: 700;
+  color: #7f97b3;
+}
+
+.homeDemoToolbar.isActive .homeDemoToggleNote {
+  color: #d4b86a;
+}
+
 /* --- 今月収益カード（このカード専用・他カード非共有） --- */
 .homeDemoBanner {
   margin: -2px 0 8px;
@@ -550,12 +655,13 @@
   border: 1px solid rgba(36, 58, 90, .85);
   border-radius: 12px;
   background: rgba(5, 12, 24, .92);
-  overflow: hidden;
+  overflow: visible;
 }
 
 .homeMonthlyCard .homeMonthlyChartInner {
   position: relative;
   min-height: 190px;
+  overflow: visible;
 }
 
 .homeMonthlyCard .homeMonthlyChartTip {
@@ -1193,8 +1299,14 @@
   }
 
   .homeInputCard .homeInputBtn--premium .homeInputBtnIcon {
-    font-size: 40px;
+    width: 40px;
+    height: 40px;
     margin-top: -2px;
+  }
+
+  .homeInputCard .homeInputBtn--premium .homeInputBtnIcon svg {
+    width: 40px;
+    height: 40px;
   }
 
   .homeInputCard .homeInputBtn--premium .homeInputBtnText {
@@ -1429,8 +1541,14 @@
 }
 
 .homeInputBtn--premium .homeInputBtnIcon {
-  font-size: 36px;
+  width: 36px;
+  height: 36px;
   filter: drop-shadow(0 2px 6px rgba(15, 23, 42, .25));
+}
+
+.homeInputBtn--premium .homeInputBtnIcon svg {
+  width: 36px;
+  height: 36px;
 }
 
 .homeInputBtn--premium .homeInputBtnText {
@@ -1445,8 +1563,23 @@
 }
 
 .homeInputBtnIcon {
-  font-size: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
   line-height: 1;
+  flex-shrink: 0;
+}
+
+.homeInputBtnIcon svg {
+  width: 28px;
+  height: 28px;
+  stroke: #fff;
+  stroke-width: 2.2;
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .homeInputBtnText {
