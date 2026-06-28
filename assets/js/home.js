@@ -1,4 +1,4 @@
-/* OUKEI HUB Home UI — Ver1.5.8.33 */
+/* OUKEI HUB Home UI — Ver1.5.8.34 */
 let homeCalView = { y: new Date().getFullYear(), m: new Date().getMonth() };
 
 function ensureRevenueLog() {
@@ -42,6 +42,70 @@ function getEnabledHomeProjects() {
   if (settings.useORCA) list.push({ key: 'orca', name: 'ORCA', dot: 'orca' });
   if (settings.useCARY) list.push({ key: 'cary', name: 'Cary Pact', dot: 'cary' });
   return list.length ? list : [{ key: 'ram', name: 'RAM', dot: 'ram' }];
+}
+
+var HOME_ACTION_ICON_PENDING = '<span class="homeActionItemIcon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/></svg></span>';
+var HOME_ACTION_ICON_DONE = '<span class="homeActionItemIcon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9 12l2 2 4-4"/></svg></span>';
+
+function getHomeActionProjects() {
+  let list = getEnabledHomeProjects().map(function (p) {
+    return { key: p.key, name: p.name, cls: p.dot || p.key };
+  });
+  (settings.customProjects || []).forEach(function (p) {
+    let key = String(p.key || p.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (!key || list.some(function (x) { return x.key === key; })) return;
+    list.push({ key: key, name: p.name || key, cls: 'custom' });
+  });
+  return list;
+}
+
+function isHomeProjectEnteredToday(entry, projectKey) {
+  if (!entry) return false;
+  return Number(entry[projectKey] || 0) > 0;
+}
+
+function updateHomeActionCard() {
+  let listEl = document.getElementById('homeActionList');
+  let completeEl = document.getElementById('homeActionComplete');
+  let rateEl = document.getElementById('homeActionRate');
+  if (!listEl) return;
+
+  let projects = getHomeActionProjects();
+  let entry = getRevenueEntry(todayKey());
+  let rows = projects.map(function (p) {
+    return { proj: p, done: isHomeProjectEnteredToday(entry, p.key) };
+  });
+
+  rows.sort(function (a, b) {
+    if (a.done !== b.done) return a.done ? 1 : -1;
+    return 0;
+  });
+
+  let doneCount = rows.filter(function (row) { return row.done; }).length;
+  let allDone = projects.length > 0 && doneCount === projects.length;
+
+  if (allDone) {
+    listEl.innerHTML = '';
+    listEl.classList.add('isHidden');
+    if (completeEl) completeEl.classList.remove('hidden');
+    if (rateEl) rateEl.textContent = '100%';
+    return;
+  }
+
+  listEl.classList.remove('isHidden');
+  if (completeEl) completeEl.classList.add('hidden');
+
+  listEl.innerHTML = rows.map(function (row) {
+    let p = row.proj;
+    if (row.done) {
+      return '<div class="homeActionItem homeActionItem--done">' +
+        HOME_ACTION_ICON_DONE +
+        '<span class="homeActionItemText">' + p.name + ' 入力完了</span></div>';
+    }
+    return '<div class="homeActionItem homeActionItem--pending">' +
+      HOME_ACTION_ICON_PENDING +
+      '<span class="homeActionItemText">' + p.name + 'の収益を入力してください</span></div>';
+  }).join('');
 }
 
 function defaultRevenueEntry() {
@@ -715,6 +779,7 @@ function updateHomeTodaySection(sAll) {
 
 function updateHomeDashboard(sAll) {
   updateHomeInputStats();
+  updateHomeActionCard();
   renderHomeCalendar();
   renderHomeMonthlyLineChart();
   updateHomeMonthlyProjects(sAll);

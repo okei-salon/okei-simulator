@@ -91,7 +91,7 @@
   opacity: .94;
 }
 
-/* --- homeTaskCard --- */
+/* --- homeTaskCard（今日のアクション） --- */
 .homePanelHead {
   display: flex;
   align-items: center;
@@ -135,59 +135,81 @@
 
 .homeTaskBody {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
+  flex-direction: column;
+  gap: 8px;
 }
 
-.homeTaskList {
+.homeActionList {
   display: flex;
-  flex-wrap: wrap;
-  gap: 10px 14px;
+  flex-direction: column;
+  gap: 8px;
 }
 
-.homeTaskItem {
+.homeActionList.isHidden {
+  display: none;
+}
+
+.homeActionItem {
   display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.45;
+  color: #d4e4f7;
+}
+
+.homeActionItem--done {
+  color: #8fa8c5;
+}
+
+.homeActionItemIcon {
+  display: inline-flex;
   align-items: center;
-  gap: 6px;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.homeActionItemIcon svg {
+  width: 18px;
+  height: 18px;
+  stroke: #93c5fd;
+  stroke-width: 2;
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.homeActionItem--done .homeActionItemIcon svg {
+  stroke: #34d399;
+}
+
+.homeActionItemText {
+  flex: 1;
+  min-width: 0;
+}
+
+.homeActionComplete {
+  padding: 2px 0 0;
+}
+
+.homeActionCompleteMsg {
+  margin: 0;
   font-size: 13px;
   font-weight: 800;
   color: var(--text);
-  cursor: default;
+  line-height: 1.45;
 }
 
-.homeTaskItem input {
-  accent-color: var(--blue);
-  width: 16px;
-  height: 16px;
-}
-
-.homeTaskProgress {
-  min-width: 140px;
-  text-align: right;
-}
-
-.homeTaskProgressLabel {
-  font-size: 13px;
-  font-weight: 900;
-}
-
-.homeTaskBar {
-  height: 8px;
-  background: #081426;
-  border: 1px solid #2a4264;
-  border-radius: 999px;
-  margin-top: 6px;
-  overflow: hidden;
-}
-
-.homeTaskBarFill {
-  height: 100%;
-  background: linear-gradient(90deg, #2563eb, #60a5fa);
-  border-radius: 999px;
-  width: 0;
-  transition: .2s;
+.homeActionCompleteRate {
+  margin: 6px 0 0;
+  font-size: 12px;
+  font-weight: 800;
+  color: #8fa8c5;
+  line-height: 1.35;
 }
 
 /* --- ochanArea (位置調整: .ochanContainer または .ochanAvatar) --- */
@@ -2464,11 +2486,12 @@
   }
 
   .homeTaskBody {
-    flex-direction: column;
-    align-items: stretch;
+    gap: 10px;
   }
 
-  .homeTaskProgress { text-align: left; }
+  .homeActionItem {
+    font-size: 13px;
+  }
 
   .homeInputCard { order: 1; min-height: 0; justify-content: flex-start; gap: 8px; padding: 10px 12px; }
 
