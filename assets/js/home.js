@@ -1,6 +1,7 @@
-/* OUKEI HUB Home UI — Ver1.5.9.1 */
+/* OUKEI HUB Home UI — Ver1.5.9.2 */
 let homeCalView = { y: new Date().getFullYear(), m: new Date().getMonth() };
 let ramSavePending = null;
+let orcaSavePending = null;
 
 function ensureRevenueLog() {
   if (!settings.revenueLog || typeof settings.revenueLog !== 'object') settings.revenueLog = {};
@@ -63,7 +64,19 @@ function getHomeActionProjects() {
 function isHomeProjectEnteredToday(entry, projectKey) {
   if (!entry) return false;
   if (projectKey === 'ram') return isRamFullyEntered(entry);
+  if (projectKey === 'orca') return isOrcaFullyEntered(entry);
   return Number(entry[projectKey] || 0) > 0;
+}
+
+function getRevenueInputProjects() {
+  return getEnabledHomeProjects();
+}
+
+function renderInputStatusBadge(isEntered) {
+  if (isEntered) {
+    return '<span class="ramInputStatus ramInputStatus--done">本日入力済み</span>';
+  }
+  return '<span class="ramInputStatus ramInputStatus--pending">未入力</span>';
 }
 
 function getRamInputAccounts() {
@@ -223,6 +236,7 @@ function persistRamRevenueEntry(ramAccounts, totalRam) {
     genesis: Number(existing.genesis) || 0,
     cary: Number(existing.cary) || 0,
     ramAccounts: normalizedAccounts,
+    orcaAccounts: existing.orcaAccounts || {},
     savedAt: new Date().toLocaleString()
   });
 }
@@ -266,14 +280,12 @@ function renderRamInputFooter() {
   return '<div class="ramInputFooterStack">' +
     '<button type="button" class="ramInputBtnSave" onclick="saveTodayRevenue()">保存</button>' +
     '<button type="button" class="btn2 ramInputBtnAdd" onclick="openRamAddAccountForm()">アカウント追加</button>' +
+    '<button type="button" class="btn2 ramInputBtnAdd" onclick="openRevenueProjectSelect()">プロジェクト選択に戻る</button>' +
     '</div>';
 }
 
 function renderRamAccountStatusBadge(existing, accountId) {
-  if (isRamAccountEntered(existing, accountId)) {
-    return '<span class="ramInputStatus ramInputStatus--done">本日入力済み</span>';
-  }
-  return '<span class="ramInputStatus ramInputStatus--pending">未入力</span>';
+  return renderInputStatusBadge(isRamAccountEntered(existing, accountId));
 }
 
 function renderRamInputProgress(existing) {
@@ -344,8 +356,14 @@ function updateHomeActionCard() {
     }
     return '<div class="homeActionItem homeActionItem--pending">' +
       HOME_ACTION_ICON_PENDING +
-      '<span class="homeActionItemText">' + (p.key === 'ram' ? p.name + 'の本日収益を入力してください' : p.name + 'の収益を入力してください') + '</span></div>';
+      '<span class="homeActionItemText">' + getHomeActionPendingText(p.key, p.name) + '</span></div>';
   }).join('');
+}
+
+function getHomeActionPendingText(projectKey, projectName) {
+  if (projectKey === 'ram') return projectName + 'の本日収益を入力してください';
+  if (projectKey === 'orca') return projectName + 'の昨日AI利益・本日アフィリエイト利益を入力してください';
+  return projectName + 'の収益を入力してください';
 }
 
 function defaultRevenueEntry() {
@@ -1075,6 +1093,51 @@ function showRevenueDayDetail(key) {
 }
 
 function openRevenueInput() {
+  openRevenueProjectSelect();
+}
+
+function openRevenueProjectSelect() {
+  ramSavePending = null;
+  orcaSavePending = null;
+  let projects = getRevenueInputProjects();
+  modalTitle.textContent = '実績入力';
+
+  if (!projects.length) {
+    modalContent.innerHTML =
+      '<div class="lineBox"><b>表示中のプロジェクトがありません</b><p class="help">設定のプロジェクト管理から、入力したいプロジェクトを表示 ON にしてください。</p></div>';
+    modalBg.style.display = 'flex';
+    return;
+  }
+
+  let buttons = projects.map(function (p) {
+    let dot = p.dot || p.key;
+    let ready = p.key === 'ram' || p.key === 'orca';
+    return '<button type="button" class="revenueProjectBtn revenueProjectBtn--' + escapeHtml(p.key) + (ready ? '' : ' isSoon') + '" onclick="selectRevenueProject(\'' + p.key + '\')">' +
+      '<span class="homeProjDot ' + escapeHtml(dot) + '"></span>' +
+      '<span class="revenueProjectBtnText">' + escapeHtml(p.name) + '</span>' +
+      (ready ? '' : '<span class="revenueProjectBtnNote">準備中</span>') +
+      '</button>';
+  }).join('');
+
+  modalContent.innerHTML =
+    '<p class="help ramInputLead">入力するプロジェクトを選んでください。</p>' +
+    '<div class="revenueProjectList">' + buttons + '</div>';
+  modalBg.style.display = 'flex';
+}
+
+function selectRevenueProject(projectKey) {
+  if (projectKey === 'ram') {
+    openRamRevenueInput();
+    return;
+  }
+  if (projectKey === 'orca') {
+    openOrcaRevenueInput();
+    return;
+  }
+  alert('このプロジェクトの実績入力は準備中です。');
+}
+
+function openRamRevenueInput() {
   ramSavePending = null;
   let accounts = getRamInputAccounts();
   modalTitle.textContent = 'RAM 実績入力';
@@ -1111,7 +1174,7 @@ function openRevenueInput() {
   }, 80);
 }
 
-function refreshHomeAfterRamSave() {
+function refreshHomeAfterRevenueSave() {
   if (typeof allOrgSummary === 'function' && typeof updateHomeDashboard === 'function') {
     updateHomeDashboard(allOrgSummary());
   } else {
@@ -1122,7 +1185,7 @@ function refreshHomeAfterRamSave() {
 function executeRamSave(collected) {
   persistRamRevenueEntry(collected.ramAccounts, collected.totalRam);
   if (typeof render === 'function') render();
-  refreshHomeAfterRamSave();
+  refreshHomeAfterRevenueSave();
   if (typeof showPage === 'function') showPage('home');
   if (typeof closeModal === 'function') closeModal();
   showToast('✅ 保存しました');
@@ -1181,7 +1244,7 @@ function openRamAddAccountForm() {
     '<label>本日収益（USD）</label><input id="ramNewTodayRev" type="number" step="0.01" min="0" placeholder="例：10">' +
     '<div class="ramInputFooterStack">' +
     '<button type="button" class="ramInputBtnSave" onclick="registerRamAccount()">このアカウントを登録</button>' +
-    '<button type="button" class="btn2 ramInputBtnAdd" onclick="openRevenueInput()">入力画面に戻る</button>' +
+    '<button type="button" class="btn2 ramInputBtnAdd" onclick="openRamRevenueInput()">入力画面に戻る</button>' +
     '</div>';
   modalBg.style.display = 'flex';
   setTimeout(function () {
@@ -1237,29 +1300,417 @@ function registerRamAccount() {
   persistRamRevenueEntry(ramAccounts, totalRam);
   if (typeof markActivity === 'function') markActivity();
   if (typeof render === 'function') render();
-  openRevenueInput();
+  openRamRevenueInput();
+  showToast('✅ アカウントを登録しました');
+}
+
+function ensureOrcaInputAccounts() {
+  if (!Array.isArray(settings.orcaInputAccounts)) settings.orcaInputAccounts = [];
+}
+
+function getOrcaInputAccounts() {
+  ensureOrcaInputAccounts();
+  return settings.orcaInputAccounts.map(function (acc) {
+    return {
+      id: acc.id,
+      username: (acc.username || acc.name || '未入力').replace(/^@/, ''),
+      investment: Number(acc.investment) || 0
+    };
+  });
+}
+
+function normalizeOrcaAccountsMap(orcaAccounts) {
+  if (!orcaAccounts || typeof orcaAccounts !== 'object') return {};
+  let out = {};
+  Object.keys(orcaAccounts).forEach(function (id) {
+    let a = orcaAccounts[id];
+    if (!a) return;
+    let yesterdayAiProfit = normalizeRamRevenueNumber(a.yesterdayAiProfit);
+    let todayAffiliateProfit = normalizeRamRevenueNumber(a.todayAffiliateProfit);
+    if (yesterdayAiProfit === null || todayAffiliateProfit === null) return;
+    out[id] = {
+      yesterdayAiProfit: yesterdayAiProfit,
+      todayAffiliateProfit: todayAffiliateProfit
+    };
+  });
+  return out;
+}
+
+function getTodayOrcaRevenueEntry() {
+  let entry = getRevenueEntry(todayKey());
+  if (!entry) return null;
+  return Object.assign({}, entry, {
+    orcaAccounts: normalizeOrcaAccountsMap(entry.orcaAccounts)
+  });
+}
+
+function getOrcaAccountEntry(entry, accountId) {
+  if (!entry || !entry.orcaAccounts) return null;
+  let acc = entry.orcaAccounts[accountId];
+  if (!acc) return null;
+  let yesterdayAiProfit = normalizeRamRevenueNumber(acc.yesterdayAiProfit);
+  let todayAffiliateProfit = normalizeRamRevenueNumber(acc.todayAffiliateProfit);
+  if (yesterdayAiProfit === null || todayAffiliateProfit === null) return null;
+  return {
+    yesterdayAiProfit: yesterdayAiProfit,
+    todayAffiliateProfit: todayAffiliateProfit
+  };
+}
+
+function calcOrcaAccountTotal(accEntry) {
+  if (!accEntry) return 0;
+  return Math.round((accEntry.yesterdayAiProfit + accEntry.todayAffiliateProfit) * 100) / 100;
+}
+
+function isOrcaAccountEntered(entry, accountId) {
+  return getOrcaAccountEntry(entry, accountId) !== null;
+}
+
+function countOrcaEnteredAccounts(entry) {
+  return getOrcaInputAccounts().filter(function (a) {
+    return isOrcaAccountEntered(entry, a.id);
+  }).length;
+}
+
+function isOrcaFullyEntered(entry) {
+  let accounts = getOrcaInputAccounts();
+  if (!accounts.length) return false;
+  return accounts.every(function (a) { return isOrcaAccountEntered(entry, a.id); });
+}
+
+function hasOrcaDataSavedForToday(entry) {
+  if (!entry || !entry.orcaAccounts) return false;
+  return getOrcaInputAccounts().some(function (a) { return isOrcaAccountEntered(entry, a.id); });
+}
+
+function orcaInputDiffersFromSaved(collected, existing) {
+  if (!existing || !hasOrcaDataSavedForToday(existing)) return false;
+  let existingAccounts = normalizeOrcaAccountsMap(existing.orcaAccounts);
+  let accounts = getOrcaInputAccounts();
+
+  return accounts.some(function (acc) {
+    let next = collected.orcaAccounts[acc.id];
+    let prev = existingAccounts[acc.id];
+    let nextYesterday = next ? normalizeRamRevenueNumber(next.yesterdayAiProfit) : null;
+    let prevYesterday = prev ? prev.yesterdayAiProfit : null;
+    let nextAff = next ? normalizeRamRevenueNumber(next.todayAffiliateProfit) : null;
+    let prevAff = prev ? prev.todayAffiliateProfit : null;
+    if (!next && !prev) return false;
+    if (!next || !prev) return true;
+    return nextYesterday !== prevYesterday || nextAff !== prevAff;
+  });
+}
+
+function collectOrcaInputFromForm() {
+  let accounts = getOrcaInputAccounts();
+  let existingEntry = getTodayOrcaRevenueEntry() || { orcaAccounts: {} };
+  let orcaAccounts = {};
+  let totalOrca = 0;
+
+  accounts.forEach(function (acc) {
+    let yesterdayEl = document.getElementById('orcaYesterdayAi_' + acc.id);
+    let affEl = document.getElementById('orcaTodayAff_' + acc.id);
+    let prev = getOrcaAccountEntry(existingEntry, acc.id);
+    let hasYesterday = yesterdayEl && yesterdayEl.value !== '' && !isNaN(Number(yesterdayEl.value));
+    let hasAff = affEl && affEl.value !== '' && !isNaN(Number(affEl.value));
+    if (hasYesterday && hasAff) {
+      let entry = {
+        yesterdayAiProfit: Number(yesterdayEl.value) || 0,
+        todayAffiliateProfit: Number(affEl.value) || 0
+      };
+      orcaAccounts[acc.id] = entry;
+      totalOrca += calcOrcaAccountTotal(entry);
+    } else if (prev) {
+      orcaAccounts[acc.id] = {
+        yesterdayAiProfit: prev.yesterdayAiProfit,
+        todayAffiliateProfit: prev.todayAffiliateProfit
+      };
+      totalOrca += calcOrcaAccountTotal(prev);
+    }
+  });
+
+  return { orcaAccounts: orcaAccounts, totalOrca: Math.round(totalOrca * 100) / 100 };
+}
+
+function persistOrcaRevenueEntry(orcaAccounts, totalOrca) {
+  let existing = getRevenueEntry(todayKey()) || {};
+  let normalizedAccounts = normalizeOrcaAccountsMap(orcaAccounts);
+  saveRevenueEntry(todayKey(), {
+    total: (Number(existing.ram) || 0) + totalOrca + (Number(existing.genesis) || 0) + (Number(existing.cary) || 0),
+    ram: Number(existing.ram) || 0,
+    orca: totalOrca,
+    genesis: Number(existing.genesis) || 0,
+    cary: Number(existing.cary) || 0,
+    ramAccounts: existing.ramAccounts || {},
+    orcaAccounts: normalizedAccounts,
+    savedAt: new Date().toLocaleString()
+  });
+}
+
+function bindOrcaInputListeners() {
+  getOrcaInputAccounts().forEach(function (acc) {
+    ['orcaYesterdayAi_', 'orcaTodayAff_'].forEach(function (prefix) {
+      let el = document.getElementById(prefix + acc.id);
+      if (el) {
+        el.addEventListener('input', function () {
+          updateOrcaInputDerived(acc.id);
+        });
+      }
+    });
+  });
+}
+
+function updateOrcaInputDerived(accountId) {
+  let yesterdayEl = document.getElementById('orcaYesterdayAi_' + accountId);
+  let affEl = document.getElementById('orcaTodayAff_' + accountId);
+  let totalEl = document.getElementById('orcaTotal_' + accountId);
+  if (!totalEl) return;
+  let yesterday = yesterdayEl && yesterdayEl.value !== '' && !isNaN(Number(yesterdayEl.value)) ? Number(yesterdayEl.value) || 0 : 0;
+  let aff = affEl && affEl.value !== '' && !isNaN(Number(affEl.value)) ? Number(affEl.value) || 0 : 0;
+  let hasAny = (yesterdayEl && yesterdayEl.value !== '') || (affEl && affEl.value !== '');
+  totalEl.textContent = money(hasAny ? calcOrcaAccountTotal({ yesterdayAiProfit: yesterday, todayAffiliateProfit: aff }) : 0);
+}
+
+function renderOrcaInputFooter() {
+  return '<div class="ramInputFooterStack">' +
+    '<button type="button" class="ramInputBtnSave" onclick="saveTodayOrcaRevenue()">保存</button>' +
+    '<button type="button" class="btn2 ramInputBtnAdd" onclick="openOrcaAddAccountForm()">アカウント追加</button>' +
+    '<button type="button" class="btn2 ramInputBtnAdd" onclick="openRevenueProjectSelect()">プロジェクト選択に戻る</button>' +
+    '</div>';
+}
+
+function renderOrcaInputProgress(existing) {
+  let total = getOrcaInputAccounts().length;
+  let done = countOrcaEnteredAccounts(existing);
+  let label = done + ' / ' + total;
+  if (total > 0 && done === total) label += ' 完了';
+  return '<div class="ramInputProgress">' +
+    '<span class="ramInputProgressLabel">入力状況</span>' +
+    '<span class="ramInputProgressVal' + (total > 0 && done === total ? ' isComplete' : '') + '">' + label + '</span>' +
+    '</div>';
+}
+
+function renderOrcaInputAccountCard(acc, existing) {
+  let accEntry = getOrcaAccountEntry(existing, acc.id);
+  let yesterdayAi = accEntry ? accEntry.yesterdayAiProfit : '';
+  let todayAff = accEntry ? accEntry.todayAffiliateProfit : '';
+  let total = accEntry ? calcOrcaAccountTotal(accEntry) : 0;
+  return '<section class="ramInputAccount" data-acc="' + acc.id + '">' +
+    '<div class="ramInputAccountHead">' + renderInputStatusBadge(isOrcaAccountEntered(existing, acc.id)) + '</div>' +
+    '<div class="ramInputRows">' +
+    '<div class="ramInputRow ramInputRow--readonly"><span class="ramInputLabel">ユーザー名</span><span class="ramInputVal">' + escapeHtml(acc.username) + '</span></div>' +
+    '<div class="ramInputRow ramInputRow--readonly"><span class="ramInputLabel">投資額</span><span class="ramInputVal">' + num(acc.investment) + 'ドル</span></div>' +
+    '<div class="ramInputRow ramInputRow--main"><span class="ramInputLabel ramInputLabel--hero">昨日AI利益</span><div class="ramInputField ramInputField--hero"><input type="number" step="0.01" min="0" id="orcaYesterdayAi_' + acc.id + '" class="ramInputMain" inputmode="decimal" placeholder="0" value="' + yesterdayAi + '"><span class="ramInputUnit">ドル</span><span class="ramInputBadge">毎日入力</span></div></div>' +
+    '<div class="ramInputRow ramInputRow--main"><span class="ramInputLabel ramInputLabel--hero">本日アフィリエイト利益</span><div class="ramInputField ramInputField--hero"><input type="number" step="0.01" min="0" id="orcaTodayAff_' + acc.id + '" class="ramInputMain" inputmode="decimal" placeholder="0" value="' + todayAff + '"><span class="ramInputUnit">ドル</span><span class="ramInputBadge">毎日入力</span></div></div>' +
+    '<div class="ramInputRow ramInputRow--readonly"><span class="ramInputLabel">本日のORCA合計</span><span class="ramInputVal ramInputVal--gold" id="orcaTotal_' + acc.id + '">' + money(total) + '</span></div>' +
+    '</div></section>';
+}
+
+function openOrcaRevenueInput() {
+  orcaSavePending = null;
+  let accounts = getOrcaInputAccounts();
+  modalTitle.textContent = 'ORCA 実績入力';
+
+  if (!accounts.length) {
+    modalContent.innerHTML =
+      '<div class="lineBox"><b>アカウントがありません</b><p class="help">「アカウント追加」からORCAアカウントを登録してください。</p></div>' +
+      renderOrcaInputFooter();
+    modalBg.style.display = 'flex';
+    return;
+  }
+
+  let existing = getTodayOrcaRevenueEntry();
+  let cards = accounts.map(function (acc) {
+    return renderOrcaInputAccountCard(acc, existing);
+  }).join('');
+
+  modalContent.innerHTML =
+    renderOrcaInputProgress(existing) +
+    '<p class="help ramInputLead">毎日入力するのは「昨日AI利益」と「本日アフィリエイト利益」です。合計は自動で「本日のORCA収益」として反映されます。</p>' +
+    '<div class="ramInputList">' + cards + '</div>' +
+    renderOrcaInputFooter();
+
+  modalBg.style.display = 'flex';
+  bindOrcaInputListeners();
+
+  setTimeout(function () {
+    let focusEl = accounts.map(function (acc) {
+      return document.getElementById('orcaYesterdayAi_' + acc.id);
+    }).find(function (el) {
+      return el && el.value === '';
+    });
+    if (focusEl) focusEl.focus();
+  }, 80);
+}
+
+function executeOrcaSave(collected) {
+  persistOrcaRevenueEntry(collected.orcaAccounts, collected.totalOrca);
+  persistHubSettings();
+  if (typeof render === 'function') render();
+  refreshHomeAfterRevenueSave();
+  if (typeof showPage === 'function') showPage('home');
+  if (typeof closeModal === 'function') closeModal();
+  showToast('✅ 保存しました');
+}
+
+function showOrcaOverwriteConfirm(collected) {
+  orcaSavePending = collected;
+  let existing = document.getElementById('orcaOverwriteConfirm');
+  if (existing) existing.remove();
+  modalContent.insertAdjacentHTML('beforeend',
+    '<div class="ramInputConfirm" id="orcaOverwriteConfirm">' +
+    '<p class="ramInputConfirmText">本日のORCA実績はすでに保存されています。<br>この内容で上書きしますか？</p>' +
+    '<div class="ramInputFooterStack">' +
+    '<button type="button" class="ramInputBtnSave" onclick="confirmOrcaOverwriteSave()">上書き保存</button>' +
+    '<button type="button" class="btn2 ramInputBtnAdd" onclick="cancelOrcaOverwrite()">キャンセル</button>' +
+    '</div></div>');
+  let confirmEl = document.getElementById('orcaOverwriteConfirm');
+  if (confirmEl && confirmEl.scrollIntoView) confirmEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function cancelOrcaOverwrite() {
+  orcaSavePending = null;
+  let el = document.getElementById('orcaOverwriteConfirm');
+  if (el) el.remove();
+}
+
+function confirmOrcaOverwriteSave() {
+  if (!orcaSavePending) return;
+  let collected = orcaSavePending;
+  orcaSavePending = null;
+  let el = document.getElementById('orcaOverwriteConfirm');
+  if (el) el.remove();
+  executeOrcaSave(collected);
+}
+
+function saveTodayOrcaRevenue() {
+  let collected = collectOrcaInputFromForm();
+  if (!Object.keys(collected.orcaAccounts).length) {
+    alert('保存する内容がありません。「昨日AI利益」と「本日アフィリエイト利益」を入力してください。');
+    return;
+  }
+  let existing = getTodayOrcaRevenueEntry();
+  if (hasOrcaDataSavedForToday(existing) && orcaInputDiffersFromSaved(collected, existing)) {
+    showOrcaOverwriteConfirm(collected);
+    return;
+  }
+  executeOrcaSave(collected);
+}
+
+function openOrcaAddAccountForm() {
+  modalTitle.textContent = 'ORCA アカウント追加';
+  modalContent.innerHTML =
+    '<p class="help">ユーザー名・投資額・昨日AI利益・本日アフィリエイト利益を入力して登録します。</p>' +
+    '<label>ユーザー名</label><input id="orcaNewUsername" type="text" placeholder="例：kai1">' +
+    '<label>投資額（USD）</label><input id="orcaNewInvestment" type="number" step="1" min="0" placeholder="例：5000">' +
+    '<label>昨日AI利益（USD）</label><input id="orcaNewYesterdayAi" type="number" step="0.01" min="0" placeholder="例：8">' +
+    '<label>本日アフィリエイト利益（USD）</label><input id="orcaNewTodayAff" type="number" step="0.01" min="0" placeholder="例：2">' +
+    '<div class="ramInputFooterStack">' +
+    '<button type="button" class="ramInputBtnSave" onclick="registerOrcaAccount()">このアカウントを登録</button>' +
+    '<button type="button" class="btn2 ramInputBtnAdd" onclick="openOrcaRevenueInput()">入力画面に戻る</button>' +
+    '</div>';
+  modalBg.style.display = 'flex';
+  setTimeout(function () {
+    let el = document.getElementById('orcaNewUsername');
+    if (el) el.focus();
+  }, 80);
+}
+
+function registerOrcaAccount() {
+  let username = (document.getElementById('orcaNewUsername')?.value || '').trim().replace(/^@/, '');
+  let investment = Number(document.getElementById('orcaNewInvestment')?.value) || 0;
+  let yesterdayRaw = document.getElementById('orcaNewYesterdayAi')?.value;
+  let affRaw = document.getElementById('orcaNewTodayAff')?.value;
+  if (!username) {
+    alert('ユーザー名を入力してください。');
+    return;
+  }
+  if (!investment) {
+    alert('投資額を入力してください。');
+    return;
+  }
+  if (yesterdayRaw === '' || isNaN(Number(yesterdayRaw))) {
+    alert('昨日AI利益を入力してください。');
+    return;
+  }
+  if (affRaw === '' || isNaN(Number(affRaw))) {
+    alert('本日アフィリエイト利益を入力してください。');
+    return;
+  }
+  if (!confirm('このアカウントを登録しますか？')) return;
+
+  let id = 'orca_' + Date.now();
+  ensureOrcaInputAccounts();
+  settings.orcaInputAccounts.push({
+    id: id,
+    username: username,
+    name: username,
+    investment: investment
+  });
+
+  let yesterdayAiProfit = Number(yesterdayRaw) || 0;
+  let todayAffiliateProfit = Number(affRaw) || 0;
+  let existing = getRevenueEntry(todayKey()) || {};
+  let orcaAccounts = existing.orcaAccounts || {};
+  orcaAccounts[id] = { yesterdayAiProfit: yesterdayAiProfit, todayAffiliateProfit: todayAffiliateProfit };
+  let totalOrca = 0;
+  Object.keys(orcaAccounts).forEach(function (key) {
+    let ae = orcaAccounts[key];
+    totalOrca += calcOrcaAccountTotal({
+      yesterdayAiProfit: Number(ae.yesterdayAiProfit) || 0,
+      todayAffiliateProfit: Number(ae.todayAffiliateProfit) || 0
+    });
+  });
+
+  persistOrcaRevenueEntry(orcaAccounts, Math.round(totalOrca * 100) / 100);
+  persistHubSettings();
+  if (typeof markActivity === 'function') markActivity();
+  if (typeof render === 'function') render();
+  openOrcaRevenueInput();
   showToast('✅ アカウントを登録しました');
 }
 
 function renderPortfolio() {
   let el = document.getElementById('portfolioAccountList');
   if (!el) return;
-  let accounts = getRamInputAccounts();
   let entry = getRevenueEntry(todayKey());
-  if (!accounts.length) {
-    el.innerHTML = '<div class="lineBox"><p class="help">RAMアカウントがまだありません。実績入力画面から追加できます。</p></div>';
+  let sections = [];
+
+  let ramAccounts = getRamInputAccounts();
+  if (ramAccounts.length) {
+    sections.push('<div class="portfolioSectionTitle"><span class="homeProjDot ram"></span> RAM</div>');
+    sections.push(ramAccounts.map(function (acc) {
+      let ae = getRamAccountEntry(entry, acc.id);
+      let effectiveInv = calcRamEffectiveInvestment(acc.investment, ae ? ae.addInvestment : 0);
+      return '<div class="portfolioAccountCard">' +
+        '<div class="portfolioAccountName">' + escapeHtml(acc.username) + '</div>' +
+        '<div class="portfolioAccountMeta">投資額：' + num(acc.investment) + 'ドル　日利：' + formatDailyRateLabel(effectiveInv) + '</div>' +
+        '<div class="portfolioAccountMeta">本日の配当：' + money(calcRamOperatingProfit(effectiveInv)) + '</div>' +
+        '<div class="portfolioAccountRev">本日収益：<b>' + money(ae ? ae.todayRevenue || 0 : 0) + '</b></div>' +
+        '</div>';
+    }).join(''));
+  }
+
+  let orcaAccounts = getOrcaInputAccounts();
+  if (orcaAccounts.length) {
+    sections.push('<div class="portfolioSectionTitle"><span class="homeProjDot orca"></span> ORCA</div>');
+    sections.push(orcaAccounts.map(function (acc) {
+      let ae = getOrcaAccountEntry(entry, acc.id);
+      let total = ae ? calcOrcaAccountTotal(ae) : 0;
+      return '<div class="portfolioAccountCard">' +
+        '<div class="portfolioAccountName">' + escapeHtml(acc.username) + '</div>' +
+        '<div class="portfolioAccountMeta">投資額：' + num(acc.investment) + 'ドル</div>' +
+        (ae ? '<div class="portfolioAccountMeta">昨日AI利益：' + money(ae.yesterdayAiProfit) + '　本日アフィリエイト：' + money(ae.todayAffiliateProfit) + '</div>' : '') +
+        '<div class="portfolioAccountRev">本日のORCA合計：<b>' + money(total) + '</b></div>' +
+        '</div>';
+    }).join(''));
+  }
+
+  if (!sections.length) {
+    el.innerHTML = '<div class="lineBox"><p class="help">アカウントがまだありません。実績入力画面から追加できます。</p></div>';
     return;
   }
-  el.innerHTML = accounts.map(function (acc) {
-    let ae = getRamAccountEntry(entry, acc.id);
-    let effectiveInv = calcRamEffectiveInvestment(acc.investment, ae ? ae.addInvestment : 0);
-    return '<div class="portfolioAccountCard">' +
-      '<div class="portfolioAccountName">' + escapeHtml(acc.username) + '</div>' +
-      '<div class="portfolioAccountMeta">投資額：' + num(acc.investment) + 'ドル　日利：' + formatDailyRateLabel(effectiveInv) + '</div>' +
-      '<div class="portfolioAccountMeta">本日の配当：' + money(calcRamOperatingProfit(effectiveInv)) + '</div>' +
-      '<div class="portfolioAccountRev">本日収益：<b>' + money(ae ? ae.todayRevenue || 0 : 0) + '</b></div>' +
-      '</div>';
-  }).join('');
+  el.innerHTML = sections.join('');
 }
 
 function openPortfolioNav() {
