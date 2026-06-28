@@ -1,0 +1,741 @@
+/* OUKEI HUB Portfolio UI — Ver1.7.6 */
+
+.portfolioPage {
+  padding: 0;
+}
+
+.pfShell {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  max-width: 1320px;
+  margin: 0 auto;
+  padding: 4px 2px 28px;
+}
+
+.pfHead {
+  position: static;
+  top: auto;
+  z-index: auto;
+  display: block;
+  flex-direction: unset;
+  align-items: unset;
+  gap: unset;
+  padding: 2px 4px 0;
+  background: transparent;
+  border: none;
+}
+
+.pfTitle {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 900;
+  letter-spacing: .03em;
+  color: #f8fafc;
+}
+
+.pfSubtitle {
+  margin: 6px 0 0;
+  font-size: 14px;
+  color: #8fa8c5;
+  letter-spacing: .04em;
+}
+
+.pfWidgetSub {
+  margin: 0 0 16px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #6b849f;
+  letter-spacing: .04em;
+}
+
+/* ===== Summary cards ===== */
+.pfSummaryGrid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.pfSummaryCard {
+  position: relative;
+  overflow: hidden;
+  padding: 14px 14px 12px;
+  border-radius: 16px;
+  min-height: 128px;
+  background: linear-gradient(155deg, rgba(22, 38, 62, .92) 0%, rgba(8, 16, 30, .98) 55%, rgba(6, 12, 24, .99) 100%);
+  border: 1px solid rgba(80, 110, 150, .35);
+  box-shadow:
+    0 14px 36px rgba(0, 0, 0, .32),
+    inset 0 1px 0 rgba(255, 255, 255, .08),
+    inset 0 -1px 0 rgba(0, 0, 0, .25);
+}
+
+.pfSummaryCardGlow {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  border-radius: 16px 16px 0 0;
+  opacity: .95;
+}
+
+.pfSummaryCard--invest { border-color: rgba(59, 130, 246, .45); }
+.pfSummaryCard--invest .pfSummaryCardGlow { background: linear-gradient(90deg, transparent, #60a5fa, transparent); box-shadow: 0 0 18px rgba(59, 130, 246, .55); }
+.pfSummaryCard--invest .pfSummaryIcon { color: #93c5fd; background: rgba(59, 130, 246, .18); border-color: rgba(96, 165, 250, .35); }
+
+.pfSummaryCard--profit { border-color: rgba(249, 115, 22, .42); }
+.pfSummaryCard--profit .pfSummaryCardGlow { background: linear-gradient(90deg, transparent, #fb923c, transparent); box-shadow: 0 0 18px rgba(249, 115, 22, .45); }
+.pfSummaryCard--profit .pfSummaryIcon { color: #fdba74; background: rgba(249, 115, 22, .16); border-color: rgba(251, 146, 60, .35); }
+
+.pfSummaryCard--recovery { border-color: rgba(16, 185, 129, .4); }
+.pfSummaryCard--recovery .pfSummaryCardGlow { background: linear-gradient(90deg, transparent, #34d399, transparent); box-shadow: 0 0 18px rgba(16, 185, 129, .45); }
+.pfSummaryCard--recovery .pfSummaryIcon { color: #6ee7b7; background: rgba(16, 185, 129, .14); border-color: rgba(52, 211, 153, .32); }
+
+.pfSummaryCard--monthly { border-color: rgba(168, 85, 247, .42); }
+.pfSummaryCard--monthly .pfSummaryCardGlow { background: linear-gradient(90deg, transparent, #c084fc, transparent); box-shadow: 0 0 18px rgba(168, 85, 247, .45); }
+.pfSummaryCard--monthly .pfSummaryIcon { color: #d8b4fe; background: rgba(168, 85, 247, .14); border-color: rgba(192, 132, 252, .32); }
+
+.pfSummaryCard--daily { border-color: rgba(6, 182, 212, .42); }
+.pfSummaryCard--daily .pfSummaryCardGlow { background: linear-gradient(90deg, transparent, #22d3ee, transparent); box-shadow: 0 0 18px rgba(6, 182, 212, .45); }
+.pfSummaryCard--daily .pfSummaryIcon { color: #67e8f9; background: rgba(6, 182, 212, .14); border-color: rgba(34, 211, 238, .32); }
+
+.pfSummaryCard--goal { border-color: rgba(234, 179, 8, .45); }
+.pfSummaryCard--goal .pfSummaryCardGlow { background: linear-gradient(90deg, transparent, #fbbf24, transparent); box-shadow: 0 0 18px rgba(234, 179, 8, .45); }
+.pfSummaryCard--goal .pfSummaryIcon { color: #fde68a; background: rgba(234, 179, 8, .14); border-color: rgba(251, 191, 36, .35); }
+
+.pfSummaryIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  margin-bottom: 8px;
+  border-radius: 9px;
+  border: 1px solid transparent;
+}
+
+.pfSummaryIcon svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.pfSummaryLabel {
+  font-size: 12px;
+  font-weight: 800;
+  color: #8fa8c5;
+  letter-spacing: .06em;
+}
+
+.pfSummaryValue {
+  margin-top: 6px;
+  font-size: 23px;
+  font-weight: 900;
+  color: #f8fafc;
+  letter-spacing: -.02em;
+  line-height: 1.15;
+  text-shadow: 0 0 24px rgba(255, 255, 255, .08);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pfSummaryValue--goal {
+  font-size: 19px;
+}
+
+.pfSummarySub {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #7f97b3;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pfSummaryTrend {
+  margin-top: 8px;
+  font-size: 12px;
+  font-weight: 800;
+  color: #7f97b3;
+  line-height: 1.35;
+}
+
+.pfSummaryTrend b {
+  color: #4ade80;
+  font-size: 13px;
+}
+
+.pfTrendArrow {
+  color: #4ade80;
+  font-weight: 900;
+}
+
+.pfGoalMeta {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 8px;
+  font-size: 12px;
+  color: #9db4d0;
+}
+
+.pfGoalMeta b {
+  color: #fbbf24;
+  font-size: 14px;
+}
+
+.pfGoalBar {
+  margin-top: 8px;
+  height: 7px;
+  border-radius: 999px;
+  background: rgba(42, 66, 100, .65);
+  overflow: hidden;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, .35);
+}
+
+.pfGoalBarFill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #f59e0b, #fde047);
+  box-shadow: 0 0 14px rgba(251, 191, 36, .45);
+}
+
+.pfGoalRemain {
+  margin-top: 6px;
+  font-size: 11px;
+  color: #7f97b3;
+}
+
+/* ===== Project cards ===== */
+.pfSectionHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.pfSectionTitle {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 900;
+  color: #f8fafc;
+  letter-spacing: .03em;
+}
+
+.pfProjectGrid {
+  display: grid;
+  grid-template-columns: repeat(var(--pf-cols, 3), minmax(0, 1fr));
+  gap: 14px;
+}
+
+.pfProjectGrid.isEmpty {
+  grid-template-columns: 1fr;
+}
+
+.pfProjectCard {
+  position: relative;
+  overflow: hidden;
+  padding: 16px;
+  border-radius: 18px;
+  background: linear-gradient(160deg, rgba(18, 32, 54, .96) 0%, rgba(8, 16, 30, .98) 100%);
+  border: 1px solid rgba(70, 100, 140, .4);
+  box-shadow:
+    0 16px 40px rgba(0, 0, 0, .28),
+    inset 0 1px 0 rgba(255, 255, 255, .07);
+  min-width: 0;
+}
+
+.pfProjectCardGlow {
+  position: absolute;
+  top: 0;
+  left: 12%;
+  right: 12%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(147, 197, 253, .55), transparent);
+}
+
+.pfProjectCard--ram { border-color: rgba(249, 115, 22, .35); }
+.pfProjectCard--orca { border-color: rgba(6, 182, 212, .32); }
+.pfProjectCard--cary { border-color: rgba(168, 85, 247, .32); }
+
+.pfProjectCardTop {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.pfProjectCardBrand {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+}
+
+.pfProjectCardIcon {
+  width: 40px !important;
+  height: 40px !important;
+  border-radius: 11px !important;
+  background-size: 20px 20px !important;
+  flex-shrink: 0;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, .25);
+}
+
+.pfProjectCardName {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 900;
+  color: #f8fafc;
+}
+
+.pfProjectStart {
+  margin: 4px 0 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: #7f97b3;
+}
+
+.pfStatusBadge {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 900;
+  padding: 4px 9px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.pfStatusBadge--active {
+  color: #86efac;
+  background: rgba(34, 197, 94, .14);
+  border: 1px solid rgba(34, 197, 94, .32);
+  box-shadow: 0 0 12px rgba(34, 197, 94, .15);
+}
+
+.pfStatusBadge--stopped {
+  color: #94a3b8;
+  background: rgba(100, 116, 139, .14);
+  border: 1px solid rgba(100, 116, 139, .28);
+}
+
+.pfProjectMetrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.pfProjectMetric {
+  min-width: 0;
+}
+
+.pfProjectMetricLabel {
+  display: block;
+  font-size: 11px;
+  font-weight: 800;
+  color: #6b849f;
+}
+
+.pfProjectMetricVal {
+  display: block;
+  margin-top: 4px;
+  font-size: 15px;
+  font-weight: 900;
+  color: #e2e8f0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pfProjectMetricVal.isProfit {
+  color: #4ade80;
+  text-shadow: 0 0 16px rgba(74, 222, 128, .25);
+}
+
+.pfProjectMetricVal.isRecovery {
+  color: #93c5fd;
+}
+
+.pfRecoveryBlock {
+  padding-top: 12px;
+  border-top: 1px solid rgba(42, 66, 100, .45);
+}
+
+.pfRecoveryLabel {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: #7f97b3;
+  margin-bottom: 7px;
+}
+
+.pfRecoveryLabel b {
+  font-size: 15px;
+  color: #93c5fd;
+}
+
+.pfRecoveryTrack {
+  position: relative;
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(4, 10, 20, .85);
+  border: 1px solid rgba(42, 66, 100, .55);
+  overflow: hidden;
+}
+
+.pfRecoveryFill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #16a34a, #4ade80 65%, #fbbf24);
+  box-shadow: 0 0 16px rgba(74, 222, 128, .35);
+}
+
+.pfRecoveryMark {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  left: 50%;
+  width: 2px;
+  background: rgba(251, 191, 36, .75);
+  box-shadow: 0 0 8px rgba(251, 191, 36, .35);
+}
+
+.pfRecoveryScale {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 5px;
+  font-size: 9px;
+  font-weight: 800;
+  color: #5f7490;
+}
+
+.pfRecoveryDateRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 10px;
+  font-size: 12px;
+  color: #7f97b3;
+}
+
+.pfRecoveryDateRow b {
+  color: #dbeafe;
+  font-weight: 800;
+}
+
+/* ===== Widgets ===== */
+.pfWidgetsGrid {
+  display: grid;
+  grid-template-columns: 1.05fr 1.25fr;
+  gap: 14px;
+}
+
+.pfWidget {
+  position: relative;
+  overflow: hidden;
+  padding: 18px 18px 16px;
+  border-radius: 18px;
+  background: linear-gradient(160deg, rgba(16, 28, 48, .96) 0%, rgba(8, 16, 30, .98) 100%);
+  border: 1px solid rgba(70, 100, 140, .4);
+  box-shadow:
+    0 16px 40px rgba(0, 0, 0, .28),
+    inset 0 1px 0 rgba(255, 255, 255, .06);
+  min-height: 320px;
+}
+
+.pfWidgetTitle {
+  margin: 0 0 4px;
+  font-size: 17px;
+  font-weight: 900;
+  color: #f8fafc;
+}
+
+/* ===== Donut allocation ===== */
+.pfAllocLayout {
+  display: grid;
+  grid-template-columns: minmax(200px, 240px) 1fr;
+  gap: 20px;
+  align-items: center;
+  min-height: 260px;
+}
+
+.pfDonutWrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 220px;
+}
+
+.pfDonut {
+  width: 200px;
+  height: 200px;
+  border-radius: 50%;
+  position: relative;
+  box-shadow:
+    0 0 32px rgba(0, 0, 0, .35),
+    0 0 48px rgba(59, 130, 246, .08);
+}
+
+.pfDonutHole {
+  position: absolute;
+  inset: 52px;
+  border-radius: 50%;
+  background: linear-gradient(165deg, #0c182b, #07111f);
+  border: 1px solid rgba(42, 66, 100, .55);
+  box-shadow: inset 0 2px 8px rgba(0, 0, 0, .35);
+}
+
+.pfDonutCenter {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 1;
+  text-align: center;
+  pointer-events: none;
+}
+
+.pfDonutCenter span {
+  font-size: 11px;
+  color: #7f97b3;
+  font-weight: 800;
+  letter-spacing: .04em;
+}
+
+.pfDonutCenter b {
+  margin-top: 4px;
+  font-size: 20px;
+  font-weight: 900;
+  color: #f8fafc;
+}
+
+.pfDonutCenter small {
+  margin-top: 2px;
+  font-size: 11px;
+  color: #7f97b3;
+  font-weight: 700;
+}
+
+.pfLegendList {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.pfLegendRow {
+  display: grid;
+  grid-template-columns: 10px 92px 1fr 48px;
+  gap: 10px;
+  align-items: center;
+  font-size: 13px;
+}
+
+.pfLegendDot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  box-shadow: 0 0 10px currentColor;
+}
+
+.pfLegendName {
+  color: #dbeafe;
+  font-weight: 800;
+}
+
+.pfLegendBar {
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(8, 20, 38, .88);
+  overflow: hidden;
+}
+
+.pfLegendBarFill {
+  height: 100%;
+  border-radius: inherit;
+  box-shadow: 0 0 10px rgba(255, 255, 255, .12);
+}
+
+.pfLegendVal {
+  color: #93c5fd;
+  font-weight: 900;
+  text-align: right;
+}
+
+/* ===== Stacked bar chart ===== */
+.pfStackChart {
+  display: flex;
+  gap: 10px;
+  align-items: stretch;
+  min-height: 220px;
+}
+
+.pfStackYAxis {
+  position: relative;
+  width: 52px;
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 800;
+  color: #6b849f;
+}
+
+.pfStackYAxis span {
+  position: absolute;
+  left: 0;
+  transform: translateY(50%);
+}
+
+.pfStackCols {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 10px;
+  align-items: end;
+}
+
+.pfStackCol {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 0;
+}
+
+.pfStackTotal {
+  min-height: 20px;
+  margin-bottom: 6px;
+  font-size: 12px;
+  font-weight: 900;
+  color: #dbeafe;
+  text-align: center;
+}
+
+.pfStackTrack {
+  width: 100%;
+  max-width: 52px;
+  display: flex;
+  flex-direction: column-reverse;
+  justify-content: flex-start;
+  background: rgba(4, 10, 20, .55);
+  border-radius: 0;
+  overflow: hidden;
+}
+
+.pfStackSeg {
+  width: 100%;
+  flex-shrink: 0;
+  border-radius: 0;
+  border: 0;
+  box-shadow: none;
+}
+
+.pfStackLabel {
+  margin-top: 8px;
+  font-size: 12px;
+  font-weight: 800;
+  color: #8fa8c5;
+}
+
+.pfStackLegend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 16px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(42, 66, 100, .35);
+}
+
+.pfStackLegendItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 800;
+  color: #c9d9ec;
+}
+
+.pfStackLegendItem i {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  display: inline-block;
+}
+
+.pfEmptyCard {
+  padding: 24px 16px;
+  text-align: center;
+  color: #8fa8c5;
+  font-size: 13px;
+  border-radius: 14px;
+  border: 1px dashed rgba(53, 83, 117, .45);
+  background: rgba(8, 20, 38, .45);
+}
+
+@media (max-width: 1180px) {
+  .pfSummaryGrid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .pfProjectGrid {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+  }
+}
+
+@media (max-width: 900px) {
+  .pfSummaryGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .pfProjectGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .pfWidgetsGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .pfAllocLayout {
+    grid-template-columns: 1fr;
+    justify-items: center;
+  }
+
+  .pfLegendRow {
+    grid-template-columns: 10px 1fr 44px;
+  }
+
+  .pfLegendBar {
+    display: none;
+  }
+}
+
+@media (max-width: 520px) {
+  .pfSummaryGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .pfSummaryCard {
+    min-height: 118px;
+    padding: 12px 12px 10px;
+  }
+
+  .pfSummaryValue {
+    font-size: 20px;
+  }
+
+  .pfProjectGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .pfProjectMetrics {
+    grid-template-columns: 1fr 1fr;
+  }
+}

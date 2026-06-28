@@ -1,4 +1,4 @@
-/* OUKEI HUB Home UI — Ver1.5.9.4 */
+/* OUKEI HUB Home UI — Ver1.7.6 */
 let homeCalView = { y: new Date().getFullYear(), m: new Date().getMonth() };
 let ramSavePending = null;
 let orcaSavePending = null;
@@ -1796,62 +1796,6 @@ function registerOrcaAccount() {
   if (typeof render === 'function') render();
   openOrcaRevenueInput();
   showToast('✅ アカウントを登録しました');
-}
-
-function renderPortfolio() {
-  let el = document.getElementById('portfolioAccountList');
-  if (!el) return;
-  let entry = getRevenueEntry(todayKey());
-  let sections = [];
-
-  let ramAccounts = getRamInputAccounts();
-  if (ramAccounts.length) {
-    sections.push('<div class="portfolioSectionTitle">' + renderHomeProjIcon('ram') + ' RAM</div>');
-    sections.push(ramAccounts.map(function (acc) {
-      let ae = getRamAccountEntry(entry, acc.id);
-      let effectiveInv = calcRamEffectiveInvestment(acc.investment, ae ? ae.addInvestment : 0);
-      return '<div class="portfolioAccountCard">' +
-        '<div class="portfolioAccountName">' + escapeHtml(acc.username) + '</div>' +
-        '<div class="portfolioAccountMeta">投資額：' + num(acc.investment) + 'ドル　日利：' + formatDailyRateLabel(effectiveInv) + '</div>' +
-        '<div class="portfolioAccountMeta">本日の配当：' + money(calcRamOperatingProfit(effectiveInv)) + '</div>' +
-        '<div class="portfolioAccountRev">本日収益：<b>' + money(ae ? ae.todayRevenue || 0 : 0) + '</b></div>' +
-        '</div>';
-    }).join(''));
-  }
-
-  let orcaAccounts = getOrcaInputAccounts();
-  if (orcaAccounts.length) {
-    sections.push('<div class="portfolioSectionTitle">' + renderHomeProjIcon('orca') + ' ORCA</div>');
-    sections.push(orcaAccounts.map(function (acc) {
-      let ae = getOrcaAccountEntry(entry, acc.id);
-      let total = ae ? calcOrcaAccountTotal(ae) : 0;
-      return '<div class="portfolioAccountCard">' +
-        '<div class="portfolioAccountName">' + escapeHtml(acc.username) + '</div>' +
-        '<div class="portfolioAccountMeta">投資額：' + num(acc.investment) + 'ドル</div>' +
-        (ae ? '<div class="portfolioAccountMeta">昨日AI利益：' + money(ae.yesterdayAiProfit) + '　本日アフィリエイト：' + money(ae.todayAffiliateProfit) + '</div>' : '') +
-        '<div class="portfolioAccountRev">本日のORCA合計：<b>' + money(total) + '</b></div>' +
-        '</div>';
-    }).join(''));
-  }
-
-  let caryAccounts = getCaryInputAccounts();
-  if (caryAccounts.length) {
-    sections.push('<div class="portfolioSectionTitle">' + renderHomeProjIcon('cary') + ' Cary Pact</div>');
-    sections.push(caryAccounts.map(function (acc) {
-      let ae = getCaryAccountEntry(entry, acc.id);
-      return '<div class="portfolioAccountCard">' +
-        '<div class="portfolioAccountName">' + escapeHtml(acc.username) + '</div>' +
-        '<div class="portfolioAccountMeta">投資額：' + num(acc.investment) + 'ドル</div>' +
-        '<div class="portfolioAccountRev">本日報酬：<b>' + money(ae ? ae.todayReward : 0) + '</b></div>' +
-        '</div>';
-    }).join(''));
-  }
-
-  if (!sections.length) {
-    el.innerHTML = '<div class="lineBox"><p class="help">アカウントがまだありません。実績入力画面から追加できます。</p></div>';
-    return;
-  }
-  el.innerHTML = sections.join('');
 }
 
 function openPortfolioNav() {

@@ -1,4 +1,4 @@
-/* ===== OUKEI HUB Home Layout (Ver1.5.9.4) ===== */
+/* ===== OUKEI HUB Home Layout (Ver1.7.6) ===== */
 /* ホーム画面専用CSS — 微調整はこのファイルを編集してください */
 
 /* --- Legacy compat (index.html から移行) --- */
@@ -2861,21 +2861,6 @@
   align-self: flex-start;
 }
 
-.portfolioSectionTitle {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 16px 0 8px;
-  font-size: 14px;
-  font-weight: 900;
-  color: #dbeafe;
-  letter-spacing: .02em;
-}
-
-.portfolioSectionTitle:first-child {
-  margin-top: 0;
-}
-
 /* --- RAM 実績入力（最小入力モーダル） --- */
 .ramInputLead {
   margin: 0 0 12px;
@@ -3101,49 +3086,6 @@
 
 .ramInputBtnAdd {
   width: 100%;
-}
-
-.portfolioPageActions {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-top: 14px;
-}
-
-.portfolioPageActions button {
-  width: 100%;
-}
-
-.portfolioAccountCard {
-  background: #081426;
-  border: 1px solid #2a4264;
-  border-radius: 14px;
-  padding: 12px 14px;
-  margin-top: 10px;
-}
-
-.portfolioAccountName {
-  font-size: 16px;
-  font-weight: 900;
-  color: #dbeafe;
-  margin-bottom: 6px;
-}
-
-.portfolioAccountMeta {
-  font-size: 12px;
-  color: #9fb3cc;
-  line-height: 1.55;
-}
-
-.portfolioAccountRev {
-  margin-top: 8px;
-  font-size: 13px;
-  color: #c9d9ec;
-}
-
-.portfolioAccountRev b {
-  color: #fbbf24;
-  font-size: 15px;
 }
 
 @media (max-width: 900px) {
