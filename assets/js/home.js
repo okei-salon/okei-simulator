@@ -1,5 +1,6 @@
-/* OUKEI HUB Home UI — Ver1.5.8.34 */
+/* OUKEI HUB Home UI — Ver1.5.9.1 */
 let homeCalView = { y: new Date().getFullYear(), m: new Date().getMonth() };
+let ramSavePending = null;
 
 function ensureRevenueLog() {
   if (!settings.revenueLog || typeof settings.revenueLog !== 'object') settings.revenueLog = {};
@@ -61,7 +62,246 @@ function getHomeActionProjects() {
 
 function isHomeProjectEnteredToday(entry, projectKey) {
   if (!entry) return false;
+  if (projectKey === 'ram') return isRamFullyEntered(entry);
   return Number(entry[projectKey] || 0) > 0;
+}
+
+function getRamInputAccounts() {
+  if (typeof getRootIdsForSummary !== 'function' || typeof members === 'undefined') return [];
+  return getRootIdsForSummary().map(function (id) {
+    let m = members.find(function (x) { return x.id === id; });
+    if (!m) return null;
+    let username = (m.username || m.name || '未入力').replace(/^@/, '');
+    return {
+      id: id,
+      username: username,
+      investment: Number(m.investment) || 0
+    };
+  }).filter(Boolean);
+}
+
+function getDailyRateDecimal(investment) {
+  if (typeof rateFor !== 'function') return { pct: 0, decimal: 0, label: '' };
+  let r = rateFor(investment);
+  let decimal = r.m / 30;
+  let pct = Math.round(decimal * 10000) / 100;
+  return { pct: pct, decimal: decimal, label: r.label };
+}
+
+function formatDailyRateLabel(investment) {
+  let rate = getDailyRateDecimal(investment);
+  return '日利' + rate.pct + '%';
+}
+
+function calcRamOperatingProfit(investment) {
+  let rate = getDailyRateDecimal(investment);
+  return Math.round(investment * rate.decimal * 100) / 100;
+}
+
+function calcRamEffectiveInvestment(baseInvestment, addInvestment) {
+  let add = Number(addInvestment) || 0;
+  return (Number(baseInvestment) || 0) + (add > 0 ? add : 0);
+}
+
+function normalizeRamRevenueNumber(val) {
+  if (val === null || val === undefined || val === '') return null;
+  let n = Number(val);
+  return isNaN(n) ? null : n;
+}
+
+function normalizeRamAccountsMap(ramAccounts) {
+  if (!ramAccounts || typeof ramAccounts !== 'object') return {};
+  let out = {};
+  Object.keys(ramAccounts).forEach(function (id) {
+    let a = ramAccounts[id];
+    if (!a) return;
+    let todayRevenue = normalizeRamRevenueNumber(a.todayRevenue);
+    if (todayRevenue === null) return;
+    out[id] = {
+      todayRevenue: todayRevenue,
+      addInvestment: Number(a.addInvestment) || 0
+    };
+  });
+  return out;
+}
+
+function getTodayRamRevenueEntry() {
+  let entry = getRevenueEntry(todayKey());
+  if (!entry) return null;
+  return Object.assign({}, entry, {
+    ramAccounts: normalizeRamAccountsMap(entry.ramAccounts)
+  });
+}
+
+function getRamAccountEntry(entry, accountId) {
+  if (!entry || !entry.ramAccounts) return null;
+  let acc = entry.ramAccounts[accountId];
+  if (!acc) return null;
+  let todayRevenue = normalizeRamRevenueNumber(acc.todayRevenue);
+  if (todayRevenue === null) return null;
+  return {
+    todayRevenue: todayRevenue,
+    addInvestment: Number(acc.addInvestment) || 0
+  };
+}
+
+function isRamAccountEntered(entry, accountId) {
+  return getRamAccountEntry(entry, accountId) !== null;
+}
+
+function countRamEnteredAccounts(entry) {
+  return getRamInputAccounts().filter(function (a) {
+    return isRamAccountEntered(entry, a.id);
+  }).length;
+}
+
+function isRamFullyEntered(entry) {
+  let accounts = getRamInputAccounts();
+  if (!accounts.length) return false;
+  return accounts.every(function (a) { return isRamAccountEntered(entry, a.id); });
+}
+
+function hasRamDataSavedForToday(entry) {
+  if (!entry || !entry.ramAccounts) return false;
+  return getRamInputAccounts().some(function (a) { return isRamAccountEntered(entry, a.id); });
+}
+
+function ramInputDiffersFromSaved(collected, existing) {
+  if (!existing || !hasRamDataSavedForToday(existing)) return false;
+  let existingAccounts = normalizeRamAccountsMap(existing.ramAccounts);
+  let accounts = getRamInputAccounts();
+
+  return accounts.some(function (acc) {
+    let next = collected.ramAccounts[acc.id];
+    let prev = existingAccounts[acc.id];
+    let nextRev = next && typeof next.todayRevenue === 'number' ? Number(next.todayRevenue) : NaN;
+    let prevRev = prev && typeof prev.todayRevenue === 'number' ? Number(prev.todayRevenue) : NaN;
+    let nextAdd = next ? Number(next.addInvestment) || 0 : 0;
+    let prevAdd = prev ? Number(prev.addInvestment) || 0 : 0;
+    if (isNaN(nextRev) && isNaN(prevRev)) return false;
+    if (isNaN(nextRev) !== isNaN(prevRev)) return true;
+    if (nextRev !== prevRev) return true;
+    return nextAdd !== prevAdd;
+  });
+}
+
+function collectRamInputFromForm() {
+  let accounts = getRamInputAccounts();
+  let existingEntry = getTodayRamRevenueEntry() || { ramAccounts: {} };
+  let ramAccounts = {};
+  let totalRam = 0;
+
+  accounts.forEach(function (acc) {
+    let revEl = document.getElementById('ramTodayRev_' + acc.id);
+    let addEl = document.getElementById('ramAddInv_' + acc.id);
+    let prev = getRamAccountEntry(existingEntry, acc.id);
+    let addInvestment = addEl && addEl.value !== '' ? Number(addEl.value) || 0 : (prev ? prev.addInvestment : 0);
+    let hasInput = revEl && revEl.value !== '' && !isNaN(Number(revEl.value));
+    if (hasInput) {
+      let todayRevenue = Number(revEl.value) || 0;
+      ramAccounts[acc.id] = { todayRevenue: todayRevenue, addInvestment: addInvestment };
+      totalRam += todayRevenue;
+    } else if (prev) {
+      ramAccounts[acc.id] = {
+        todayRevenue: prev.todayRevenue,
+        addInvestment: addInvestment
+      };
+      totalRam += prev.todayRevenue;
+    }
+  });
+
+  return { ramAccounts: ramAccounts, totalRam: totalRam };
+}
+
+function persistRamRevenueEntry(ramAccounts, totalRam) {
+  let existing = getRevenueEntry(todayKey()) || {};
+  let normalizedAccounts = normalizeRamAccountsMap(ramAccounts);
+  saveRevenueEntry(todayKey(), {
+    total: totalRam + (Number(existing.orca) || 0) + (Number(existing.genesis) || 0) + (Number(existing.cary) || 0),
+    ram: totalRam,
+    orca: Number(existing.orca) || 0,
+    genesis: Number(existing.genesis) || 0,
+    cary: Number(existing.cary) || 0,
+    ramAccounts: normalizedAccounts,
+    savedAt: new Date().toLocaleString()
+  });
+}
+
+function escapeHtml(text) {
+  return String(text || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function bindRamInputListeners() {
+  getRamInputAccounts().forEach(function (acc) {
+    let addEl = document.getElementById('ramAddInv_' + acc.id);
+    let revEl = document.getElementById('ramTodayRev_' + acc.id);
+    if (addEl) {
+      addEl.addEventListener('input', function () {
+        updateRamInputDerived(acc.id);
+      });
+    }
+  });
+}
+
+function updateRamInputDerived(accountId) {
+  let acc = getRamInputAccounts().find(function (a) { return a.id === accountId; });
+  if (!acc) return;
+  let addEl = document.getElementById('ramAddInv_' + accountId);
+  let addRaw = addEl ? String(addEl.value).trim() : '';
+  let add = addRaw !== '' ? Number(addRaw) || 0 : 0;
+  let effectiveInv = calcRamEffectiveInvestment(acc.investment, add);
+  let invEl = document.getElementById('ramInv_' + accountId);
+  let rateEl = document.getElementById('ramRate_' + accountId);
+  let profitEl = document.getElementById('ramProfit_' + accountId);
+  if (invEl) invEl.textContent = num(effectiveInv) + 'ドル';
+  if (rateEl) rateEl.textContent = formatDailyRateLabel(effectiveInv);
+  if (profitEl) profitEl.textContent = money(calcRamOperatingProfit(effectiveInv));
+}
+
+function renderRamInputFooter() {
+  return '<div class="ramInputFooterStack">' +
+    '<button type="button" class="ramInputBtnSave" onclick="saveTodayRevenue()">保存</button>' +
+    '<button type="button" class="btn2 ramInputBtnAdd" onclick="openRamAddAccountForm()">アカウント追加</button>' +
+    '</div>';
+}
+
+function renderRamAccountStatusBadge(existing, accountId) {
+  if (isRamAccountEntered(existing, accountId)) {
+    return '<span class="ramInputStatus ramInputStatus--done">本日入力済み</span>';
+  }
+  return '<span class="ramInputStatus ramInputStatus--pending">未入力</span>';
+}
+
+function renderRamInputProgress(existing) {
+  let total = getRamInputAccounts().length;
+  let done = countRamEnteredAccounts(existing);
+  let label = done + ' / ' + total;
+  if (total > 0 && done === total) label += ' 完了';
+  return '<div class="ramInputProgress">' +
+    '<span class="ramInputProgressLabel">入力状況</span>' +
+    '<span class="ramInputProgressVal' + (total > 0 && done === total ? ' isComplete' : '') + '">' + label + '</span>' +
+    '</div>';
+}
+
+function renderRamInputAccountCard(acc, existing) {
+  let accEntry = getRamAccountEntry(existing, acc.id);
+  let addInv = accEntry && accEntry.addInvestment > 0 ? accEntry.addInvestment : '';
+  let todayRev = accEntry ? accEntry.todayRevenue : '';
+  let effectiveInv = calcRamEffectiveInvestment(acc.investment, addInv);
+  return '<section class="ramInputAccount" data-acc="' + acc.id + '">' +
+    '<div class="ramInputAccountHead">' + renderRamAccountStatusBadge(existing, acc.id) + '</div>' +
+    '<div class="ramInputRows">' +
+    '<div class="ramInputRow ramInputRow--readonly"><span class="ramInputLabel">ユーザー名</span><span class="ramInputVal">' + escapeHtml(acc.username) + '</span></div>' +
+    '<div class="ramInputRow ramInputRow--readonly"><span class="ramInputLabel">投資額</span><span class="ramInputVal" id="ramInv_' + acc.id + '">' + num(effectiveInv) + 'ドル</span></div>' +
+    '<div class="ramInputRow ramInputRow--readonly"><span class="ramInputLabel">日利</span><span class="ramInputVal" id="ramRate_' + acc.id + '">' + formatDailyRateLabel(effectiveInv) + '</span></div>' +
+    '<div class="ramInputRow"><span class="ramInputLabel">追加投資額</span><div class="ramInputField"><input type="number" step="1" min="0" id="ramAddInv_' + acc.id + '" class="ramInputOptional" placeholder="0" value="' + addInv + '"><span class="ramInputUnit">ドル</span><span class="ramInputHint">追加投資があった時のみ入力</span></div></div>' +
+    '<div class="ramInputRow ramInputRow--readonly"><span class="ramInputLabel">本日の配当</span><span class="ramInputVal ramInputVal--gold" id="ramProfit_' + acc.id + '">' + money(calcRamOperatingProfit(effectiveInv)) + '</span></div>' +
+    '<div class="ramInputRow ramInputRow--main"><span class="ramInputLabel ramInputLabel--hero">本日収益</span><div class="ramInputField ramInputField--hero"><input type="number" step="0.01" min="0" id="ramTodayRev_' + acc.id + '" class="ramInputMain" inputmode="decimal" placeholder="0" value="' + todayRev + '"><span class="ramInputUnit">ドル</span><span class="ramInputBadge">毎日入力</span></div></div>' +
+    '</div></section>';
 }
 
 function updateHomeActionCard() {
@@ -104,7 +344,7 @@ function updateHomeActionCard() {
     }
     return '<div class="homeActionItem homeActionItem--pending">' +
       HOME_ACTION_ICON_PENDING +
-      '<span class="homeActionItemText">' + p.name + 'の収益を入力してください</span></div>';
+      '<span class="homeActionItemText">' + (p.key === 'ram' ? p.name + 'の本日収益を入力してください' : p.name + 'の収益を入力してください') + '</span></div>';
   }).join('');
 }
 
@@ -137,12 +377,27 @@ function getRevenueEntry(key) {
   return settings.revenueLog[key] || null;
 }
 
+function persistHubSettings() {
+  if (typeof localStorage === 'undefined' || typeof settings === 'undefined') return;
+  try {
+    localStorage.setItem('oukei_hub_v15_data', JSON.stringify({
+      members: typeof members !== 'undefined' ? members : [],
+      currentData: typeof currentData !== 'undefined' ? currentData : [],
+      settings: settings,
+      scenarios: typeof scenarios !== 'undefined' ? scenarios : [],
+      rootId: typeof rootId !== 'undefined' ? rootId : '',
+      rootAccountIds: typeof rootAccountIds !== 'undefined' ? rootAccountIds : []
+    }));
+  } catch (e) {}
+}
+
 function saveRevenueEntry(key, entry) {
   if (typeof isHomeDemoActive === 'function' && isHomeDemoActive()) return;
   ensureRevenueLog();
   settings.revenueLog[key] = entry;
   settings.lastUpdate = new Date().toLocaleString();
   markActivity();
+  persistHubSettings();
 }
 
 function calcInputStreak() {
@@ -785,6 +1040,7 @@ function updateHomeDashboard(sAll) {
   updateHomeMonthlyProjects(sAll);
   updateHomeTodaySection(sAll);
   if (typeof updateOchanMessage === 'function') updateOchanMessage();
+  if (typeof renderPortfolio === 'function') renderPortfolio();
 }
 
 function showRevenueDayDetail(key) {
@@ -795,6 +1051,15 @@ function showRevenueDayDetail(key) {
   if (!entry) {
     modalContent.innerHTML = '<div class="lineBox"><b>未入力</b><p class="help">この日付の実績はまだ記録されていません。</p></div>';
   } else {
+    let ramDetail = '';
+    if (entry.ramAccounts && typeof getRamInputAccounts === 'function') {
+      let rows = getRamInputAccounts().map(function (acc) {
+        let ae = entry.ramAccounts[acc.id];
+        if (!ae) return '';
+        return '<div class="homeSummaryRow"><span>' + escapeHtml(acc.username) + '</span><b>' + money(ae.todayRevenue || 0) + '</b></div>';
+      }).join('');
+      if (rows) ramDetail = '<div class="lineBox" style="margin-top:10px"><b>RAM アカウント別</b><div class="homeSummaryList">' + rows + '</div></div>';
+    }
     modalContent.innerHTML =
       '<div class="lineBox"><b>合計</b><div class="amount">' + money(entry.total) + '</div><div class="help">' + yen(entry.total) + '</div></div>' +
       '<div class="homeSummaryList" style="margin-top:10px">' +
@@ -803,56 +1068,212 @@ function showRevenueDayDetail(key) {
       '<div class="homeSummaryRow"><span><span class="homeProjDot genesis"></span>Genesis</span><b>' + money(entry.genesis || 0) + '</b></div>' +
       '<div class="homeSummaryRow"><span><span class="homeProjDot cary"></span>Cary Pact</span><b>' + money(entry.cary || 0) + '</b></div>' +
       '</div>' +
+      ramDetail +
       (entry.savedAt ? '<p class="help" style="margin-top:10px">記録：' + entry.savedAt + '</p>' : '');
   }
   modalBg.style.display = 'flex';
 }
 
 function openRevenueInput() {
-  let key = todayKey();
-  let existing = getRevenueEntry(key);
-  let base = existing || defaultRevenueEntry();
-  modalTitle.textContent = '実績入力';
+  ramSavePending = null;
+  let accounts = getRamInputAccounts();
+  modalTitle.textContent = 'RAM 実績入力';
+
+  if (!accounts.length) {
+    modalContent.innerHTML =
+      '<div class="lineBox"><b>アカウントがありません</b><p class="help">「アカウント追加」からRAMアカウントを登録してください。</p></div>' +
+      renderRamInputFooter();
+    modalBg.style.display = 'flex';
+    return;
+  }
+
+  let existing = getTodayRamRevenueEntry();
+  let cards = accounts.map(function (acc) {
+    return renderRamInputAccountCard(acc, existing);
+  }).join('');
+
   modalContent.innerHTML =
-    '<p class="help">今日の収益を記録します（参考シミュレーション用）。</p>' +
-    '<label>合計収益（USD）</label>' +
-    '<input id="revenueInputTotal" type="number" step="0.01" value="' + (Math.round((base.total || 0) * 100) / 100) + '">' +
-    '<label>RAM</label><input id="revenueInputRam" type="number" step="0.01" value="' + (Math.round((base.ram || base.total || 0) * 100) / 100) + '">' +
-    '<div style="display:flex;gap:8px;margin-top:14px;justify-content:flex-end">' +
-    '<button class="btn2" onclick="closeModal()">キャンセル</button>' +
-    '<button onclick="saveTodayRevenue()">保存</button></div>';
+    renderRamInputProgress(existing) +
+    '<p class="help ramInputLead">毎日入力するのは「本日収益」だけです。それ以外は自動表示されます。</p>' +
+    '<div class="ramInputList">' + cards + '</div>' +
+    renderRamInputFooter();
+
   modalBg.style.display = 'flex';
-  setTimeout(function () { let el = document.getElementById('revenueInputTotal'); if (el) el.focus(); }, 80);
+  bindRamInputListeners();
+
+  setTimeout(function () {
+    let focusEl = accounts.map(function (acc) {
+      return document.getElementById('ramTodayRev_' + acc.id);
+    }).find(function (el) {
+      return el && el.value === '';
+    });
+    if (focusEl) focusEl.focus();
+  }, 80);
+}
+
+function refreshHomeAfterRamSave() {
+  if (typeof allOrgSummary === 'function' && typeof updateHomeDashboard === 'function') {
+    updateHomeDashboard(allOrgSummary());
+  } else {
+    updateHomeActionCard();
+  }
+}
+
+function executeRamSave(collected) {
+  persistRamRevenueEntry(collected.ramAccounts, collected.totalRam);
+  if (typeof render === 'function') render();
+  refreshHomeAfterRamSave();
+  if (typeof showPage === 'function') showPage('home');
+  if (typeof closeModal === 'function') closeModal();
+  showToast('✅ 保存しました');
+}
+
+function showRamOverwriteConfirm(collected) {
+  ramSavePending = collected;
+  let existing = document.getElementById('ramOverwriteConfirm');
+  if (existing) existing.remove();
+  modalContent.insertAdjacentHTML('beforeend',
+    '<div class="ramInputConfirm" id="ramOverwriteConfirm">' +
+    '<p class="ramInputConfirmText">本日のRAM実績はすでに保存されています。<br>この内容で上書きしますか？</p>' +
+    '<div class="ramInputFooterStack">' +
+    '<button type="button" class="ramInputBtnSave" onclick="confirmRamOverwriteSave()">上書き保存</button>' +
+    '<button type="button" class="btn2 ramInputBtnAdd" onclick="cancelRamOverwrite()">キャンセル</button>' +
+    '</div></div>');
+  let confirmEl = document.getElementById('ramOverwriteConfirm');
+  if (confirmEl && confirmEl.scrollIntoView) confirmEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function cancelRamOverwrite() {
+  ramSavePending = null;
+  let el = document.getElementById('ramOverwriteConfirm');
+  if (el) el.remove();
+}
+
+function confirmRamOverwriteSave() {
+  if (!ramSavePending) return;
+  let collected = ramSavePending;
+  ramSavePending = null;
+  let el = document.getElementById('ramOverwriteConfirm');
+  if (el) el.remove();
+  executeRamSave(collected);
 }
 
 function saveTodayRevenue() {
-  let total = Number(document.getElementById('revenueInputTotal')?.value) || 0;
-  let ram = Number(document.getElementById('revenueInputRam')?.value) || 0;
-  saveRevenueEntry(todayKey(), {
-    total: total,
-    ram: ram,
-    orca: 0,
-    genesis: 0,
-    cary: 0,
-    savedAt: new Date().toLocaleString()
+  let collected = collectRamInputFromForm();
+  if (!Object.keys(collected.ramAccounts).length) {
+    alert('保存する内容がありません。「本日収益」を入力してください。');
+    return;
+  }
+  let existing = getTodayRamRevenueEntry();
+  if (hasRamDataSavedForToday(existing) && ramInputDiffersFromSaved(collected, existing)) {
+    showRamOverwriteConfirm(collected);
+    return;
+  }
+  executeRamSave(collected);
+}
+
+function openRamAddAccountForm() {
+  modalTitle.textContent = 'RAM アカウント追加';
+  modalContent.innerHTML =
+    '<p class="help">ユーザー名・投資額・本日収益を入力して登録します。</p>' +
+    '<label>ユーザー名</label><input id="ramNewUsername" type="text" placeholder="例：kai1">' +
+    '<label>投資額（USD）</label><input id="ramNewInvestment" type="number" step="1" min="0" placeholder="例：40000">' +
+    '<label>本日収益（USD）</label><input id="ramNewTodayRev" type="number" step="0.01" min="0" placeholder="例：10">' +
+    '<div class="ramInputFooterStack">' +
+    '<button type="button" class="ramInputBtnSave" onclick="registerRamAccount()">このアカウントを登録</button>' +
+    '<button type="button" class="btn2 ramInputBtnAdd" onclick="openRevenueInput()">入力画面に戻る</button>' +
+    '</div>';
+  modalBg.style.display = 'flex';
+  setTimeout(function () {
+    let el = document.getElementById('ramNewUsername');
+    if (el) el.focus();
+  }, 80);
+}
+
+function registerRamAccount() {
+  let username = (document.getElementById('ramNewUsername')?.value || '').trim().replace(/^@/, '');
+  let investment = Number(document.getElementById('ramNewInvestment')?.value) || 0;
+  let todayRevRaw = document.getElementById('ramNewTodayRev')?.value;
+  if (!username) {
+    alert('ユーザー名を入力してください。');
+    return;
+  }
+  if (!investment) {
+    alert('投資額を入力してください。');
+    return;
+  }
+  if (todayRevRaw === '' || isNaN(Number(todayRevRaw))) {
+    alert('本日収益を入力してください。');
+    return;
+  }
+  if (!confirm('このアカウントを登録しますか？')) return;
+
+  let id = 'm' + Date.now();
+  members.push({
+    id: id,
+    parent: null,
+    name: username,
+    username: username,
+    rank: 0,
+    investment: investment,
+    manualVolume: 0,
+    open: true,
+    bvMode: 'MANUAL',
+    bvPrompted: false
   });
-  closeModal();
-  render();
-  showToast('✅ 今日の実績を記録しました');
+  if (typeof ensureRootAccounts === 'function') ensureRootAccounts();
+  if (typeof rootAccountIds !== 'undefined' && !rootAccountIds.includes(id)) rootAccountIds.push(id);
+  if (typeof rootId !== 'undefined') rootId = id;
+  if (typeof focusId !== 'undefined') focusId = id;
+
+  let todayRevenue = Number(todayRevRaw) || 0;
+  let existing = getRevenueEntry(todayKey()) || {};
+  let ramAccounts = existing.ramAccounts || {};
+  ramAccounts[id] = { todayRevenue: todayRevenue, addInvestment: 0 };
+  let totalRam = Object.keys(ramAccounts).reduce(function (s, key) {
+    return s + (Number(ramAccounts[key].todayRevenue) || 0);
+  }, 0);
+
+  persistRamRevenueEntry(ramAccounts, totalRam);
+  if (typeof markActivity === 'function') markActivity();
+  if (typeof render === 'function') render();
+  openRevenueInput();
+  showToast('✅ アカウントを登録しました');
+}
+
+function renderPortfolio() {
+  let el = document.getElementById('portfolioAccountList');
+  if (!el) return;
+  let accounts = getRamInputAccounts();
+  let entry = getRevenueEntry(todayKey());
+  if (!accounts.length) {
+    el.innerHTML = '<div class="lineBox"><p class="help">RAMアカウントがまだありません。実績入力画面から追加できます。</p></div>';
+    return;
+  }
+  el.innerHTML = accounts.map(function (acc) {
+    let ae = getRamAccountEntry(entry, acc.id);
+    let effectiveInv = calcRamEffectiveInvestment(acc.investment, ae ? ae.addInvestment : 0);
+    return '<div class="portfolioAccountCard">' +
+      '<div class="portfolioAccountName">' + escapeHtml(acc.username) + '</div>' +
+      '<div class="portfolioAccountMeta">投資額：' + num(acc.investment) + 'ドル　日利：' + formatDailyRateLabel(effectiveInv) + '</div>' +
+      '<div class="portfolioAccountMeta">本日の配当：' + money(calcRamOperatingProfit(effectiveInv)) + '</div>' +
+      '<div class="portfolioAccountRev">本日収益：<b>' + money(ae ? ae.todayRevenue || 0 : 0) + '</b></div>' +
+      '</div>';
+  }).join('');
+}
+
+function openPortfolioNav() {
+  showPage('portfolio');
 }
 
 function syncMobileNav(page) {
   let nav = document.getElementById('mobileBottomNav');
   if (!nav) return;
-  let map = { home: 'home', ram: 'ram', settings: 'settings', accountManage: 'ram' };
+  let map = { home: 'home', ram: 'ram', portfolio: 'portfolio', settings: 'settings', accountManage: 'ram' };
   let active = map[page] || '';
   nav.querySelectorAll('[data-nav]').forEach(function (btn) {
     btn.classList.toggle('isActive', btn.getAttribute('data-nav') === active);
   });
-}
-
-function openPortfolioNav() {
-  alert('ポートフォリオは今後実装予定です');
 }
 
 document.addEventListener('DOMContentLoaded', function () {

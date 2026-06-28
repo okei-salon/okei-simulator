@@ -1,4 +1,4 @@
-/* ===== OUKEI HUB Home Layout (Ver1.5.8.28) ===== */
+/* ===== OUKEI HUB Home Layout (Ver1.5.9.1) ===== */
 /* ホーム画面専用CSS — 微調整はこのファイルを編集してください */
 
 /* --- Legacy compat (index.html から移行) --- */
@@ -2709,5 +2709,287 @@
   .ochanRoomAvatar {
     width: min(110px, 34vw);
     max-height: min(150px, 24vh);
+  }
+}
+
+/* --- RAM 実績入力（最小入力モーダル） --- */
+.ramInputLead {
+  margin: 0 0 12px;
+}
+
+.ramInputProgress {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: #081426;
+  border: 1px solid #2a4264;
+}
+
+.ramInputProgressLabel {
+  font-size: 13px;
+  font-weight: 900;
+  color: #9fb3cc;
+  letter-spacing: .02em;
+}
+
+.ramInputProgressVal {
+  font-size: 18px;
+  font-weight: 900;
+  color: #fde68a;
+  letter-spacing: .03em;
+}
+
+.ramInputProgressVal.isComplete {
+  color: #93c5fd;
+}
+
+.ramInputList {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ramInputAccount {
+  background: #081426;
+  border: 1px solid #2a4264;
+  border-radius: 14px;
+  padding: 12px 14px;
+}
+
+.ramInputAccountHead {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 8px;
+}
+
+.ramInputStatus {
+  font-size: 10px;
+  font-weight: 900;
+  padding: 4px 10px;
+  border-radius: 999px;
+  letter-spacing: .02em;
+}
+
+.ramInputStatus--done {
+  color: #dbeafe;
+  background: rgba(37, 99, 235, .24);
+  border: 1px solid rgba(96, 165, 250, .45);
+}
+
+.ramInputStatus--pending {
+  color: #713f12;
+  background: rgba(250, 204, 21, .24);
+  border: 1px solid rgba(234, 179, 8, .45);
+}
+
+.ramInputAccountTitle {
+  margin: 0 0 10px;
+  font-size: 16px;
+  font-weight: 900;
+  color: #dbeafe;
+  letter-spacing: .02em;
+}
+
+.ramInputRows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ramInputRow {
+  display: grid;
+  grid-template-columns: 88px 1fr;
+  gap: 10px;
+  align-items: center;
+}
+
+.ramInputRow--main {
+  margin-top: 6px;
+  padding: 12px;
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(37, 99, 235, .18) 0%, rgba(8, 20, 38, .96) 100%);
+  border: 2px solid rgba(96, 165, 250, .58);
+  box-shadow:
+    0 0 22px rgba(59, 130, 246, .28),
+    inset 0 0 0 1px rgba(147, 197, 253, .12);
+}
+
+.ramInputLabel--hero {
+  color: #bfdbfe;
+  font-size: 13px;
+}
+
+.ramInputField--hero {
+  align-items: center;
+}
+
+.ramInputLabel {
+  font-size: 12px;
+  font-weight: 800;
+  color: #9fb3cc;
+}
+
+.ramInputVal {
+  font-size: 14px;
+  font-weight: 900;
+  color: var(--text);
+}
+
+.ramInputVal--gold {
+  color: #fbbf24;
+}
+
+.ramInputField {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.ramInputField input {
+  width: min(140px, 100%);
+  min-height: 42px;
+  padding: 10px 12px;
+  margin: 0;
+}
+
+.ramInputOptional {
+  border-color: #355777 !important;
+}
+
+.ramInputMain {
+  min-height: 52px !important;
+  font-size: 18px !important;
+  font-weight: 900 !important;
+  background: rgba(7, 17, 31, .92) !important;
+  border: 2px solid #60a5fa !important;
+  box-shadow:
+    0 0 18px rgba(59, 130, 246, .42),
+    inset 0 0 12px rgba(59, 130, 246, .12) !important;
+}
+
+.ramInputUnit {
+  font-size: 12px;
+  font-weight: 800;
+  color: #9fb3cc;
+}
+
+.ramInputHint {
+  font-size: 10px;
+  font-weight: 700;
+  color: #94a3b8;
+  line-height: 1.45;
+  flex: 1 1 100%;
+}
+
+.ramInputBadge {
+  font-size: 10px;
+  font-weight: 900;
+  color: #bfdbfe;
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: rgba(37, 99, 235, .18);
+  border: 1px solid rgba(96, 165, 250, .28);
+}
+
+.ramInputFooterStack {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 16px;
+  padding-top: 4px;
+}
+
+.ramInputFooterStack button {
+  width: 100%;
+  min-height: 48px;
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.ramInputBtnSave {
+  background: #2563eb;
+  color: #fff;
+  border: 0;
+  border-radius: 12px;
+}
+
+.ramInputConfirm {
+  margin-top: 16px;
+  padding: 16px;
+  border-radius: 14px;
+  background: #0a1628;
+  border: 1px solid #f59e0b;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .35);
+}
+
+.ramInputConfirmText {
+  margin: 0 0 14px;
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.6;
+  color: #fde68a;
+}
+
+.ramInputBtnAdd {
+  width: 100%;
+}
+
+.portfolioPageActions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.portfolioPageActions button {
+  width: 100%;
+}
+
+.portfolioAccountCard {
+  background: #081426;
+  border: 1px solid #2a4264;
+  border-radius: 14px;
+  padding: 12px 14px;
+  margin-top: 10px;
+}
+
+.portfolioAccountName {
+  font-size: 16px;
+  font-weight: 900;
+  color: #dbeafe;
+  margin-bottom: 6px;
+}
+
+.portfolioAccountMeta {
+  font-size: 12px;
+  color: #9fb3cc;
+  line-height: 1.55;
+}
+
+.portfolioAccountRev {
+  margin-top: 8px;
+  font-size: 13px;
+  color: #c9d9ec;
+}
+
+.portfolioAccountRev b {
+  color: #fbbf24;
+  font-size: 15px;
+}
+
+@media (max-width: 900px) {
+  .ramInputRow {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+
+  .ramInputField input {
+    width: 100%;
+    flex: 1 1 100%;
   }
 }
