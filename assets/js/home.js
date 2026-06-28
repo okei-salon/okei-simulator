@@ -1,4 +1,4 @@
-/* OUKEI HUB Home UI — Ver1.5.8.32 */
+/* OUKEI HUB Home UI — Ver1.5.8.33 */
 let homeCalView = { y: new Date().getFullYear(), m: new Date().getMonth() };
 
 function ensureRevenueLog() {
@@ -527,26 +527,190 @@ function updateHomeMonthlyProjects(sAll) {
   renderHomeMonthlyProjGrid(sAll);
 }
 
+function getHomeTodayProjectRows(ctx) {
+  if (!ctx) return [];
+  let registry = getHomeProjectRegistry();
+  let entry = ctx.todayEntry;
+
+  if (entry) {
+    Object.keys(entry).forEach(function (k) {
+      if (k === 'total' || k === 'savedAt') return;
+      if (registry.some(function (p) { return p.key === k; })) return;
+      if ((entry[k] || 0) <= 0) return;
+      registry.push({
+        key: k,
+        name: k.charAt(0).toUpperCase() + k.slice(1),
+        cls: 'custom'
+      });
+    });
+  }
+
+  return registry.map(function (p) {
+    let amt = entry ? (entry[p.key] || 0) : fallbackProjectAmount(p, ctx.sAll, 'daily');
+    let pct = ctx.todayTotal > 0 ? Math.round((amt / ctx.todayTotal) * 1000) / 10 : 0;
+    return { proj: p, amt: amt, pct: pct };
+  }).filter(function (row) { return row.amt > 0; });
+}
+
+function renderHomeTodayDonut(rows, total) {
+  let el = document.getElementById('homeTodayDonut');
+  if (!el) return;
+  if (!rows.length || total <= 0) {
+    el.innerHTML = '';
+    el.classList.remove('isHover');
+    return;
+  }
+
+  let colors = {
+    ram: '#3b82f6',
+    orca: '#14b8a6',
+    genesis: '#a855f7',
+    cary: '#a855f7',
+    custom: '#94a3b8'
+  };
+  let r = 30;
+  let cx = 44;
+  let cy = 44;
+  let c = 2 * Math.PI * r;
+  let offset = 0;
+  let segs = rows.map(function (row, i) {
+    let len = (row.amt / total) * c;
+    let stroke = colors[row.proj.cls] || colors.custom;
+    let hit = '<circle class="homeTodayDonutHit" data-idx="' + i + '" cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="none" stroke="transparent" stroke-width="14" stroke-dasharray="' + len.toFixed(2) + ' ' + (c - len).toFixed(2) + '" stroke-dashoffset="' + (-offset).toFixed(2) + '" transform="rotate(-90 ' + cx + ' ' + cy + ')"></circle>';
+    let seg = '<circle class="homeTodayDonutSeg" data-idx="' + i + '" cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="none" stroke="' + stroke + '" stroke-width="9" stroke-dasharray="' + len.toFixed(2) + ' ' + (c - len).toFixed(2) + '" stroke-dashoffset="' + (-offset).toFixed(2) + '" transform="rotate(-90 ' + cx + ' ' + cy + ')"></circle>';
+    offset += len;
+    return hit + seg;
+  }).join('');
+
+  let legend = rows.map(function (row, i) {
+    let stroke = colors[row.proj.cls] || colors.custom;
+    return '<button type="button" class="homeTodayDonutLegendItem" data-idx="' + i + '" aria-label="' + row.proj.name + ' ' + row.pct + '%">' +
+      '<span class="homeTodayDonutLegendDot" style="background:' + stroke + '"></span>' +
+      '<span class="homeTodayDonutLegendName">' + row.proj.name + '</span>' +
+      '<span class="homeTodayDonutLegendPct">' + row.pct + '%</span></button>';
+  }).join('');
+
+  el.innerHTML =
+    '<div class="homeTodayDonutTip" id="homeTodayDonutTip" role="tooltip"></div>' +
+    '<div class="homeTodayDonutInner">' +
+    '<svg class="homeTodayDonutSvg" viewBox="0 0 88 88" aria-hidden="true">' +
+    '<circle class="homeTodayDonutTrack" cx="' + cx + '" cy="' + cy + '" r="' + r + '"></circle>' +
+    segs +
+    '</svg>' +
+    '<span class="homeTodayDonutCenter"><span class="homeTodayDonutCenterMain">内訳</span><span class="homeTodayDonutCenterSub">100%</span></span>' +
+    '</div>' +
+    '<div class="homeTodayDonutLegend">' + legend + '</div>';
+
+  bindHomeTodayDonutHover(el, rows);
+}
+
+function bindHomeTodayDonutHover(wrap, rows) {
+  if (!wrap || !rows.length) return;
+  let tip = wrap.querySelector('#homeTodayDonutTip');
+  let hits = wrap.querySelectorAll('.homeTodayDonutHit');
+  let segs = wrap.querySelectorAll('.homeTodayDonutSeg');
+  let legendItems = wrap.querySelectorAll('.homeTodayDonutLegendItem');
+
+  function clearActive() {
+    wrap.classList.remove('isHover');
+    segs.forEach(function (s) { s.classList.remove('isActive'); });
+    legendItems.forEach(function (l) { l.classList.remove('isActive'); });
+    if (tip) {
+      tip.classList.remove('isVisible');
+      tip.textContent = '';
+    }
+  }
+
+  function setActive(idx) {
+    let row = rows[idx];
+    if (!row) return;
+    wrap.classList.add('isHover');
+    segs.forEach(function (s) {
+      s.classList.toggle('isActive', Number(s.getAttribute('data-idx')) === idx);
+    });
+    legendItems.forEach(function (l) {
+      l.classList.toggle('isActive', Number(l.getAttribute('data-idx')) === idx);
+    });
+    if (tip) {
+      tip.textContent = row.proj.name + ' ' + row.pct + '% · ' + money(row.amt);
+      tip.classList.add('isVisible');
+    }
+  }
+
+  hits.forEach(function (hit) {
+    hit.addEventListener('mouseenter', function () {
+      setActive(Number(hit.getAttribute('data-idx')));
+    });
+  });
+
+  legendItems.forEach(function (item) {
+    item.addEventListener('mouseenter', function () {
+      setActive(Number(item.getAttribute('data-idx')));
+    });
+    item.addEventListener('focus', function () {
+      setActive(Number(item.getAttribute('data-idx')));
+    });
+    item.addEventListener('blur', function () {
+      if (!wrap.matches(':hover') && !wrap.contains(document.activeElement)) clearActive();
+    });
+  });
+
+  wrap.addEventListener('mouseleave', clearActive);
+}
+
+function renderHomeTodayProjGrid(rows) {
+  let el = document.getElementById('homeDailyProjGrid');
+  if (!el) return;
+  let cols = Math.max(rows.length, 1);
+  el.style.setProperty('--today-proj-cols', cols);
+  el.setAttribute('data-count', rows.length);
+
+  if (!rows.length) {
+    el.innerHTML = '';
+    return;
+  }
+
+  el.innerHTML = rows.map(function (row) {
+    let p = row.proj;
+    return '<div class="homeTodayProjCard homeTodayProjCard--' + p.cls + '">' +
+      '<div class="homeTodayProjCardHead">' +
+      '<span class="homeTodayProjCardName"><span class="homeTodayProjMark"></span>' + p.name + '</span>' +
+      '<span class="homeTodayProjCardPct">' + row.pct + '%</span></div>' +
+      '<span class="homeTodayProjCardAmt">' + money(row.amt) + '</span>' +
+      '<div class="homeTodayProjCardBar"><div class="homeTodayProjCardBarFill" style="width:' + row.pct + '%"></div></div>' +
+      '</div>';
+  }).join('');
+}
+
 function updateHomeTodaySection(sAll) {
   if (!sAll && typeof allOrgSummary === 'function') sAll = allOrgSummary();
   if (!sAll) return;
-  let projects = getEnabledHomeProjects();
+
   let todayEntry = getRevenueEntry(todayKey());
   let yesterdayEntry = getRevenueEntry(yesterdayKey());
   let todayTotal = todayEntry ? (todayEntry.total || 0) : sAll.daily;
   let yesterdayTotal = yesterdayEntry ? (yesterdayEntry.total || 0) : sAll.daily;
 
+  let dailyEl = document.getElementById('homeDaily');
+  let yenEl = document.getElementById('homeDailyYen');
+  if (dailyEl) dailyEl.textContent = money(todayTotal);
+  if (yenEl) yenEl.textContent = yen(todayTotal);
+
   let compareEl = document.getElementById('homeTodayCompare');
   if (compareEl) {
     compareEl.innerHTML =
-      '<div class="homeTodayCompareItem"><span class="homeTodayCompareLabel">昨日の収益</span><span class="homeTodayCompareVal">' + money(yesterdayTotal) + '</span></div>' +
-      '<div class="homeTodayCompareItem homeTodayCompareItem--today"><span class="homeTodayCompareLabel">本日の収益</span><span class="homeTodayCompareVal">' + money(todayTotal) + '</span></div>';
+      '<div class="homeTodayCompareItem">' +
+      '<span class="homeTodayCompareLabel">昨日の収益</span>' +
+      '<span class="homeTodayCompareVal">' + money(yesterdayTotal) + '</span></div>' +
+      '<div class="homeTodayCompareItem homeTodayCompareItem--today">' +
+      '<span class="homeTodayCompareLabel">本日の収益</span>' +
+      '<span class="homeTodayCompareVal">' + money(todayTotal) + '</span></div>';
   }
 
-  renderProjectGrid('homeDailyProjGrid', projects, function (p) {
-    if (todayEntry) return projectAmountFromEntry(todayEntry, p);
-    return fallbackProjectAmount(p, sAll, 'daily');
-  }, todayTotal);
+  let ctx = { sAll: sAll, todayEntry: todayEntry, todayTotal: todayTotal, yesterdayTotal: yesterdayTotal };
+  let rows = getHomeTodayProjectRows(ctx);
+  renderHomeTodayDonut(rows, todayTotal);
+  renderHomeTodayProjGrid(rows);
 }
 
 function updateHomeDashboard(sAll) {
