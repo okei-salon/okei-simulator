@@ -784,6 +784,7 @@ function updateHomeDashboard(sAll) {
   renderHomeMonthlyLineChart();
   updateHomeMonthlyProjects(sAll);
   updateHomeTodaySection(sAll);
+  if (typeof updateOchanMessage === 'function') updateOchanMessage();
 }
 
 function showRevenueDayDetail(key) {
