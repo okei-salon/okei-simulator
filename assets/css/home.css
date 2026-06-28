@@ -379,49 +379,47 @@
   gap: 2px;
   min-width: 0;
   text-align: left;
-  transform: translateX(45px);
 }
 
 .homeInputStatLabel {
   color: #8fa8c5;
-  font-weight: 800;
-  font-size: 18px;
+  font-weight: 700;
+  font-size: 10px;
   line-height: 1.3;
 }
 
-.homeInputStatBody--streak .homeInputStatVal {
+.homeInputStatVal {
   color: var(--text);
-  font-size: 30px;
-  font-weight: 800;
+  font-weight: 900;
+  font-size: 17px;
   line-height: 1.15;
 }
 
 .homeInputStatBody--streak .homeInputStatSub {
   color: #9db4d0;
   font-weight: 800;
-  font-size: 16px;
+  font-size: 10px;
   line-height: 1.2;
 }
 
 .homeInputStatBody--rate .homeInputStatSub {
   color: var(--text);
-  font-weight: 800;
-  font-size: 16px;
+  font-weight: 900;
+  font-size: 11px;
   line-height: 1.2;
 }
 
 .homeInputRateRing {
   position: relative;
-  width: 100px;
-  height: 100px;
+  width: 48px;
+  height: 48px;
   flex-shrink: 0;
-  transform: translateX(40px);
 }
 
 .homeInputRateRing svg,
 .homeInputRateSvg {
-  width: 100px;
-  height: 100px;
+  width: 48px;
+  height: 48px;
   display: block;
   transform: rotate(-90deg);
 }
@@ -446,8 +444,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 24px;
-  font-weight: 800;
+  font-size: 11px;
+  font-weight: 900;
   color: var(--text);
 }
 
@@ -905,9 +903,34 @@
     padding: 6px 8px;
   }
 
+  .homeInputStatBody--rate {
+    transform: translateX(45px);
+  }
+
+  .homeInputStatLabel {
+    font-size: 18px;
+    font-weight: 800;
+  }
+
+  .homeInputStatBody--streak .homeInputStatVal {
+    font-size: 30px;
+    font-weight: 800;
+  }
+
+  .homeInputStatBody--streak .homeInputStatSub {
+    font-size: 16px;
+    font-weight: 800;
+  }
+
+  .homeInputStatBody--rate .homeInputStatSub {
+    font-size: 16px;
+    font-weight: 800;
+  }
+
   .homeInputRateRing {
     width: 100px;
     height: 100px;
+    transform: translateX(40px);
   }
 
   .homeInputRateRing svg,
@@ -919,11 +942,6 @@
 
   .homeInputRatePct {
     font-size: 24px;
-    font-weight: 800;
-  }
-
-  .homeInputStatBody--streak .homeInputStatVal {
-    font-size: 30px;
     font-weight: 800;
   }
 
