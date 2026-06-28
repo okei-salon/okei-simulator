@@ -490,6 +490,308 @@
   line-height: 1.15;
 }
 
+/* --- 今月収益カード（このカード専用・他カード非共有） --- */
+.homeDemoBanner {
+  margin: -2px 0 8px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: rgba(251, 191, 36, .12);
+  border: 1px solid rgba(251, 191, 36, .35);
+  color: #fcd34d;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .03em;
+  line-height: 1.4;
+}
+
+.homeMonthlyCard .homeMonthlySummary {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 4px;
+  padding: 6px 0 12px;
+}
+
+.homeMonthlyCard .homeMonthlySummaryAmt {
+  font-size: 22px;
+  font-weight: 900;
+  color: var(--text);
+  letter-spacing: -.02em;
+  line-height: 1.15;
+}
+
+.homeMonthlyCard .homeMonthlySummaryYen {
+  font-size: 13px;
+  font-weight: 700;
+  color: #9db4d0;
+  line-height: 1.3;
+}
+
+.homeMonthlyCard .homeMonthlyChartBlock {
+  margin-top: 2px;
+}
+
+.homeMonthlyCard .homeMonthlyChartHead {
+  margin-bottom: 6px;
+}
+
+.homeMonthlyCard .homeMonthlyChartTitle {
+  font-size: 11px;
+  font-weight: 800;
+  color: #9db4d0;
+  letter-spacing: .04em;
+}
+
+.homeMonthlyCard .homeMonthlyChartArea {
+  width: 100%;
+  margin-left: 0;
+  margin-right: 0;
+  padding: 0;
+  border: 1px solid rgba(36, 58, 90, .85);
+  border-radius: 12px;
+  background: rgba(5, 12, 24, .92);
+  overflow: hidden;
+}
+
+.homeMonthlyCard .homeMonthlyChartInner {
+  position: relative;
+  min-height: 190px;
+}
+
+.homeMonthlyCard .homeMonthlyChartTip {
+  position: absolute;
+  z-index: 3;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 11px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, .92);
+  border: 1px solid rgba(255, 255, 255, .12);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, .45);
+  white-space: nowrap;
+  opacity: 0;
+  transform: translateY(4px);
+  transition: opacity .15s ease, transform .15s ease;
+}
+
+.homeMonthlyCard .homeMonthlyChartTipDate {
+  font-size: 10px;
+  font-weight: 700;
+  color: #9db4d0;
+}
+
+.homeMonthlyCard .homeMonthlyChartTipAmt {
+  font-size: 13px;
+  font-weight: 900;
+  color: #f0f7ff;
+}
+
+.homeMonthlyCard .homeMonthlyChartTip.isVisible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.homeMonthlyCard .homeMonthlyChartSvg {
+  width: 100%;
+  height: 190px;
+  display: block;
+}
+
+.homeMonthlyCard .homeMonthlyChartGrid {
+  stroke: rgba(255, 255, 255, .07);
+  stroke-width: 1;
+}
+
+.homeMonthlyCard .homeMonthlyChartYLabel,
+.homeMonthlyCard .homeMonthlyChartXLabel {
+  fill: #7f97b3;
+  font-size: 9px;
+  font-weight: 700;
+  font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic", Meiryo, sans-serif;
+}
+
+.homeMonthlyCard .homeMonthlyChartLine {
+  fill: none;
+  stroke: #60a5fa;
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.homeMonthlyCard .homeMonthlyChartFill {
+  fill: url(#homeMonthlyLineGrad);
+  stroke: none;
+}
+
+.homeMonthlyCard .homeMonthlyChartHit {
+  fill: transparent;
+  cursor: pointer;
+}
+
+.homeMonthlyCard .homeMonthlyChartDot {
+  fill: #60a5fa;
+  pointer-events: none;
+}
+
+.homeMonthlyCard .homeMonthlyChartDot.isToday {
+  fill: var(--gold);
+  stroke: rgba(255, 255, 255, .35);
+  stroke-width: 1;
+}
+
+.homeMonthlyCard .homeMonthlyChartDot.isActive {
+  fill: #fff;
+  stroke: #93c5fd;
+  stroke-width: 1.5;
+}
+
+.homeMonthlyCard .homeMonthlyProjSection {
+  margin-top: 12px;
+}
+
+.homeMonthlyCard .homeMonthlyProjTitle {
+  font-size: 11px;
+  font-weight: 800;
+  color: #8fa8c5;
+  margin-bottom: 8px;
+}
+
+.homeMonthlyCard .homeMonthlyProjGrid {
+  display: grid;
+  grid-template-columns: repeat(var(--monthly-proj-cols, 1), minmax(0, 1fr));
+  gap: 8px;
+}
+
+.homeMonthlyCard .homeMonthlyProjCard {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  padding: 9px 10px 8px;
+  background: rgba(7, 16, 30, .88);
+  border: 1px solid rgba(36, 58, 90, .8);
+  border-radius: 11px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .03);
+}
+
+.homeMonthlyCard .homeMonthlyProjCardHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.homeMonthlyCard .homeMonthlyProjCardName {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 800;
+  color: #b8cce4;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.homeMonthlyCard .homeMonthlyProjDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.homeMonthlyCard .homeMonthlyProjCard--ram {
+  border-color: rgba(59, 130, 246, .28);
+}
+
+.homeMonthlyCard .homeMonthlyProjCard--ram .homeMonthlyProjDot {
+  background: #3b82f6;
+}
+
+.homeMonthlyCard .homeMonthlyProjCard--orca {
+  border-color: rgba(20, 184, 166, .28);
+}
+
+.homeMonthlyCard .homeMonthlyProjCard--orca .homeMonthlyProjDot {
+  background: #14b8a6;
+}
+
+.homeMonthlyCard .homeMonthlyProjCard--genesis {
+  border-color: rgba(168, 85, 247, .28);
+}
+
+.homeMonthlyCard .homeMonthlyProjCard--genesis .homeMonthlyProjDot {
+  background: #a855f7;
+}
+
+.homeMonthlyCard .homeMonthlyProjCard--cary {
+  border-color: rgba(168, 85, 247, .28);
+}
+
+.homeMonthlyCard .homeMonthlyProjCard--cary .homeMonthlyProjDot {
+  background: #a855f7;
+}
+
+.homeMonthlyCard .homeMonthlyProjCard--custom {
+  border-color: rgba(148, 163, 184, .28);
+}
+
+.homeMonthlyCard .homeMonthlyProjCard--custom .homeMonthlyProjDot {
+  background: #94a3b8;
+}
+
+.homeMonthlyCard .homeMonthlyProjCardPct {
+  font-size: 10px;
+  font-weight: 800;
+  color: #7f97b3;
+  flex-shrink: 0;
+}
+
+.homeMonthlyCard .homeMonthlyProjCardAmt {
+  font-size: 14px;
+  font-weight: 900;
+  color: var(--text);
+  line-height: 1.2;
+}
+
+.homeMonthlyCard .homeMonthlyProjCardBar {
+  width: 100%;
+  height: 3px;
+  margin-top: 2px;
+  background: rgba(42, 66, 100, .55);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.homeMonthlyCard .homeMonthlyProjCardBarFill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width .25s ease;
+}
+
+.homeMonthlyCard .homeMonthlyProjCard--ram .homeMonthlyProjCardBarFill {
+  background: linear-gradient(90deg, #3b82f6, #60a5fa);
+}
+
+.homeMonthlyCard .homeMonthlyProjCard--orca .homeMonthlyProjCardBarFill {
+  background: linear-gradient(90deg, #0d9488, #2dd4bf);
+}
+
+.homeMonthlyCard .homeMonthlyProjCard--genesis .homeMonthlyProjCardBarFill {
+  background: linear-gradient(90deg, #9333ea, #c084fc);
+}
+
+.homeMonthlyCard .homeMonthlyProjCard--cary .homeMonthlyProjCardBarFill {
+  background: linear-gradient(90deg, #9333ea, #c084fc);
+}
+
+.homeMonthlyCard .homeMonthlyProjCard--custom .homeMonthlyProjCardBarFill {
+  background: linear-gradient(90deg, #64748b, #94a3b8);
+}
+
 .homeChartBlock {
   margin-top: 12px;
 }
@@ -1020,6 +1322,26 @@
 
   .homeChartBlockHead .homeChartUnit {
     display: none;
+  }
+
+  .homeMonthlyCard .homeMonthlySummaryAmt {
+    font-size: 28px;
+  }
+
+  .homeMonthlyCard .homeMonthlySummaryYen {
+    font-size: 14px;
+  }
+
+  .homeMonthlyCard .homeMonthlyChartSvg {
+    height: 200px;
+  }
+
+  .homeMonthlyCard .homeMonthlyChartInner {
+    min-height: 200px;
+  }
+
+  .homeMonthlyCard .homeMonthlyProjCardAmt {
+    font-size: 15px;
   }
 
   .homeInputStatVal {
@@ -1568,6 +1890,17 @@
     font-size: 12.5px;
     line-height: 1.55;
     max-width: 100%;
+  }
+
+  .homeMonthlyCard .homeMonthlyChartSvg,
+  .homeMonthlyCard .homeMonthlyChartInner {
+    min-height: 180px;
+    height: 180px;
+  }
+
+  .homeMonthlyCard .homeMonthlyProjGrid {
+    grid-template-columns: 1fr;
+    gap: 8px;
   }
 }
 

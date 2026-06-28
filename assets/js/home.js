@@ -1,4 +1,4 @@
-/* OUKEI HUB Home UI — Ver1.5.8.28 */
+/* OUKEI HUB Home UI — Ver1.5.8.31 */
 let homeCalView = { y: new Date().getFullYear(), m: new Date().getMonth() };
 
 function ensureRevenueLog() {
@@ -10,12 +10,20 @@ function revenueDateKey(y, m, d) {
 }
 
 function todayKey() {
-  let t = new Date();
+  if (typeof getHomeDemoTodayKey === 'function') {
+    let k = getHomeDemoTodayKey();
+    if (k) return k;
+  }
+  let t = getHomeReferenceDate();
   return revenueDateKey(t.getFullYear(), t.getMonth(), t.getDate());
 }
 
 function yesterdayKey() {
-  let t = new Date();
+  if (typeof getHomeDemoYesterdayKey === 'function') {
+    let k = getHomeDemoYesterdayKey();
+    if (k) return k;
+  }
+  let t = getHomeReferenceDate();
   t.setDate(t.getDate() - 1);
   return revenueDateKey(t.getFullYear(), t.getMonth(), t.getDate());
 }
@@ -25,6 +33,10 @@ function formatCalLabel(y, m) {
 }
 
 function getEnabledHomeProjects() {
+  if (typeof getHomeDemoEnabledProjects === 'function') {
+    let demo = getHomeDemoEnabledProjects();
+    if (demo) return demo;
+  }
   let list = [];
   if (settings.useRAM !== false) list.push({ key: 'ram', name: 'RAM', dot: 'ram' });
   if (settings.useORCA) list.push({ key: 'orca', name: 'ORCA', dot: 'orca' });
@@ -44,12 +56,25 @@ function defaultRevenueEntry() {
   };
 }
 
+function getHomeReferenceDate() {
+  if (typeof getHomeDemoReferenceDate === 'function') {
+    let d = getHomeDemoReferenceDate();
+    if (d) return d;
+  }
+  return new Date();
+}
+
 function getRevenueEntry(key) {
+  if (typeof getHomeDemoRevenueEntry === 'function') {
+    let demo = getHomeDemoRevenueEntry(key);
+    if (demo !== undefined) return demo;
+  }
   ensureRevenueLog();
   return settings.revenueLog[key] || null;
 }
 
 function saveRevenueEntry(key, entry) {
+  if (typeof isHomeDemoActive === 'function' && isHomeDemoActive()) return;
   ensureRevenueLog();
   settings.revenueLog[key] = entry;
   settings.lastUpdate = new Date().toLocaleString();
@@ -73,7 +98,7 @@ function calcInputStreak() {
 
 function calcMonthInputDetail() {
   ensureRevenueLog();
-  let now = new Date();
+  let now = getHomeReferenceDate();
   let y = now.getFullYear();
   let m = now.getMonth();
   let elapsed = now.getDate();
@@ -128,16 +153,16 @@ function updateHomeInputStats() {
 function sumMonthRevenueLog(y, m) {
   ensureRevenueLog();
   let daysInMonth = new Date(y, m + 1, 0).getDate();
-  let out = { total: 0, ram: 0, orca: 0, genesis: 0, cary: 0, hasLog: false };
+  let out = { total: 0, hasLog: false };
   for (let d = 1; d <= daysInMonth; d++) {
     let entry = getRevenueEntry(revenueDateKey(y, m, d));
     if (!entry) continue;
     out.hasLog = true;
     out.total += entry.total || 0;
-    out.ram += entry.ram || 0;
-    out.orca += entry.orca || 0;
-    out.genesis += entry.genesis || 0;
-    out.cary += entry.cary || 0;
+    Object.keys(entry).forEach(function (k) {
+      if (k === 'total' || k === 'savedAt') return;
+      out[k] = (out[k] || 0) + (Number(entry[k]) || 0);
+    });
   }
   return out;
 }
@@ -165,7 +190,7 @@ function renderHomeCalendar() {
   let first = new Date(y, m, 1);
   let start = first.getDay();
   let daysInMonth = new Date(y, m + 1, 0).getDate();
-  let today = new Date();
+  let today = getHomeReferenceDate();
   let weekdays = ['日', '月', '火', '水', '木', '金', '土'];
   let cells = weekdays.map(function (w, i) {
     let cls = 'homeCalDayLabel' + (i === 0 ? ' isSun' : i === 6 ? ' isSat' : '');
@@ -261,40 +286,109 @@ function chartXLabels(daysInMonth, monthNum) {
   return marks.map(function (d) { return { d: d, label: monthNum + '/' + d }; });
 }
 
-function bindLineChartTooltip(container, points, monthNum) {
-  let tip = container.querySelector('.homeLineChartTip');
-  let svg = container.querySelector('.homeLineChartSvg');
+var HOME_PROJECT_REGISTRY = [
+  { key: 'ram', name: 'RAM', cls: 'ram' },
+  { key: 'orca', name: 'ORCA', cls: 'orca' },
+  { key: 'genesis', name: 'Genesis', cls: 'genesis' },
+  { key: 'cary', name: 'Cary Pact', cls: 'cary' }
+];
+
+function getHomeProjectRegistry() {
+  let list = HOME_PROJECT_REGISTRY.slice();
+  (settings.customProjects || []).forEach(function (p) {
+    let key = String(p.key || p.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (!key || list.some(function (x) { return x.key === key; })) return;
+    list.push({ key: key, name: p.name || key, cls: 'custom' });
+  });
+  return list;
+}
+
+function getHomeMonthlyRevenueContext(sAll) {
+  if (!sAll && typeof allOrgSummary === 'function') sAll = allOrgSummary();
+  if (!sAll) return null;
+  let y = homeCalView.y;
+  let m = homeCalView.m;
+  if (typeof getHomeDemoMonthlyOverride === 'function') {
+    let demo = getHomeDemoMonthlyOverride(y, m, sAll);
+    if (demo) return demo;
+  }
+  let monthLog = sumMonthRevenueLog(y, m);
+  let total = monthLog.hasLog ? monthLog.total : sAll.monthly;
+  return { sAll: sAll, monthLog: monthLog, total: total };
+}
+
+function getHomeMonthlyProjectRows(ctx) {
+  if (!ctx) return [];
+  let registry = getHomeProjectRegistry();
+
+  if (ctx.monthLog.hasLog) {
+    Object.keys(ctx.monthLog).forEach(function (k) {
+      if (k === 'total' || k === 'hasLog') return;
+      if (registry.some(function (p) { return p.key === k; })) return;
+      if ((ctx.monthLog[k] || 0) <= 0) return;
+      registry.push({
+        key: k,
+        name: k.charAt(0).toUpperCase() + k.slice(1),
+        cls: 'custom'
+      });
+    });
+  }
+
+  let entry = ctx.monthLog.hasLog ? ctx.monthLog : null;
+  return registry.map(function (p) {
+    let amt = entry ? (entry[p.key] || 0) : fallbackProjectAmount(p, ctx.sAll, 'monthly');
+    let pct = ctx.total > 0 ? Math.round((amt / ctx.total) * 1000) / 10 : 0;
+    return { proj: p, amt: amt, pct: pct };
+  }).filter(function (row) { return row.amt > 0; });
+}
+
+function updateHomeMonthlySummary(sAll) {
+  let ctx = getHomeMonthlyRevenueContext(sAll);
+  if (!ctx) return;
+  let monthlyEl = document.getElementById('homeMonthly');
+  let yenEl = document.getElementById('homeMonthlyYen');
+  if (monthlyEl) monthlyEl.textContent = money(ctx.total);
+  if (yenEl) yenEl.textContent = yen(ctx.total);
+}
+
+function bindMonthlyChartTooltip(container, points, monthNum) {
+  let tip = container.querySelector('.homeMonthlyChartTip');
+  let svg = container.querySelector('.homeMonthlyChartSvg');
   if (!tip || !svg) return;
 
   function showTip(node, p) {
     if (!p) return;
-    tip.textContent = monthNum + '/' + p.d + '  ' + money(p.val);
+    tip.innerHTML =
+      '<span class="homeMonthlyChartTipDate">' + monthNum + '/' + p.d + '</span>' +
+      '<span class="homeMonthlyChartTipAmt">' + money(p.val) + '</span>';
     tip.classList.add('isVisible');
     let cx = Number(node.getAttribute('cx'));
     let cy = Number(node.getAttribute('cy'));
     let vb = svg.viewBox.baseVal;
     let left = ((cx / vb.width) * svg.clientWidth) - tip.offsetWidth / 2;
-    let top = ((cy / vb.height) * svg.clientHeight) - 38;
+    let top = ((cy / vb.height) * svg.clientHeight) - tip.offsetHeight - 12;
     tip.style.left = Math.max(4, Math.min(left, svg.clientWidth - tip.offsetWidth - 4)) + 'px';
-    tip.style.top = Math.max(2, top) + 'px';
-    container.querySelectorAll('.homeLineDot').forEach(function (d) { d.classList.remove('isActive'); });
-    let dot = node.parentNode ? node.parentNode.querySelector('.homeLineDot') : null;
+    tip.style.top = Math.max(4, top) + 'px';
+    container.querySelectorAll('.homeMonthlyChartDot').forEach(function (d) { d.classList.remove('isActive'); });
+    let dot = node.parentNode ? node.parentNode.querySelector('.homeMonthlyChartDot') : null;
     if (dot) dot.classList.add('isActive');
   }
 
-  container.querySelectorAll('.homeLineHit').forEach(function (node) {
+  function hideTip() {
+    tip.classList.remove('isVisible');
+    container.querySelectorAll('.homeMonthlyChartDot').forEach(function (d) { d.classList.remove('isActive'); });
+  }
+
+  container.querySelectorAll('.homeMonthlyChartHit').forEach(function (node) {
     node.addEventListener('mouseenter', function () {
       showTip(node, points[Number(node.getAttribute('data-idx'))]);
     });
-    node.addEventListener('mouseleave', function () {
-      tip.classList.remove('isVisible');
-      container.querySelectorAll('.homeLineDot').forEach(function (d) { d.classList.remove('isActive'); });
-    });
+    node.addEventListener('mouseleave', hideTip);
   });
 
   let todayIdx = points.findIndex(function (p) { return p.isToday; });
   if (todayIdx >= 0) {
-    let todayHit = container.querySelector('.homeLineHit[data-idx="' + todayIdx + '"]');
+    let todayHit = container.querySelector('.homeMonthlyChartHit[data-idx="' + todayIdx + '"]');
     if (todayHit) showTip(todayHit, points[todayIdx]);
   }
 }
@@ -307,7 +401,7 @@ function renderHomeMonthlyLineChart() {
   let m = homeCalView.m;
   let monthNum = m + 1;
   let daysInMonth = new Date(y, m + 1, 0).getDate();
-  let today = new Date();
+  let today = getHomeReferenceDate();
   let vals = [];
   let dataMax = 0;
 
@@ -322,25 +416,25 @@ function renderHomeMonthlyLineChart() {
   let ticks = chartAxisTicks(axisMax, 5);
   let xMarks = chartXLabels(daysInMonth, monthNum);
 
-  let w = 360;
-  let h = 108;
-  let yAxisW = 44;
-  let padRight = 10;
-  let padBottom = 18;
-  let padY = 10;
+  let w = 380;
+  let h = 190;
+  let yAxisW = 30;
+  let padRight = 4;
+  let padBottom = 16;
+  let padY = 8;
   let chartLeft = yAxisW;
   let innerW = w - chartLeft - padRight;
   let innerH = h - padY - padBottom;
 
   let gridSvg = ticks.map(function (t) {
     let yPos = padY + innerH - (t / axisMax) * innerH;
-    return '<line class="homeLineGrid" x1="' + chartLeft + '" y1="' + yPos.toFixed(1) + '" x2="' + (w - padRight) + '" y2="' + yPos.toFixed(1) + '"></line>' +
-      '<text class="homeLineYLabel" x="' + (chartLeft - 6) + '" y="' + (yPos + 3).toFixed(1) + '" text-anchor="end">' + formatAxisDollar(t) + '</text>';
+    return '<line class="homeMonthlyChartGrid" x1="' + chartLeft + '" y1="' + yPos.toFixed(1) + '" x2="' + (w - padRight) + '" y2="' + yPos.toFixed(1) + '"></line>' +
+      '<text class="homeMonthlyChartYLabel" x="' + (chartLeft - 4) + '" y="' + (yPos + 3.5).toFixed(1) + '" text-anchor="end">' + formatAxisDollar(t) + '</text>';
   }).join('');
 
   let xSvg = xMarks.map(function (mark) {
     let x = chartLeft + (daysInMonth <= 1 ? innerW / 2 : ((mark.d - 1) / (daysInMonth - 1)) * innerW);
-    return '<text class="homeLineXLabel" x="' + x.toFixed(1) + '" y="' + (h - 4) + '" text-anchor="middle">' + mark.label + '</text>';
+    return '<text class="homeMonthlyChartXLabel" x="' + x.toFixed(1) + '" y="' + (h - 4) + '" text-anchor="middle">' + mark.label + '</text>';
   }).join('');
 
   let pts = vals.map(function (v, i) {
@@ -354,40 +448,63 @@ function renderHomeMonthlyLineChart() {
   let dots = vals.map(function (v, i) {
     let x = chartLeft + (daysInMonth <= 1 ? innerW / 2 : (i / (daysInMonth - 1)) * innerW);
     let yPos = padY + innerH - (v.val / axisMax) * innerH;
-    let cls = v.isToday ? 'homeLineDot isToday' : 'homeLineDot';
-    return '<g class="homeLinePoint">' +
-      '<circle class="homeLineHit" data-idx="' + i + '" cx="' + x.toFixed(1) + '" cy="' + yPos.toFixed(1) + '" r="7"></circle>' +
-      '<circle class="' + cls + '" cx="' + x.toFixed(1) + '" cy="' + yPos.toFixed(1) + '" r="' + (v.isToday ? '3' : '2') + '"></circle></g>';
+    let xf = x.toFixed(1);
+    let yf = yPos.toFixed(1);
+    let dotR = v.isToday ? 3 : 1.5;
+    let cls = v.isToday ? 'homeMonthlyChartDot isToday' : 'homeMonthlyChartDot';
+    return '<g class="homeMonthlyChartPoint">' +
+      '<circle class="homeMonthlyChartHit" data-idx="' + i + '" cx="' + xf + '" cy="' + yf + '" r="8"></circle>' +
+      '<circle class="' + cls + '" cx="' + xf + '" cy="' + yf + '" r="' + dotR + '"></circle></g>';
   }).join('');
 
   el.innerHTML =
-    '<div class="homeLineChartInner">' +
-    '<span class="homeLineChartUnit">単位：USD</span>' +
-    '<div class="homeLineChartTip"></div>' +
-    '<svg class="homeLineChartSvg" viewBox="0 0 ' + w + ' ' + h + '" preserveAspectRatio="xMidYMid meet" aria-hidden="true">' +
-    '<defs><linearGradient id="homeLineGrad" x1="0" y1="0" x2="0" y2="1">' +
-    '<stop offset="0%" stop-color="rgba(96,165,250,.28)"/><stop offset="100%" stop-color="rgba(96,165,250,0)"/>' +
+    '<div class="homeMonthlyChartInner">' +
+    '<div class="homeMonthlyChartTip"></div>' +
+    '<svg class="homeMonthlyChartSvg" viewBox="0 0 ' + w + ' ' + h + '" preserveAspectRatio="none" aria-hidden="true">' +
+    '<defs><linearGradient id="homeMonthlyLineGrad" x1="0" y1="0" x2="0" y2="1">' +
+    '<stop offset="0%" stop-color="rgba(96,165,250,.24)"/>' +
+    '<stop offset="100%" stop-color="rgba(96,165,250,0)"/>' +
     '</linearGradient></defs>' +
     gridSvg + xSvg +
-    '<polyline class="homeLineChartFill" points="' + fillPts + '"></polyline>' +
-    '<polyline class="homeLineChartLine" points="' + pts + '"></polyline>' +
+    '<polyline class="homeMonthlyChartFill" points="' + fillPts + '"></polyline>' +
+    '<polyline class="homeMonthlyChartLine" points="' + pts + '"></polyline>' +
     dots +
     '</svg></div>';
 
-  bindLineChartTooltip(el, vals, monthNum);
+  bindMonthlyChartTooltip(el, vals, monthNum);
+}
+
+function renderHomeMonthlyProjGrid(sAll) {
+  let el = document.getElementById('homeMonthlyProjGrid');
+  if (!el) return;
+  let ctx = getHomeMonthlyRevenueContext(sAll);
+  if (!ctx) return;
+
+  let rows = getHomeMonthlyProjectRows(ctx);
+  let cols = Math.max(rows.length, 1);
+  el.style.setProperty('--monthly-proj-cols', cols);
+  el.setAttribute('data-count', rows.length);
+
+  if (!rows.length) {
+    el.innerHTML = '';
+    return;
+  }
+
+  el.innerHTML = rows.map(function (row) {
+    let p = row.proj;
+    return '<div class="homeMonthlyProjCard homeMonthlyProjCard--' + p.cls + '">' +
+      '<div class="homeMonthlyProjCardHead">' +
+      '<span class="homeMonthlyProjCardName"><span class="homeMonthlyProjDot"></span>' + p.name + '</span>' +
+      '<span class="homeMonthlyProjCardPct">' + row.pct + '%</span></div>' +
+      '<span class="homeMonthlyProjCardAmt">' + money(row.amt) + '</span>' +
+      '<div class="homeMonthlyProjCardBar"><div class="homeMonthlyProjCardBarFill" style="width:' + row.pct + '%"></div></div>' +
+      '</div>';
+  }).join('');
 }
 
 function updateHomeMonthlyProjects(sAll) {
-  if (!sAll && typeof allOrgSummary === 'function') sAll = allOrgSummary();
-  if (!sAll) return;
-  let projects = getEnabledHomeProjects();
-  let now = new Date();
-  let monthLog = sumMonthRevenueLog(now.getFullYear(), now.getMonth());
-  let monthTotal = monthLog.hasLog ? monthLog.total : sAll.monthly;
-  renderProjectGrid('homeMonthlyProjGrid', projects, function (p) {
-    if (monthLog.hasLog) return projectAmountFromEntry({ total: monthLog.total, ram: monthLog.ram, orca: monthLog.orca, genesis: monthLog.genesis, cary: monthLog.cary }, p);
-    return fallbackProjectAmount(p, sAll, 'monthly');
-  }, monthTotal);
+  updateHomeMonthlySummary(sAll);
+  renderHomeMonthlyProjGrid(sAll);
 }
 
 function updateHomeTodaySection(sAll) {
