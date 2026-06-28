@@ -1,5 +1,5 @@
 /* ============================================================
- * ホーム画面デモモード（デザイン確認・説明会用）
+ * ホーム画面デモモード（完成形体験版・説明会用）
  *
  * ON/OFF: ホーム画面上部のトグル
  * 保存: localStorage「oukei_home_demo_mode」のみ（本番データとは分離）
@@ -15,7 +15,7 @@ var HOME_DEMO_MONTHLY = {
   total: 4120,
   ram: 3240,
   orca: 720,
-  genesis: 160
+  cary: 160
 };
 
 var HOME_DEMO_DAILY_TOTALS = [
@@ -24,22 +24,77 @@ var HOME_DEMO_DAILY_TOTALS = [
   304, 338, 356, 344, 382, 401, 392, 427, 415, 448
 ];
 
+var HOME_DEMO_RAM_ACCOUNTS = [
+  { id: 'demo_ram_kai', username: 'kai', investment: 40000 },
+  { id: 'demo_ram_kai2', username: 'kai2', investment: 12000 }
+];
+
+var HOME_DEMO_ORCA_ACCOUNTS = [
+  { id: 'demo_orca_1', username: '甲斐①', investment: 5000 },
+  { id: 'demo_orca_2', username: '甲斐②', investment: 3000 }
+];
+
+var HOME_DEMO_CARY_ACCOUNTS = [
+  { id: 'demo_cary_a', username: '甲斐A', investment: 2000 },
+  { id: 'demo_cary_b', username: '甲斐B', investment: 1500 }
+];
+
+var HOME_DEMO_TODAY_ACCOUNTS = {
+  ramAccounts: {
+    demo_ram_kai: { todayRevenue: 6, addInvestment: 0 },
+    demo_ram_kai2: { todayRevenue: 4, addInvestment: 0 }
+  },
+  orcaAccounts: {
+    demo_orca_1: { yesterdayAiProfit: 8, todayAffiliateProfit: 2 },
+    demo_orca_2: { yesterdayAiProfit: 2, todayAffiliateProfit: 1 }
+  },
+  caryAccounts: {
+    demo_cary_a: { todayReward: 3 },
+    demo_cary_b: { todayReward: 3 }
+  }
+};
+
 var HOME_DEMO_LOG = (function () {
   var log = {};
   var ramR = HOME_DEMO_MONTHLY.ram / HOME_DEMO_MONTHLY.total;
   var orcaR = HOME_DEMO_MONTHLY.orca / HOME_DEMO_MONTHLY.total;
+  var caryR = HOME_DEMO_MONTHLY.cary / HOME_DEMO_MONTHLY.total;
   HOME_DEMO_DAILY_TOTALS.forEach(function (total, i) {
     var d = i + 1;
     var key = HOME_DEMO_YEAR + '-06-' + String(d).padStart(2, '0');
     var ram = Math.round(total * ramR * 100) / 100;
     var orca = Math.round(total * orcaR * 100) / 100;
-    var genesis = Math.round((total - ram - orca) * 100) / 100;
-    log[key] = { total: total, ram: ram, orca: orca, genesis: genesis, savedAt: 'demo' };
+    var cary = Math.round(total * caryR * 100) / 100;
+    log[key] = {
+      total: total,
+      ram: ram,
+      orca: orca,
+      cary: cary,
+      genesis: 0,
+      savedAt: 'demo'
+    };
   });
   return log;
 })();
 
 var HOME_DEMO_MODE = false;
+
+function buildHomeDemoTodayEntry() {
+  var ram = 10;
+  var orca = 11;
+  var cary = 6;
+  return {
+    total: ram + orca + cary,
+    ram: ram,
+    orca: orca,
+    cary: cary,
+    genesis: 0,
+    ramAccounts: JSON.parse(JSON.stringify(HOME_DEMO_TODAY_ACCOUNTS.ramAccounts)),
+    orcaAccounts: JSON.parse(JSON.stringify(HOME_DEMO_TODAY_ACCOUNTS.orcaAccounts)),
+    caryAccounts: JSON.parse(JSON.stringify(HOME_DEMO_TODAY_ACCOUNTS.caryAccounts)),
+    savedAt: 'demo'
+  };
+}
 
 function loadHomeDemoMode() {
   try {
@@ -76,6 +131,8 @@ function getHomeDemoYesterdayKey() {
 
 function getHomeDemoRevenueEntry(key) {
   if (!isHomeDemoActive()) return undefined;
+  var todayKey = getHomeDemoTodayKey();
+  if (key === todayKey) return buildHomeDemoTodayEntry();
   if (Object.prototype.hasOwnProperty.call(HOME_DEMO_LOG, key)) return HOME_DEMO_LOG[key];
   if (/^2026-06-\d{2}$/.test(key)) return null;
   return undefined;
@@ -90,7 +147,8 @@ function getHomeDemoMonthlyOverride(y, m, sAll) {
       total: HOME_DEMO_MONTHLY.total,
       ram: HOME_DEMO_MONTHLY.ram,
       orca: HOME_DEMO_MONTHLY.orca,
-      genesis: HOME_DEMO_MONTHLY.genesis
+      cary: HOME_DEMO_MONTHLY.cary,
+      genesis: 0
     },
     total: HOME_DEMO_MONTHLY.total
   };
@@ -101,8 +159,41 @@ function getHomeDemoEnabledProjects() {
   return [
     { key: 'ram', name: 'RAM', dot: 'ram' },
     { key: 'orca', name: 'ORCA', dot: 'orca' },
-    { key: 'genesis', name: 'Genesis', dot: 'genesis' }
+    { key: 'cary', name: 'Cary Pact', dot: 'cary' }
   ];
+}
+
+function getHomeDemoRamAccounts() {
+  if (!isHomeDemoActive()) return null;
+  return HOME_DEMO_RAM_ACCOUNTS.map(function (acc) {
+    return {
+      id: acc.id,
+      username: acc.username,
+      investment: acc.investment
+    };
+  });
+}
+
+function getHomeDemoOrcaAccounts() {
+  if (!isHomeDemoActive()) return null;
+  return HOME_DEMO_ORCA_ACCOUNTS.map(function (acc) {
+    return {
+      id: acc.id,
+      username: acc.username,
+      investment: acc.investment
+    };
+  });
+}
+
+function getHomeDemoCaryAccounts() {
+  if (!isHomeDemoActive()) return null;
+  return HOME_DEMO_CARY_ACCOUNTS.map(function (acc) {
+    return {
+      id: acc.id,
+      username: acc.username,
+      investment: acc.investment
+    };
+  });
 }
 
 function removeHomeDemoBanner() {

@@ -1,4 +1,4 @@
-/* OUKEI HUB Home UI — Ver1.5.9.2 */
+/* OUKEI HUB Home UI — Ver1.5.9.4 */
 let homeCalView = { y: new Date().getFullYear(), m: new Date().getMonth() };
 let ramSavePending = null;
 let orcaSavePending = null;
@@ -65,11 +65,87 @@ function isHomeProjectEnteredToday(entry, projectKey) {
   if (!entry) return false;
   if (projectKey === 'ram') return isRamFullyEntered(entry);
   if (projectKey === 'orca') return isOrcaFullyEntered(entry);
+  if (projectKey === 'cary') return isCaryFullyEntered(entry);
   return Number(entry[projectKey] || 0) > 0;
 }
 
 function getRevenueInputProjects() {
   return getEnabledHomeProjects();
+}
+
+var REVENUE_PROJECT_META = {
+  ram: { desc: '銅鉱山／本日の収益', ready: true },
+  orca: { desc: '昨日AI利益＋本日アフィリエイト利益', ready: true },
+  cary: { desc: 'ブロックチェーン／報酬入力', ready: false }
+};
+
+function getRevenueProjectMeta(projectKey) {
+  return REVENUE_PROJECT_META[projectKey] || { desc: '収益入力', ready: false };
+}
+
+function renderHomeProjIcon(projectKey, extraClass) {
+  let cls = 'homeProjIcon homeProjIcon--' + projectKey;
+  if (extraClass) cls += ' ' + extraClass;
+  return '<span class="' + cls + '" aria-hidden="true"></span>';
+}
+
+function countProjectEnteredAccounts(projectKey, entry) {
+  if (projectKey === 'ram') {
+    return getRamInputAccounts().filter(function (a) { return isRamAccountEntered(entry, a.id); }).length;
+  }
+  if (projectKey === 'orca') {
+    return getOrcaInputAccounts().filter(function (a) { return isOrcaAccountEntered(entry, a.id); }).length;
+  }
+  if (projectKey === 'cary') {
+    return getCaryInputAccounts().filter(function (a) { return isCaryAccountEntered(entry, a.id); }).length;
+  }
+  return entry && Number(entry[projectKey] || 0) > 0 ? 1 : 0;
+}
+
+function countProjectInputAccounts(projectKey) {
+  if (projectKey === 'ram') return getRamInputAccounts().length;
+  if (projectKey === 'orca') return getOrcaInputAccounts().length;
+  if (projectKey === 'cary') return getCaryInputAccounts().length;
+  return 0;
+}
+
+function getProjectInputSavedTotal(projectKey, entry) {
+  if (!entry) return 0;
+  if (projectKey === 'ram') {
+    return getRamInputAccounts().reduce(function (sum, acc) {
+      let ae = getRamAccountEntry(entry, acc.id);
+      return sum + (ae ? ae.todayRevenue : 0);
+    }, 0);
+  }
+  if (projectKey === 'orca') {
+    return getOrcaInputAccounts().reduce(function (sum, acc) {
+      let ae = getOrcaAccountEntry(entry, acc.id);
+      return sum + (ae ? calcOrcaAccountTotal(ae) : 0);
+    }, 0);
+  }
+  if (projectKey === 'cary') {
+    return getCaryInputAccounts().reduce(function (sum, acc) {
+      let ae = getCaryAccountEntry(entry, acc.id);
+      return sum + (ae ? ae.todayReward : 0);
+    }, 0);
+  }
+  return Number(entry[projectKey] || 0);
+}
+
+function getRevenueProjectCardStats(projectKey) {
+  let entry = getRevenueEntry(todayKey());
+  let accountCount = countProjectInputAccounts(projectKey);
+  let enteredCount = countProjectEnteredAccounts(projectKey, entry);
+  let total = getProjectInputSavedTotal(projectKey, entry);
+  if (!accountCount && entry) {
+    enteredCount = countProjectEnteredAccounts(projectKey, entry) || (Number(entry[projectKey] || 0) > 0 ? 1 : 0);
+    total = Number(entry[projectKey] || 0);
+  }
+  return {
+    accountCount: accountCount,
+    enteredCount: enteredCount,
+    total: Math.round(total * 100) / 100
+  };
 }
 
 function renderInputStatusBadge(isEntered) {
@@ -80,6 +156,10 @@ function renderInputStatusBadge(isEntered) {
 }
 
 function getRamInputAccounts() {
+  if (typeof getHomeDemoRamAccounts === 'function') {
+    let demo = getHomeDemoRamAccounts();
+    if (demo) return demo;
+  }
   if (typeof getRootIdsForSummary !== 'function' || typeof members === 'undefined') return [];
   return getRootIdsForSummary().map(function (id) {
     let m = members.find(function (x) { return x.id === id; });
@@ -363,6 +443,7 @@ function updateHomeActionCard() {
 function getHomeActionPendingText(projectKey, projectName) {
   if (projectKey === 'ram') return projectName + 'の本日収益を入力してください';
   if (projectKey === 'orca') return projectName + 'の昨日AI利益・本日アフィリエイト利益を入力してください';
+  if (projectKey === 'cary') return projectName + 'の報酬を入力してください';
   return projectName + 'の収益を入力してください';
 }
 
@@ -851,7 +932,7 @@ function renderHomeMonthlyProjGrid(sAll) {
     let p = row.proj;
     return '<div class="homeMonthlyProjCard homeMonthlyProjCard--' + p.cls + '">' +
       '<div class="homeMonthlyProjCardHead">' +
-      '<span class="homeMonthlyProjCardName"><span class="homeMonthlyProjDot"></span>' + p.name + '</span>' +
+      '<span class="homeMonthlyProjCardName"><span class="homeMonthlyProjDot homeProjIcon homeProjIcon--' + p.cls + '"></span>' + p.name + '</span>' +
       '<span class="homeMonthlyProjCardPct">' + row.pct + '%</span></div>' +
       '<span class="homeMonthlyProjCardAmt">' + money(row.amt) + '</span>' +
       '<div class="homeMonthlyProjCardBar"><div class="homeMonthlyProjCardBarFill" style="width:' + row.pct + '%"></div></div>' +
@@ -1011,7 +1092,7 @@ function renderHomeTodayProjGrid(rows) {
     let p = row.proj;
     return '<div class="homeTodayProjCard homeTodayProjCard--' + p.cls + '">' +
       '<div class="homeTodayProjCardHead">' +
-      '<span class="homeTodayProjCardName"><span class="homeTodayProjMark"></span>' + p.name + '</span>' +
+      '<span class="homeTodayProjCardName"><span class="homeTodayProjMark homeProjIcon homeProjIcon--' + p.cls + '"></span>' + p.name + '</span>' +
       '<span class="homeTodayProjCardPct">' + row.pct + '%</span></div>' +
       '<span class="homeTodayProjCardAmt">' + money(row.amt) + '</span>' +
       '<div class="homeTodayProjCardBar"><div class="homeTodayProjCardBarFill" style="width:' + row.pct + '%"></div></div>' +
@@ -1110,13 +1191,18 @@ function openRevenueProjectSelect() {
   }
 
   let buttons = projects.map(function (p) {
-    let dot = p.dot || p.key;
-    let ready = p.key === 'ram' || p.key === 'orca';
-    return '<button type="button" class="revenueProjectBtn revenueProjectBtn--' + escapeHtml(p.key) + (ready ? '' : ' isSoon') + '" onclick="selectRevenueProject(\'' + p.key + '\')">' +
-      '<span class="homeProjDot ' + escapeHtml(dot) + '"></span>' +
-      '<span class="revenueProjectBtnText">' + escapeHtml(p.name) + '</span>' +
-      (ready ? '' : '<span class="revenueProjectBtnNote">準備中</span>') +
-      '</button>';
+    let meta = getRevenueProjectMeta(p.key);
+    let stats = getRevenueProjectCardStats(p.key);
+    let countLabel = Math.max(stats.accountCount, stats.enteredCount) + '件';
+    return '<button type="button" class="revenueProjectCard revenueProjectCard--' + escapeHtml(p.key) + (meta.ready ? '' : ' isSoon') + '" onclick="selectRevenueProject(\'' + p.key + '\')">' +
+      renderHomeProjIcon(p.key, 'revenueProjectCardIcon') +
+      '<div class="revenueProjectCardBody">' +
+      '<div class="revenueProjectCardName">' + escapeHtml(p.name) + '</div>' +
+      '<div class="revenueProjectCardDesc">' + escapeHtml(meta.desc) + '</div>' +
+      '<div class="revenueProjectCardMeta">入力件数：' + countLabel + '</div>' +
+      '<div class="revenueProjectCardTotal">入力済み合計：' + money(stats.total) + '</div>' +
+      (meta.ready ? '' : '<div class="revenueProjectCardNote">準備中</div>') +
+      '</div></button>';
   }).join('');
 
   modalContent.innerHTML =
@@ -1309,6 +1395,10 @@ function ensureOrcaInputAccounts() {
 }
 
 function getOrcaInputAccounts() {
+  if (typeof getHomeDemoOrcaAccounts === 'function') {
+    let demo = getHomeDemoOrcaAccounts();
+    if (demo) return demo;
+  }
   ensureOrcaInputAccounts();
   return settings.orcaInputAccounts.map(function (acc) {
     return {
@@ -1381,6 +1471,44 @@ function isOrcaFullyEntered(entry) {
 function hasOrcaDataSavedForToday(entry) {
   if (!entry || !entry.orcaAccounts) return false;
   return getOrcaInputAccounts().some(function (a) { return isOrcaAccountEntered(entry, a.id); });
+}
+
+function ensureCaryInputAccounts() {
+  if (!Array.isArray(settings.caryInputAccounts)) settings.caryInputAccounts = [];
+}
+
+function getCaryInputAccounts() {
+  if (typeof getHomeDemoCaryAccounts === 'function') {
+    let demo = getHomeDemoCaryAccounts();
+    if (demo) return demo;
+  }
+  ensureCaryInputAccounts();
+  return settings.caryInputAccounts.map(function (acc) {
+    return {
+      id: acc.id,
+      username: (acc.username || acc.name || '未入力').replace(/^@/, ''),
+      investment: Number(acc.investment) || 0
+    };
+  });
+}
+
+function getCaryAccountEntry(entry, accountId) {
+  if (!entry || !entry.caryAccounts) return null;
+  let acc = entry.caryAccounts[accountId];
+  if (!acc) return null;
+  let todayReward = normalizeRamRevenueNumber(acc.todayReward);
+  if (todayReward === null) return null;
+  return { todayReward: todayReward };
+}
+
+function isCaryAccountEntered(entry, accountId) {
+  return getCaryAccountEntry(entry, accountId) !== null;
+}
+
+function isCaryFullyEntered(entry) {
+  let accounts = getCaryInputAccounts();
+  if (!accounts.length) return false;
+  return accounts.every(function (a) { return isCaryAccountEntered(entry, a.id); });
 }
 
 function orcaInputDiffersFromSaved(collected, existing) {
@@ -1678,7 +1806,7 @@ function renderPortfolio() {
 
   let ramAccounts = getRamInputAccounts();
   if (ramAccounts.length) {
-    sections.push('<div class="portfolioSectionTitle"><span class="homeProjDot ram"></span> RAM</div>');
+    sections.push('<div class="portfolioSectionTitle">' + renderHomeProjIcon('ram') + ' RAM</div>');
     sections.push(ramAccounts.map(function (acc) {
       let ae = getRamAccountEntry(entry, acc.id);
       let effectiveInv = calcRamEffectiveInvestment(acc.investment, ae ? ae.addInvestment : 0);
@@ -1693,7 +1821,7 @@ function renderPortfolio() {
 
   let orcaAccounts = getOrcaInputAccounts();
   if (orcaAccounts.length) {
-    sections.push('<div class="portfolioSectionTitle"><span class="homeProjDot orca"></span> ORCA</div>');
+    sections.push('<div class="portfolioSectionTitle">' + renderHomeProjIcon('orca') + ' ORCA</div>');
     sections.push(orcaAccounts.map(function (acc) {
       let ae = getOrcaAccountEntry(entry, acc.id);
       let total = ae ? calcOrcaAccountTotal(ae) : 0;
@@ -1702,6 +1830,19 @@ function renderPortfolio() {
         '<div class="portfolioAccountMeta">投資額：' + num(acc.investment) + 'ドル</div>' +
         (ae ? '<div class="portfolioAccountMeta">昨日AI利益：' + money(ae.yesterdayAiProfit) + '　本日アフィリエイト：' + money(ae.todayAffiliateProfit) + '</div>' : '') +
         '<div class="portfolioAccountRev">本日のORCA合計：<b>' + money(total) + '</b></div>' +
+        '</div>';
+    }).join(''));
+  }
+
+  let caryAccounts = getCaryInputAccounts();
+  if (caryAccounts.length) {
+    sections.push('<div class="portfolioSectionTitle">' + renderHomeProjIcon('cary') + ' Cary Pact</div>');
+    sections.push(caryAccounts.map(function (acc) {
+      let ae = getCaryAccountEntry(entry, acc.id);
+      return '<div class="portfolioAccountCard">' +
+        '<div class="portfolioAccountName">' + escapeHtml(acc.username) + '</div>' +
+        '<div class="portfolioAccountMeta">投資額：' + num(acc.investment) + 'ドル</div>' +
+        '<div class="portfolioAccountRev">本日報酬：<b>' + money(ae ? ae.todayReward : 0) + '</b></div>' +
         '</div>';
     }).join(''));
   }

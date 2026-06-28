@@ -1,4 +1,4 @@
-/* ===== OUKEI HUB Home Layout (Ver1.5.9.2) ===== */
+/* ===== OUKEI HUB Home Layout (Ver1.5.9.4) ===== */
 /* ホーム画面専用CSS — 微調整はこのファイルを編集してください */
 
 /* --- Legacy compat (index.html から移行) --- */
@@ -2712,51 +2712,153 @@
   }
 }
 
+/* --- プロジェクトアイコン（ホーム・実績入力共通） --- */
+.homeProjIcon {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+  flex-shrink: 0;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 14px 14px;
+  vertical-align: middle;
+}
+
+.homeMonthlyProjDot.homeProjIcon {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  background-size: 11px 11px;
+}
+
+.homeTodayProjMark.homeProjIcon {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .06);
+}
+
+.homeProjIcon--ram {
+  background-color: rgba(59, 130, 246, .22);
+  border: 1px solid rgba(59, 130, 246, .45);
+  box-shadow: 0 0 10px rgba(59, 130, 246, .15);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2393c5fd' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M14 4l6 6M8 20l-1 1M5 17l3 3M11 11l-5 5'/%3E%3Cpath d='M15 5l4 4'/%3E%3C/svg%3E");
+}
+
+.homeProjIcon--orca {
+  background-color: rgba(20, 184, 166, .18);
+  border: 1px solid rgba(20, 184, 166, .4);
+  box-shadow: 0 0 10px rgba(20, 184, 166, .12);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%235eead4' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 14c2-4 6-6 10-5 3 1 6 0 8-3 0 4-2 8-6 10s-8 1-12-2z'/%3E%3Ccircle cx='17' cy='9' r='1' fill='%235eead4'/%3E%3C/svg%3E");
+}
+
+.homeProjIcon--cary,
+.homeProjIcon--genesis {
+  background-color: rgba(168, 85, 247, .18);
+  border: 1px solid rgba(168, 85, 247, .4);
+  box-shadow: 0 0 10px rgba(168, 85, 247, .12);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23c084fc' stroke-width='2' stroke-linejoin='round'%3E%3Cpath d='M12 3l8 7-8 11L4 10z'/%3E%3C/svg%3E");
+}
+
+.portfolioSectionTitle .homeProjIcon {
+  margin-right: 2px;
+}
+
 /* --- 実績入力：プロジェクト選択 --- */
 .revenueProjectList {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
 }
 
-.revenueProjectBtn {
-  display: flex;
-  align-items: center;
-  gap: 12px;
+.revenueProjectCard {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 14px;
+  align-items: start;
   width: 100%;
-  min-height: 56px;
-  padding: 14px 16px;
-  border-radius: 14px;
+  padding: 16px;
+  border-radius: 16px;
   border: 1px solid #2a4264;
-  background: #081426;
+  background: linear-gradient(165deg, rgba(12, 24, 42, .98) 0%, rgba(8, 18, 32, .96) 100%);
   color: #e2e8f0;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color .15s ease, box-shadow .15s ease, transform .15s ease;
+}
+
+.revenueProjectCard:hover {
+  border-color: rgba(96, 165, 250, .45);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .22);
+  transform: translateY(-1px);
+}
+
+.revenueProjectCard.isSoon {
+  opacity: .82;
+}
+
+.revenueProjectCard--ram:hover {
+  border-color: rgba(59, 130, 246, .45);
+}
+
+.revenueProjectCard--orca:hover {
+  border-color: rgba(20, 184, 166, .45);
+}
+
+.revenueProjectCard--cary:hover {
+  border-color: rgba(168, 85, 247, .45);
+}
+
+.revenueProjectCardIcon {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background-size: 26px 26px;
+}
+
+.revenueProjectCardBody {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.revenueProjectCardName {
+  font-size: 18px;
+  font-weight: 900;
+  color: #dbeafe;
+  letter-spacing: .02em;
+}
+
+.revenueProjectCardDesc {
+  font-size: 12px;
+  font-weight: 700;
+  color: #9fb3cc;
+  line-height: 1.45;
+}
+
+.revenueProjectCardMeta {
+  margin-top: 4px;
+  font-size: 12px;
+  font-weight: 800;
+  color: #fde68a;
+}
+
+.revenueProjectCardTotal {
   font-size: 16px;
   font-weight: 900;
-  cursor: pointer;
-  text-align: left;
+  color: #fbbf24;
 }
 
-.revenueProjectBtn:hover {
-  border-color: #60a5fa;
-  background: rgba(37, 99, 235, .12);
-}
-
-.revenueProjectBtn.isSoon {
-  opacity: .72;
-}
-
-.revenueProjectBtnText {
-  flex: 1;
-}
-
-.revenueProjectBtnNote {
-  font-size: 11px;
+.revenueProjectCardNote {
+  display: inline-block;
+  margin-top: 4px;
+  font-size: 10px;
   font-weight: 800;
   color: #94a3b8;
   padding: 4px 8px;
   border-radius: 999px;
   background: rgba(148, 163, 184, .12);
   border: 1px solid rgba(148, 163, 184, .22);
+  align-self: flex-start;
 }
 
 .portfolioSectionTitle {
@@ -3053,5 +3155,96 @@
   .ramInputField input {
     width: 100%;
     flex: 1 1 100%;
+  }
+}
+
+/* ===== PWA Splash (standalone launch only) ===== */
+html.pwa-splash-active {
+  overflow: hidden;
+}
+
+html.pwa-splash-active body {
+  background: #07111f;
+}
+
+html.pwa-splash-active body > :not(#pwaSplash) {
+  visibility: hidden;
+}
+
+#pwaSplash {
+  display: none;
+}
+
+html.pwa-splash-active #pwaSplash {
+  display: flex;
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(circle at top left, #142a55, #07111f 42%, #040812);
+  padding:
+    env(safe-area-inset-top, 0)
+    env(safe-area-inset-right, 0)
+    env(safe-area-inset-bottom, 0)
+    env(safe-area-inset-left, 0);
+}
+
+.pwaSplashInner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  width: min(100%, 320px);
+  padding: 0 24px;
+  text-align: center;
+}
+
+.pwaSplashCrown {
+  width: 108px;
+  height: 108px;
+  border-radius: 24px;
+  object-fit: cover;
+  border: 1px solid rgba(68, 97, 127, .55);
+  box-shadow: 0 14px 36px rgba(0, 0, 0, .28);
+  opacity: 0;
+  transform: scale(.9);
+  animation: pwaSplashCrownIn .58s cubic-bezier(.22, 1, .36, 1) forwards;
+}
+
+.pwaSplashTagline {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: .12em;
+  color: #b8cce4;
+  line-height: 1.6;
+  opacity: 0;
+  transform: translateY(6px);
+  animation: pwaSplashTaglineIn .48s ease-out .28s forwards;
+}
+
+html.pwa-splash-active #pwaSplash.isLeaving {
+  animation: pwaSplashFadeOut .28s ease forwards;
+}
+
+@keyframes pwaSplashCrownIn {
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes pwaSplashTaglineIn {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pwaSplashFadeOut {
+  to {
+    opacity: 0;
   }
 }
