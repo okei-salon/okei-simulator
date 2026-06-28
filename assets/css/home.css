@@ -885,18 +885,20 @@
     min-height: 0;
     max-height: none;
     padding: 10px 12px;
+    gap: 14px;
   }
 
   .homeInputCard .homeInputBtn--premium .homeInputBtnIcon {
-    font-size: 22px;
+    font-size: 40px;
+    margin-top: -2px;
   }
 
   .homeInputCard .homeInputBtn--premium .homeInputBtnText {
-    font-size: 13px;
+    font-size: 28px;
   }
 
   .homeInputCard .homeInputBtn--premium .homeInputBtnText small {
-    font-size: 10px;
+    font-size: 16px;
   }
 
   .homeInputStatBlock {
