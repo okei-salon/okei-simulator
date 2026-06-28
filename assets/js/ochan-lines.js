@@ -113,12 +113,27 @@ var OCHAN_LINES = [
   { id: 'dailyup_003', category: 'daily_up', standard: '{deltaDollarSigned}アップ！いい流れ！', kansai: '{deltaDollarSigned}アップ！ええ流れや！' },
   { id: 'dailyup_004', category: 'daily_up', standard: '昨日より{deltaDollarSigned}！今日も積み重ね！', kansai: '昨日より{deltaDollarSigned}！今日も積み重ね！' },
 
-  /* --- 今日入力完了 --- */
-  { id: 'complete_001', category: 'input_complete', standard: '今日も入力完了！気持ちいいね！', kansai: '今日も入力完了！気持ちええで！' },
-  { id: 'complete_002', category: 'input_complete', standard: '今日も入力ありがとう！', kansai: '今日も入力おおきに！' },
-  { id: 'complete_003', category: 'input_complete', standard: '今日も積み重ねられたね！', kansai: '今日も積み重ねられたな！' },
-  { id: 'complete_004', category: 'input_complete', standard: '入力完了！その調子！', kansai: '入力完了！その調子や！' },
-  { id: 'complete_005', category: 'input_complete', standard: '今日も一歩前進！最高！', kansai: '今日も一歩前進！最高や！' },
+  /* --- 今日入力完了（Ver.1 辞書 20件） --- */
+  { id: 'complete_001', category: 'input_complete', standard: '今日も入力ありがとう！', kansai: '今日も入力ありがとうな！' },
+  { id: 'complete_002', category: 'input_complete', standard: '今日も一歩前に進んだね！', kansai: '今日も一歩前に進んだな！' },
+  { id: 'complete_003', category: 'input_complete', standard: '今日も積み上げ完了！', kansai: '今日も積み上げ完了や！' },
+  { id: 'complete_004', category: 'input_complete', standard: 'その調子！', kansai: 'その調子や！' },
+  { id: 'complete_005', category: 'input_complete', standard: '今日もいい感じ！', kansai: '今日もええ感じや！' },
+  { id: 'complete_006', category: 'input_complete', standard: 'また今日も未来に近づいたね！', kansai: 'また今日も未来に近づいたな！' },
+  { id: 'complete_007', category: 'input_complete', standard: 'コツコツ続けるのって強いね！', kansai: 'コツコツ続けるんが一番強いで！' },
+  { id: 'complete_008', category: 'input_complete', standard: '今日もちゃんと積み上がったね！', kansai: '今日もちゃんと積み上がったな！' },
+  { id: 'complete_009', category: 'input_complete', standard: '今日も最高！', kansai: '今日も最高や！' },
+  { id: 'complete_010', category: 'input_complete', standard: 'またひとつ記録できたね！', kansai: 'またひとつ記録できたな！' },
+  { id: 'complete_011', category: 'input_complete', standard: '今日もナイス！', kansai: '今日もナイスや！' },
+  { id: 'complete_012', category: 'input_complete', standard: 'この調子なら楽しみだね！', kansai: 'この調子なら楽しみやな！' },
+  { id: 'complete_013', category: 'input_complete', standard: '今日もちゃんと続けられたね！', kansai: '今日もちゃんと続けられたな！' },
+  { id: 'complete_014', category: 'input_complete', standard: '積み重ねってやっぱり強いね！', kansai: '積み重ねってやっぱ強いな！' },
+  { id: 'complete_015', category: 'input_complete', standard: '今日もいい一日だったね！', kansai: '今日もええ一日やったな！' },
+  { id: 'complete_016', category: 'input_complete', standard: '未来の自分が喜んでるよ！', kansai: '未来の自分も喜んどるで！' },
+  { id: 'complete_017', category: 'input_complete', standard: '今日もありがとう！', kansai: '今日もおおきにな！' },
+  { id: 'complete_018', category: 'input_complete', standard: 'また明日も一緒に積み上げよう！', kansai: 'また明日も一緒に積み上げよな！' },
+  { id: 'complete_019', category: 'input_complete', standard: 'ちゃんと続けてるの、本当にすごいよ！', kansai: 'ちゃんと続けとるん、ほんますごいで！' },
+  { id: 'complete_020', category: 'input_complete', standard: '今日も未来への投資完了！', kansai: '今日も未来への投資完了や！' },
 
   /* --- 今日未入力（応援のみ・指示なし） --- */
   { id: 'pending_001', category: 'input_pending', standard: '今日も待ってるよ！', kansai: '今日も待っとるで！' },
