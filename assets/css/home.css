@@ -1,4 +1,4 @@
-/* ===== OUKEI HUB Home Layout (Ver1.7.6) ===== */
+/* ===== OUKEI HUB Home Layout (Ver1.7.7) ===== */
 /* ホーム画面専用CSS — 微調整はこのファイルを編集してください */
 
 /* --- Legacy compat (index.html から移行) --- */
@@ -3143,15 +3143,15 @@ html.pwa-splash-active #pwaSplash {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 22px;
-  width: min(100%, 360px);
-  padding: 0 20px;
+  width: min(100%, 340px);
+  padding: 0 24px;
   text-align: center;
+  transform: translateY(-2.5vh);
 }
 
 .pwaSplashLogoWrap {
   position: relative;
-  width: min(320px, max(240px, 74vw));
+  width: min(300px, max(220px, 68vw));
   max-width: 100%;
 }
 
@@ -3159,6 +3159,7 @@ html.pwa-splash-active #pwaSplash {
   display: block;
   width: 100%;
   height: auto;
+  max-height: min(68dvh, 400px);
   border: 0;
   border-radius: 0;
   object-fit: contain;
@@ -3171,10 +3172,10 @@ html.pwa-splash-active #pwaSplash {
 
 .pwaSplashCrownGlint {
   position: absolute;
-  top: 3.8%;
+  top: 5%;
   left: 50%;
-  width: 21%;
-  height: 10.5%;
+  width: 18%;
+  height: 8.5%;
   transform: translateX(-50%);
   pointer-events: none;
   overflow: hidden;
@@ -3200,35 +3201,6 @@ html.pwa-splash-active #pwaSplash {
   );
   transform: translateX(-120%);
   animation: pwaSplashCrownGlint .55s ease-out .42s 1 forwards;
-}
-
-.pwaSplashTagline {
-  margin: 0;
-  font-size: clamp(13px, 3.6vw, 15px);
-  font-weight: 600;
-  letter-spacing: .16em;
-  color: #c9a962;
-  line-height: 1.6;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  width: 100%;
-  opacity: 0;
-  transform: translateY(4px);
-  animation: pwaSplashTaglineIn .45s ease-out .24s forwards;
-}
-
-.pwaSplashTagline::before,
-.pwaSplashTagline::after {
-  content: '';
-  flex: 0 0 min(34px, 8vw);
-  height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(201, 169, 98, .5));
-}
-
-.pwaSplashTagline::after {
-  background: linear-gradient(90deg, rgba(201, 169, 98, .5), transparent);
 }
 
 html.pwa-splash-active #pwaSplash.isLeaving {
@@ -3261,13 +3233,6 @@ html.pwa-splash-active #pwaSplash.isLeaving {
   100% {
     transform: translateX(240%);
     opacity: 0;
-  }
-}
-
-@keyframes pwaSplashTaglineIn {
-  to {
-    opacity: 1;
-    transform: translateY(0);
   }
 }
 

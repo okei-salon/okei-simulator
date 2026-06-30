@@ -1,4 +1,4 @@
-/* OUKEI HUB PWA Splash — Ver1.7.6 */
+/* OUKEI HUB PWA Splash — Ver1.7.7 */
 (function () {
   var html = document.documentElement;
   if (!html.classList.contains('pwa-splash-active')) return;
@@ -12,7 +12,7 @@
   splash.removeAttribute('hidden');
   splash.setAttribute('aria-hidden', 'false');
 
-  var SHOW_MS = 1000;
+  var SHOW_MS = 2000;
   var FADE_MS = 280;
   var dismissed = false;
 

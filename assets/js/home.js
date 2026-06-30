@@ -1,4 +1,4 @@
-/* OUKEI HUB Home UI — Ver1.7.6 */
+/* OUKEI HUB Home UI — Ver1.7.7 */
 let homeCalView = { y: new Date().getFullYear(), m: new Date().getMonth() };
 let ramSavePending = null;
 let orcaSavePending = null;
