@@ -1,4 +1,4 @@
-/* OUKEI HUB PWA Splash — Ver1.7.8 */
+/* OUKEI HUB PWA Splash — Ver1.8.0 */
 (function () {
   var html = document.documentElement;
   if (!html.classList.contains('pwa-splash-active')) return;

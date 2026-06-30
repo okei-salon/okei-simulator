@@ -1,0 +1,356 @@
+/* OUKEI HUB Settings UI — Ver1.8.0 */
+
+.settingsHubShell {
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+.settingsHubList {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.settingsHubCard {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  width: 100%;
+  padding: 16px 16px 15px;
+  border-radius: 16px;
+  border: 1px solid rgba(80, 110, 150, .35);
+  background: linear-gradient(155deg, rgba(22, 38, 62, .92) 0%, rgba(8, 16, 30, .98) 55%, rgba(6, 12, 24, .99) 100%);
+  box-shadow:
+    0 14px 36px rgba(0, 0, 0, .28),
+    inset 0 1px 0 rgba(255, 255, 255, .07);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.settingsHubCard:hover {
+  border-color: rgba(251, 191, 36, .35);
+}
+
+.settingsHubCard:focus-visible {
+  outline: 2px solid rgba(251, 191, 36, .65);
+  outline-offset: 2px;
+}
+
+.settingsHubIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  flex-shrink: 0;
+  border: 1px solid rgba(251, 191, 36, .28);
+  background: rgba(251, 191, 36, .1);
+  color: #fde68a;
+}
+
+.settingsHubIcon svg {
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.settingsHubTitle {
+  font-size: 16px;
+  font-weight: 900;
+  color: #f8fafc;
+  letter-spacing: .03em;
+}
+
+.settingsHubDesc {
+  margin: 6px 0 0;
+  font-size: 12px;
+  line-height: 1.65;
+  color: #8fa8c5;
+}
+
+.settingsRestoreBlock {
+  margin-top: 16px;
+}
+
+.settingsRestoreBlock button {
+  width: 100%;
+  margin-top: 8px;
+}
+
+.settingsRestoreBlock button:first-of-type {
+  margin-top: 0;
+}
+
+.settingsRestoreBlock .notice {
+  margin-bottom: 0;
+}
+
+.settingsRestoreBlock .backupInfo {
+  margin-top: 10px;
+}
+
+.pmAddChoice button {
+  width: 100%;
+  margin-top: 10px;
+}
+
+.pmAddChoice button:first-of-type {
+  margin-top: 0;
+}
+
+.pmEditForm textarea,
+.pmAddForm textarea {
+  width: 100%;
+  min-height: 72px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid #355777;
+  background: #081426;
+  color: var(--text);
+  font: inherit;
+  resize: vertical;
+}
+
+.pmEditForm select,
+.pmAddForm select {
+  width: 100%;
+}
+
+.settingsSubPage {
+  padding: 0;
+}
+
+.settingsSubShell {
+  max-width: 760px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.settingsSubHead {
+  padding: 2px 4px 0;
+}
+
+.settingsSubPanel {
+  margin-top: 4px;
+}
+
+.pmProjectList {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.pmProjectCard {
+  position: relative;
+  overflow: hidden;
+  width: 100%;
+  padding: 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(70, 100, 140, .4);
+  background: linear-gradient(160deg, rgba(18, 32, 54, .96) 0%, rgba(8, 16, 30, .98) 100%);
+  box-shadow:
+    0 16px 40px rgba(0, 0, 0, .28),
+    inset 0 1px 0 rgba(255, 255, 255, .07);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.pmProjectCardGlow {
+  position: absolute;
+  top: 0;
+  left: 10%;
+  right: 10%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(251, 191, 36, .45), transparent);
+}
+
+.pmProjectCardTop {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.pmProjectCardIcon {
+  width: 44px !important;
+  height: 44px !important;
+  border-radius: 12px !important;
+  background-size: 24px 24px !important;
+  flex-shrink: 0;
+}
+
+.pmProjectCardHead {
+  min-width: 0;
+  flex: 1;
+}
+
+.pmProjectCardName {
+  font-size: 17px;
+  font-weight: 900;
+  color: #f8fafc;
+}
+
+.pmProjectCardMeta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  font-size: 12px;
+  color: #7f97b3;
+}
+
+.pmProjectCardMeta b.isOn {
+  color: #86efac;
+}
+
+.pmProjectCardMeta b.isOff {
+  color: #94a3b8;
+}
+
+.pmProjectCardRows {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.pmProjectCardRow {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(8, 20, 38, .55);
+  border: 1px solid rgba(42, 66, 100, .4);
+  font-size: 11px;
+  color: #7f97b3;
+}
+
+.pmProjectCardRow b {
+  font-size: 15px;
+  color: #dbeafe;
+}
+
+.pmAddProjectBtn {
+  width: 100%;
+  margin-top: 4px;
+  background: rgba(19, 40, 66, .85);
+  border: 1px dashed rgba(251, 191, 36, .35);
+  color: #fde68a;
+}
+
+.pmSaveArea {
+  margin-top: 18px;
+}
+
+.pmSaveArea button {
+  width: 100%;
+}
+
+.pmOverwrite {
+  margin-top: 16px;
+  padding: 14px;
+  border-radius: 14px;
+  background: rgba(251, 191, 36, .08);
+  border: 1px solid rgba(251, 191, 36, .25);
+}
+
+.pmOverwrite.hidden {
+  display: none;
+}
+
+.pmOverwriteText {
+  margin: 0 0 12px;
+  font-size: 13px;
+  line-height: 1.65;
+  color: #dbeafe;
+}
+
+.pmOverwriteActions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.pmOverwriteActions button {
+  width: 100%;
+}
+
+.pmEditForm,
+.pmAddForm {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.pmEditIcon {
+  width: 52px !important;
+  height: 52px !important;
+  border-radius: 14px !important;
+  background-size: 28px 28px !important;
+  margin: 0 auto 8px;
+}
+
+.pmToggleRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 8px 0 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(8, 20, 38, .55);
+  border: 1px solid rgba(42, 66, 100, .4);
+}
+
+.pmToggleRow input {
+  width: auto;
+  margin: 0;
+}
+
+.pmRateInputWrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pmRateInputWrap input {
+  max-width: 120px;
+}
+
+.pmRateInputWrap span {
+  color: #93c5fd;
+  font-weight: 800;
+}
+
+.pmEditActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.pmAddCodeError {
+  margin: 4px 0 0;
+  color: #fca5a5;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.pmAddCodeError.hidden {
+  display: none;
+}
+
+@media (max-width: 520px) {
+  .pmProjectCardRows {
+    grid-template-columns: 1fr;
+  }
+}

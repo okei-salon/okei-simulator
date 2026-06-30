@@ -1,4 +1,4 @@
-/* OUKEI HUB Home UI — Ver1.7.8 */
+/* OUKEI HUB Home UI — Ver1.8.0 */
 let homeCalView = { y: new Date().getFullYear(), m: new Date().getMonth() };
 let ramSavePending = null;
 let orcaSavePending = null;
@@ -38,6 +38,9 @@ function getEnabledHomeProjects() {
   if (typeof getHomeDemoEnabledProjects === 'function') {
     let demo = getHomeDemoEnabledProjects();
     if (demo) return demo;
+  }
+  if (typeof pmGetEnabledProjects === 'function') {
+    return pmGetEnabledProjects();
   }
   let list = [];
   if (settings.useRAM !== false) list.push({ key: 'ram', name: 'RAM', dot: 'ram' });

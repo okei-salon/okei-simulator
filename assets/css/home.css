@@ -1,4 +1,4 @@
-/* ===== OUKEI HUB Home Layout (Ver1.7.8) ===== */
+/* ===== OUKEI HUB Home Layout (Ver1.8.0) ===== */
 /* ホーム画面専用CSS — 微調整はこのファイルを編集してください */
 
 /* --- Legacy compat (index.html から移行) --- */
@@ -2751,11 +2751,19 @@
 }
 
 .homeProjIcon--cary,
-.homeProjIcon--genesis {
+.homeProjIcon--genesis,
+.homeProjIcon--demo2026 {
   background-color: rgba(168, 85, 247, .18);
   border: 1px solid rgba(168, 85, 247, .4);
   box-shadow: 0 0 10px rgba(168, 85, 247, .12);
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23c084fc' stroke-width='2' stroke-linejoin='round'%3E%3Cpath d='M12 3l8 7-8 11L4 10z'/%3E%3C/svg%3E");
+}
+
+.homeProjIcon--custom {
+  background-color: rgba(100, 116, 139, .2);
+  border: 1px solid rgba(148, 163, 184, .45);
+  box-shadow: 0 0 10px rgba(100, 116, 139, .12);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23cbd5e1' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 7h16M4 12h16M4 17h10'/%3E%3C/svg%3E");
 }
 
 .portfolioSectionTitle .homeProjIcon {

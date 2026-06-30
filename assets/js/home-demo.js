@@ -156,6 +156,7 @@ function getHomeDemoMonthlyOverride(y, m, sAll) {
 
 function getHomeDemoEnabledProjects() {
   if (!isHomeDemoActive()) return null;
+  if (typeof pmGetEnabledProjects === 'function') return pmGetEnabledProjects();
   return [
     { key: 'ram', name: 'RAM', dot: 'ram' },
     { key: 'orca', name: 'ORCA', dot: 'orca' },

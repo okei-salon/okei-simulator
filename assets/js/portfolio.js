@@ -1,4 +1,4 @@
-/* OUKEI HUB Portfolio UI — Ver1.7.8 */
+/* OUKEI HUB Portfolio UI — Ver1.8.0 */
 
 var PF_COLORS = {
   ram: '#f97316',
@@ -68,6 +68,7 @@ function pfDefaultInclusionRate(key) {
 }
 
 function pfGetYenRate() {
+  if (typeof pmGetFxRate === 'function') return pmGetFxRate();
   return Number(typeof settings !== 'undefined' && settings ? settings.yenRate : 0) || 155;
 }
 
@@ -99,15 +100,12 @@ function pfGetProjectMock(key) {
 }
 
 function pfGetAllPortfolioProjects() {
-  let list = PF_STANDARD_PROJECTS.slice();
-  if (typeof settings !== 'undefined' && Array.isArray(settings.customProjects)) {
-    settings.customProjects.forEach(function (p) {
-      let key = String(p.key || p.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-      if (!key || list.some(function (x) { return x.key === key; })) return;
-      list.push({ key: key, name: p.name || key });
+  if (typeof pmGetRegisteredProjects === 'function') {
+    return pmGetRegisteredProjects().map(function (p) {
+      return { key: p.key, name: p.name };
     });
   }
-  return list;
+  return PF_STANDARD_PROJECTS.slice();
 }
 
 function pfEnsurePortfolioGoalSettings() {
@@ -115,17 +113,10 @@ function pfEnsurePortfolioGoalSettings() {
   if (!settings.portfolioGoal || typeof settings.portfolioGoal !== 'object') {
     settings.portfolioGoal = {};
   }
-  if (!settings.portfolioGoal.rates || typeof settings.portfolioGoal.rates !== 'object') {
-    settings.portfolioGoal.rates = {};
-  }
-  pfGetAllPortfolioProjects().forEach(function (p) {
-    if (typeof settings.portfolioGoal.rates[p.key] !== 'number') {
-      settings.portfolioGoal.rates[p.key] = pfDefaultInclusionRate(p.key);
-    }
-  });
   if (typeof settings.portfolioGoal.amountYen !== 'number') {
     settings.portfolioGoal.amountYen = 100000000;
   }
+  if (typeof pmEnsureProjectMaster === 'function') pmEnsureProjectMaster();
 }
 
 function pfGoalSettingsHasSaved() {
@@ -134,30 +125,18 @@ function pfGoalSettingsHasSaved() {
 }
 
 function pfGetInclusionRate(key) {
-  pfEnsurePortfolioGoalSettings();
-  if (typeof settings.portfolioGoal.rates[key] === 'number') {
-    return Math.max(0, Math.min(100, settings.portfolioGoal.rates[key]));
-  }
+  if (typeof pmGetInclusionRate === 'function') return pmGetInclusionRate(key);
   return pfDefaultInclusionRate(key);
 }
 
 function pfGetDefaultGoalState() {
-  let rates = {};
-  pfGetAllPortfolioProjects().forEach(function (p) {
-    rates[p.key] = pfDefaultInclusionRate(p.key);
-  });
-  return { amountYen: 100000000, rates: rates };
+  return { amountYen: 100000000 };
 }
 
 function pfGetSavedGoalState() {
   pfEnsurePortfolioGoalSettings();
-  let rates = {};
-  pfGetAllPortfolioProjects().forEach(function (p) {
-    rates[p.key] = pfGetInclusionRate(p.key);
-  });
   return {
-    amountYen: Number(settings.portfolioGoal.amountYen) || 0,
-    rates: rates
+    amountYen: Number(settings.portfolioGoal.amountYen) || 0
   };
 }
 
@@ -188,7 +167,7 @@ function pfGetEnabledProjectRows() {
     return {
       key: p.key,
       name: p.name,
-      start: mock.start,
+      start: typeof pmGetStartDate === 'function' ? pmGetStartDate(p.key) : mock.start,
       operatingUsd: mock.operatingUsd,
       operating: pfMoneyUsd(mock.operatingUsd),
       profit: pfMoneyUsd(mock.profitUsd),
@@ -419,21 +398,10 @@ function pfCloseGoalSettings() {
   renderPortfolio();
 }
 
-function pfReadGoalRatesFromForm() {
-  let rates = {};
-  pfGetAllPortfolioProjects().forEach(function (p) {
-    let input = document.getElementById('pfGoalRate_' + p.key);
-    let val = input ? Number(input.value) : pfGetInclusionRate(p.key);
-    rates[p.key] = Math.max(0, Math.min(100, isNaN(val) ? pfDefaultInclusionRate(p.key) : val));
-  });
-  return rates;
-}
-
 function pfReadGoalFormState() {
   let amountInput = document.getElementById('pfGoalAmountInput');
   return {
-    amountYen: Number(amountInput && amountInput.value) || 0,
-    rates: pfReadGoalRatesFromForm()
+    amountYen: Number(amountInput && amountInput.value) || 0
   };
 }
 
@@ -454,18 +422,6 @@ function pfRenderGoalSettingsForm() {
     amountInput.value = pfGoalSettingsHasSaved()
       ? settings.portfolioGoal.amountYen
       : pfGetDefaultGoalState().amountYen;
-  }
-
-  let ratesEl = document.getElementById('pfGoalRatesList');
-  if (ratesEl) {
-    ratesEl.innerHTML = pfGetAllPortfolioProjects().map(function (p) {
-      let val = pfGetInclusionRate(p.key);
-      return '<div class="pfGoalRateRow">' +
-        '<span class="pfGoalRateName">' + pfEscape(p.name) + '</span>' +
-        '<div class="pfGoalRateInputWrap">' +
-        '<input type="number" id="pfGoalRate_' + p.key + '" min="0" max="100" step="1" value="' + val + '" oninput="pfOnGoalFormInput()">' +
-        '<span class="pfGoalRateSuffix">%</span></div></div>';
-    }).join('');
   }
 
   pfHideGoalOverwriteConfirm();
@@ -520,7 +476,6 @@ function pfCommitGoalSettings() {
   pfEnsurePortfolioGoalSettings();
   let state = pfReadGoalFormState();
   settings.portfolioGoal.amountYen = Math.max(0, Math.round(state.amountYen));
-  settings.portfolioGoal.rates = state.rates;
   settings.portfolioGoal.savedAt = new Date().toLocaleString();
   settings.lastUpdate = settings.portfolioGoal.savedAt;
   pfGoalEditSnapshot = pfSerializeGoalState(state);
