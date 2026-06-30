@@ -655,9 +655,6 @@ function homeCalPrevMonth() {
   renderHomeCalendar();
   renderHomeMonthlyLineChart();
   updateHomeMonthlyProjects(typeof allOrgSummary === 'function' ? allOrgSummary() : null);
-  if (typeof revenueManagePage !== 'undefined' && !revenueManagePage.classList.contains('hidden') && typeof renderRevenueManage === 'function') {
-    renderRevenueManage();
-  }
 }
 
 function homeCalNextMonth() {
@@ -666,9 +663,6 @@ function homeCalNextMonth() {
   renderHomeCalendar();
   renderHomeMonthlyLineChart();
   updateHomeMonthlyProjects(typeof allOrgSummary === 'function' ? allOrgSummary() : null);
-  if (typeof revenueManagePage !== 'undefined' && !revenueManagePage.classList.contains('hidden') && typeof renderRevenueManage === 'function') {
-    renderRevenueManage();
-  }
 }
 
 function formatAxisDollar(n) {

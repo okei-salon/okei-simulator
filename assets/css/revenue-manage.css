@@ -1,0 +1,510 @@
+/* OUKEI HUB Revenue Management — Ver1.8.1 */
+
+.revenueManagePage {
+  padding: 0;
+}
+
+.rmShell {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-width: 1320px;
+  margin: 0 auto;
+  padding: 4px 2px 28px;
+}
+
+.rmTopBar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.rmTopBarRight {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-left: auto;
+}
+
+.rmMonthNav {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  border-radius: 12px;
+  border: 1px solid rgba(53, 87, 119, .55);
+  background: rgba(8, 20, 38, .72);
+}
+
+.rmMonthNavBtn {
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: #dbeafe;
+  font-size: 16px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.rmMonthNavBtn:hover {
+  background: rgba(37, 99, 235, .18);
+}
+
+.rmMonthLabel {
+  min-width: 92px;
+  text-align: center;
+  font-size: 14px;
+  font-weight: 900;
+  color: #f8fafc;
+  letter-spacing: .03em;
+}
+
+.rmIconBtn {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  border: 1px solid rgba(53, 87, 119, .55);
+  background: rgba(8, 20, 38, .72);
+  color: #93c5fd;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.rmIconBtn svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.rmUpdated {
+  font-size: 11px;
+  color: #8fa8c5;
+  white-space: nowrap;
+}
+
+.rmExportBtn {
+  padding: 9px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(96, 165, 250, .45);
+  background: rgba(37, 99, 235, .22);
+  color: #dbeafe;
+  font-size: 12px;
+  font-weight: 900;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.rmExportBtn:hover {
+  background: rgba(37, 99, 235, .34);
+}
+
+.rmFilterBar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 2px 4px;
+  font-size: 13px;
+  color: #9fb3cc;
+}
+
+.rmFilterBar label {
+  margin: 0;
+  font-weight: 700;
+}
+
+.rmFilterSelect {
+  width: auto;
+  max-width: min(100%, 220px);
+  min-width: 0;
+  padding: 9px 30px 9px 12px;
+  border-radius: 10px;
+  border: 1px solid #355777;
+  background: #081426;
+  color: #eef7ff;
+  font: inherit;
+  font-weight: 800;
+}
+
+.rmCurrency {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 800;
+  color: #8fa8c5;
+}
+
+.rmDailyPanel {
+  padding: 14px 14px 12px;
+  overflow: hidden;
+}
+
+.rmPanelTitle {
+  margin: 0 0 12px;
+  font-size: 14px;
+  font-weight: 900;
+  color: #dbeafe;
+  letter-spacing: .02em;
+}
+
+.rmTableScroll {
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  border-radius: 12px;
+  border: 1px solid rgba(42, 66, 100, .45);
+}
+
+.rmDailyTable {
+  width: max-content;
+  min-width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 12px;
+}
+
+.rmDailyTable th,
+.rmDailyTable td {
+  padding: 9px 10px;
+  border-bottom: 1px solid rgba(42, 66, 100, .35);
+  border-right: 1px solid rgba(42, 66, 100, .25);
+  white-space: nowrap;
+  text-align: right;
+  background: rgba(8, 20, 38, .96);
+}
+
+.rmDailyTable th {
+  color: #8fa8c5;
+  font-weight: 800;
+  font-size: 11px;
+}
+
+.rmDailyTable td {
+  color: #f8fafc;
+}
+
+.rmDailyTable th.rmStickyCol,
+.rmDailyTable td.rmStickyCol {
+  position: sticky;
+  left: 0;
+  z-index: 3;
+  text-align: left;
+  min-width: 132px;
+  background: #0b182b;
+  box-shadow: 2px 0 8px rgba(0, 0, 0, .22);
+}
+
+.rmDailyTable th.rmMonthTotalCol,
+.rmDailyTable td.rmMonthTotalCol {
+  position: sticky;
+  right: 0;
+  z-index: 3;
+  min-width: 92px;
+  font-weight: 900;
+  color: #f8fafc;
+  background: #0b182b;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, .22);
+}
+
+.rmDailyTable thead th.rmStickyCol {
+  z-index: 5;
+  background: #0a1628;
+}
+
+.rmDailyTable thead th.rmMonthTotalCol {
+  z-index: 5;
+  background: #0a1628;
+}
+
+.rmDailyTable th.isSat {
+  color: #60a5fa;
+}
+
+.rmDailyTable th.isSun {
+  color: #f87171;
+}
+
+.rmDailyTable td.isEmpty {
+  color: #4b6280;
+}
+
+.rmDailyTable tr.rmTotalRow td {
+  background: #102038;
+  font-weight: 900;
+  color: #f8fafc;
+}
+
+.rmDailyTable tr.rmTotalRow td.rmStickyCol,
+.rmDailyTable tr.rmTotalRow td.rmMonthTotalCol {
+  z-index: 4;
+  background: #102038;
+}
+
+.rmRowLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.rmRowLabel .homeProjIcon {
+  width: 22px !important;
+  height: 22px !important;
+  border-radius: 6px !important;
+  background-size: 13px 13px !important;
+  flex-shrink: 0;
+}
+
+.rmBottomGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.rmChartPanel,
+.rmStatsPanel {
+  padding: 14px;
+  min-height: 320px;
+}
+
+.rmCompareChart {
+  min-height: 210px;
+}
+
+.rmCompareChartInner {
+  position: relative;
+  width: 100%;
+  min-height: 210px;
+}
+
+.rmCompareSvg {
+  width: 100%;
+  height: 210px;
+  display: block;
+}
+
+.rmCompareGrid {
+  stroke: rgba(80, 110, 150, .25);
+  stroke-width: 1;
+}
+
+.rmCompareYLabel,
+.rmCompareXLabel {
+  fill: #7f97b3;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.rmCompareLine {
+  fill: none;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.rmCompareLine--current {
+  stroke: #60a5fa;
+}
+
+.rmCompareLine--prev {
+  stroke: #64748b;
+  stroke-dasharray: 4 4;
+}
+
+.rmCompareLegend {
+  display: flex;
+  gap: 16px;
+  margin-top: 10px;
+  font-size: 11px;
+  color: #8fa8c5;
+}
+
+.rmCompareLegendItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.rmCompareLegendItem i {
+  display: inline-block;
+  width: 18px;
+  height: 3px;
+  border-radius: 999px;
+}
+
+.rmCompareLegendItem i.isCurrent {
+  background: #60a5fa;
+}
+
+.rmCompareLegendItem i.isPrev {
+  background: #64748b;
+}
+
+.rmChartSummary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(42, 66, 100, .4);
+}
+
+.rmChartSummaryItem {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.rmChartSummaryLabel {
+  font-size: 11px;
+  color: #7f97b3;
+}
+
+.rmChartSummaryVal {
+  font-size: 18px;
+  font-weight: 900;
+  color: #dbeafe;
+}
+
+.rmChartSummaryVal.isPrev {
+  color: #94a3b8;
+}
+
+.rmChartSummaryVal.isUp {
+  color: #86efac;
+}
+
+.rmChartSummaryVal.isDown {
+  color: #fca5a5;
+}
+
+.rmProjectStats {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.rmStatHead {
+  display: grid;
+  grid-template-columns: minmax(120px, 1.15fr) 1fr 1fr;
+  gap: 10px;
+  padding: 0 0 8px;
+  border-bottom: 1px solid rgba(42, 66, 100, .45);
+  margin-bottom: 2px;
+}
+
+.rmStatHead span {
+  font-size: 10px;
+  font-weight: 800;
+  color: #7f97b3;
+}
+
+.rmStatHead span:first-child {
+  visibility: hidden;
+}
+
+.rmStatRow {
+  display: grid;
+  grid-template-columns: minmax(120px, 1.15fr) 1fr 1fr;
+  gap: 10px;
+  align-items: center;
+  padding: 12px 0;
+  border-bottom: 1px solid rgba(42, 66, 100, .35);
+}
+
+.rmStatMetric {
+  border-left: 1px solid rgba(42, 66, 100, .35);
+  padding-left: 12px;
+}
+
+.rmStatRow:last-child {
+  border-bottom: none;
+}
+
+.rmStatProject {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 900;
+  color: #f8fafc;
+}
+
+.rmStatMetric {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.rmStatMetricLabel {
+  font-size: 10px;
+  color: #7f97b3;
+  font-weight: 700;
+}
+
+.rmStatMetricVal {
+  font-size: 15px;
+  font-weight: 900;
+  color: #dbeafe;
+}
+
+.rmStatMetricSub {
+  font-size: 10px;
+  color: #8fa8c5;
+}
+
+.rmDisclaimer {
+  margin: 4px 4px 0;
+  font-size: 11px;
+  color: #6b849f;
+  line-height: 1.6;
+}
+
+.rmEmptyMsg {
+  padding: 24px 12px;
+  text-align: center;
+  color: #8fa8c5;
+  font-size: 13px;
+}
+
+@media (max-width: 900px) {
+  .rmBottomGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .rmTopBarRight {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .rmCurrency {
+    margin-left: 0;
+  }
+
+  .rmChartSummary {
+    grid-template-columns: 1fr;
+  }
+
+  .rmStatRow {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .rmStatHead {
+    display: none;
+  }
+
+  .rmStatMetric {
+    border-left: none;
+    padding-left: 0;
+  }
+}
