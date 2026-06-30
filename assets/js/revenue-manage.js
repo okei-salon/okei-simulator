@@ -21,6 +21,157 @@ var RM_DEMO_STATS = {
   other: { bestDayAmount: 156, bestDayLabel: '2026/06/05', bestMonthAmount: 3890, bestMonthLabel: '2026年6月' }
 };
 
+var RM_CHART_X_DAYS = [1, 5, 10, 15, 20, 25, 30];
+
+var RM_DEMO_CHART_CURRENT = { 1: 95, 5: 142, 10: 182, 15: 232, 20: 316, 25: 382, 30: 427 };
+var RM_DEMO_CHART_PREV = { 1: 80, 5: 120, 10: 150, 15: 190, 20: 260, 25: 330, 30: 390 };
+
+var RM_DEMO_PROJECT_RATIOS = {
+  ram: 0.38,
+  orca: 0.24,
+  cary: 0.19,
+  genesis: 0.12,
+  other: 0.07
+};
+
+var RM_DEMO_ACCOUNTS = {
+  ram: [
+    { id: 'demo_ram_1', username: '甲斐1' },
+    { id: 'demo_ram_2', username: '甲斐2' },
+    { id: 'demo_ram_3', username: '甲斐3' }
+  ],
+  orca: [
+    { id: 'demo_orca_1', username: '甲斐①' },
+    { id: 'demo_orca_2', username: '甲斐②' }
+  ],
+  cary: [
+    { id: 'demo_cary_1', username: '甲斐A' },
+    { id: 'demo_cary_2', username: '甲斐B' }
+  ]
+};
+
+function rmExpandAnchorSeries(anchors, daysInMonth) {
+  let pts = Object.keys(anchors).map(function (k) {
+    return { d: Number(k), v: anchors[k] };
+  }).sort(function (a, b) { return a.d - b.d; });
+  let out = [];
+  for (let d = 1; d <= daysInMonth; d++) {
+    if (d <= pts[0].d) {
+      out.push(pts[0].v);
+      continue;
+    }
+    if (d >= pts[pts.length - 1].d) {
+      out.push(pts[pts.length - 1].v);
+      continue;
+    }
+    let lo = pts[0];
+    let hi = pts[pts.length - 1];
+    for (let i = 0; i < pts.length - 1; i++) {
+      if (d >= pts[i].d && d <= pts[i + 1].d) {
+        lo = pts[i];
+        hi = pts[i + 1];
+        break;
+      }
+    }
+    let t = (d - lo.d) / (hi.d - lo.d);
+    out.push(Math.round(lo.v + (hi.v - lo.v) * t));
+  }
+  return out;
+}
+
+function rmGetDemoChartCurrentSeries(days) {
+  return rmExpandAnchorSeries(RM_DEMO_CHART_CURRENT, days || 30);
+}
+
+function rmGetDemoChartPrevSeries(days) {
+  return rmExpandAnchorSeries(RM_DEMO_CHART_PREV, days || 30);
+}
+
+function rmGetDemoChartSummary() {
+  let curVals = rmGetDemoChartCurrentSeries(30);
+  let prevVals = rmGetDemoChartPrevSeries(30);
+  let curTotal = curVals.reduce(function (s, v) { return s + v; }, 0);
+  let prevTotal = prevVals.reduce(function (s, v) { return s + v; }, 0);
+  let pct = prevTotal ? Math.round(((curTotal - prevTotal) / prevTotal) * 1000) / 10 : 0;
+  return { currentTotal: curTotal, prevTotal: prevTotal, pctChange: pct };
+}
+
+function rmGetDemoDayTotal(d, daysInMonth) {
+  let series = rmGetDemoChartCurrentSeries(daysInMonth);
+  return series[d - 1] || 0;
+}
+
+function rmGetDemoProjectDayAmount(projectKey, d, daysInMonth) {
+  let total = rmGetDemoDayTotal(d, daysInMonth);
+  let known = ['ram', 'orca', 'cary', 'genesis'];
+  if (projectKey === 'other') {
+    let sumKnown = known.reduce(function (s, k) {
+      return s + rmGetDemoProjectDayAmount(k, d, daysInMonth);
+    }, 0);
+    return Math.max(0, Math.round((total - sumKnown) * 100) / 100);
+  }
+  let ratio = RM_DEMO_PROJECT_RATIOS[projectKey] || 0;
+  return Math.round(total * ratio * 100) / 100;
+}
+
+function rmGetDemoAccountsForProject(projectKey) {
+  let live = rmGetAccountsForProject(projectKey);
+  if (live.length) return live;
+  return RM_DEMO_ACCOUNTS[projectKey] ? RM_DEMO_ACCOUNTS[projectKey].slice() : [];
+}
+
+function rmGetDemoAccountDayAmount(projectKey, accountId, d, daysInMonth) {
+  let accounts = rmGetDemoAccountsForProject(projectKey);
+  let projectAmt = rmGetDemoProjectDayAmount(projectKey, d, daysInMonth);
+  return rmSplitAmountAcrossAccounts(projectAmt, accounts, accountId);
+}
+
+function rmGetDemoRowDayAmount(row, y, m, d) {
+  let daysInMonth = new Date(y, m + 1, 0).getDate();
+
+  if (row.isTotal) {
+    if (rmFilter === 'all') return rmGetDemoDayTotal(d, daysInMonth);
+    if (rmFilter === 'genesis' || rmFilter === 'other') {
+      return rmGetDemoProjectDayAmount(rmFilter, d, daysInMonth);
+    }
+    let accounts = rmGetDemoAccountsForProject(rmFilter);
+    return accounts.reduce(function (sum, acc) {
+      return sum + rmGetDemoAccountDayAmount(rmFilter, acc.id, d, daysInMonth);
+    }, 0);
+  }
+
+  if (row.isProject) {
+    return rmGetDemoProjectDayAmount(row.key, d, daysInMonth);
+  }
+
+  if (row.isAccount) {
+    return rmGetDemoAccountDayAmount(row.projectKey, row.key, d, daysInMonth);
+  }
+
+  return rmGetDemoProjectDayAmount(row.key, d, daysInMonth);
+}
+
+function rmGetRowDayAmountFromLog(row, y, m, d) {
+  if (typeof getRevenueEntry !== 'function' || typeof revenueDateKey !== 'function') return 0;
+  let entry = getRevenueEntry(revenueDateKey(y, m, d));
+
+  if (row.isTotal) {
+    if (rmFilter === 'all') return entry ? (Number(entry.total) || 0) : 0;
+    let accounts = rmGetAccountsForProject(rmFilter);
+    return accounts.reduce(function (sum, acc) {
+      return sum + rmGetAccountDayAmount(entry, rmFilter, acc, accounts);
+    }, 0);
+  }
+
+  if (row.isAccount || row.isProject) {
+    if (row.isProject) return rmGetProjectDayAmount(entry, row.key);
+    let accounts = rmGetAccountsForProject(row.projectKey);
+    return rmGetAccountDayAmount(entry, row.projectKey, { id: row.key, username: row.name }, accounts);
+  }
+
+  return rmGetProjectDayAmount(entry, row.key);
+}
+
 function rmEscape(text) {
   return typeof escapeHtml === 'function' ? escapeHtml(text) : String(text);
 }
@@ -105,25 +256,12 @@ function rmGetAccountDayAmount(entry, projectKey, account, accounts) {
 }
 
 function rmGetRowDayAmount(row, y, m, d) {
-  let entry = typeof getRevenueEntry === 'function'
-    ? getRevenueEntry(revenueDateKey(y, m, d))
-    : null;
-
-  if (row.isTotal) {
-    if (rmFilter === 'all') return entry ? (Number(entry.total) || 0) : 0;
-    let accounts = rmGetAccountsForProject(rmFilter);
-    return accounts.reduce(function (sum, acc) {
-      return sum + rmGetAccountDayAmount(entry, rmFilter, acc, accounts);
-    }, 0);
-  }
-
-  if (row.isAccount || row.isProject) {
-    if (row.isProject) return rmGetProjectDayAmount(entry, row.key);
-    let accounts = rmGetAccountsForProject(row.projectKey);
-    return rmGetAccountDayAmount(entry, row.projectKey, { id: row.key, username: row.name }, accounts);
-  }
-
-  return rmGetProjectDayAmount(entry, row.key);
+  let fromLog = 0;
+  try {
+    fromLog = rmGetRowDayAmountFromLog(row, y, m, d);
+  } catch (e) {}
+  if (fromLog > 0) return fromLog;
+  return rmGetDemoRowDayAmount(row, y, m, d);
 }
 
 function rmGetTableRows() {
@@ -133,7 +271,7 @@ function rmGetTableRows() {
     }).concat([{ key: 'total', name: '合計', iconKey: '', isTotal: true }]);
   }
 
-  let accounts = rmGetAccountsForProject(rmFilter);
+  let accounts = rmGetDemoAccountsForProject(rmFilter);
   if (!accounts.length) {
     if (rmFilter === 'genesis' || rmFilter === 'other') {
       let p = RM_PROJECTS.find(function (x) { return x.key === rmFilter; });
@@ -215,7 +353,7 @@ function rmMonthTotal(y, m) {
   return rmMonthTotalFromSeries(rmResolveDailySeries(y, m));
 }
 
-function rmPrevMonth(y, m) {
+function rmCalcPrevMonth(y, m) {
   let pm = m - 1;
   let py = y;
   if (pm < 0) { pm = 11; py -= 1; }
@@ -237,6 +375,7 @@ function rmRenderDailyTable() {
   let table = document.getElementById('rmDailyTable');
   if (!table) return;
 
+  try {
   let y = rmView.y;
   let m = rmView.m;
   let days = new Date(y, m + 1, 0).getDate();
@@ -275,32 +414,36 @@ function rmRenderDailyTable() {
   }).join('') + '</tbody>';
 
   table.innerHTML = head + body;
+  } catch (e) {
+    table.innerHTML = '<tbody><tr><td class="rmStickyCol">項目</td><td>読込中...</td></tr></tbody>';
+  }
 }
 
 function rmRenderCompareChart() {
   let el = document.getElementById('rmCompareChart');
   if (!el) return;
 
+  try {
   let y = rmView.y;
   let m = rmView.m;
-  let prev = rmPrevMonth(y, m);
-  let curVals = rmResolveDailySeries(y, m);
-  let prevVals = rmResolveDailySeries(prev.y, prev.m);
-  let days = curVals.length;
-  let dataMax = Math.max.apply(null, curVals.concat(prevVals).concat([0]));
-  let axisMax = typeof niceChartAxisMax === 'function' ? niceChartAxisMax(dataMax) : (dataMax || 100);
+  let prev = rmCalcPrevMonth(y, m);
+  let days = new Date(y, m + 1, 0).getDate();
+  let curVals = rmGetDemoChartCurrentSeries(days);
+  let prevVals = rmGetDemoChartPrevSeries(days);
+  let dataMax = Math.max.apply(null, curVals.concat(prevVals).concat([1]));
+  let axisMax = typeof niceChartAxisMax === 'function' ? niceChartAxisMax(dataMax) : Math.max(dataMax, 450);
 
   let w = 520;
-  let h = 210;
+  let h = 168;
   let padLeft = 42;
   let padRight = 16;
-  let padTop = 12;
-  let padBottom = 22;
+  let padTop = 10;
+  let padBottom = 20;
   let plotW = w - padLeft - padRight;
   let plotH = h - padTop - padBottom;
 
   function plotY(val) {
-    return padTop + plotH - (val / axisMax) * plotH;
+    return padTop + plotH - (Math.max(0, val) / axisMax) * plotH;
   }
 
   function plotX(idx) {
@@ -314,45 +457,50 @@ function rmRenderCompareChart() {
     }).join(' ');
   }
 
+  function lineDots(vals, fill, stroke) {
+    return vals.map(function (v, i) {
+      return '<circle cx="' + plotX(i).toFixed(1) + '" cy="' + plotY(v).toFixed(1) + '" r="3.2" fill="' + fill + '" stroke="' + stroke + '" stroke-width="1.2"></circle>';
+    }).join('');
+  }
+
   let ticks = typeof chartAxisTicks === 'function' ? chartAxisTicks(axisMax, 5) : [0, axisMax / 2, axisMax];
   let grid = ticks.map(function (t) {
     let yPos = plotY(t);
     let label = typeof formatAxisDollar === 'function' ? formatAxisDollar(t) : rmMoney(t);
-    return '<line class="rmCompareGrid" x1="' + padLeft + '" y1="' + yPos.toFixed(1) + '" x2="' + (w - padRight) + '" y2="' + yPos.toFixed(1) + '"></line>' +
-      '<text class="rmCompareYLabel" x="' + (padLeft - 6) + '" y="' + (yPos + 3.5).toFixed(1) + '" text-anchor="end">' + label + '</text>';
+    return '<line x1="' + padLeft + '" y1="' + yPos.toFixed(1) + '" x2="' + (w - padRight) + '" y2="' + yPos.toFixed(1) + '" stroke="rgba(80,110,150,.25)" stroke-width="1"></line>' +
+      '<text x="' + (padLeft - 6) + '" y="' + (yPos + 3.5).toFixed(1) + '" text-anchor="end" fill="#7f97b3" font-size="10" font-weight="700">' + label + '</text>';
   }).join('');
 
-  let xMarks = [1, 5, 10, 15, 20, 25, days].filter(function (d, i, arr) {
-    return d <= days && arr.indexOf(d) === i;
-  });
-  let xSvg = xMarks.map(function (d) {
+  let xSvg = RM_CHART_X_DAYS.filter(function (d) { return d <= days; }).map(function (d) {
     let x = plotX(d - 1);
-    return '<text class="rmCompareXLabel" x="' + x.toFixed(1) + '" y="' + (h - 4) + '" text-anchor="middle">' + (m + 1) + '/' + d + '</text>';
+    return '<text x="' + x.toFixed(1) + '" y="' + (h - 3) + '" text-anchor="middle" fill="#7f97b3" font-size="10" font-weight="700">' + d + '日</text>';
   }).join('');
 
   el.innerHTML =
     '<div class="rmCompareChartInner">' +
-    '<svg class="rmCompareSvg" viewBox="0 0 ' + w + ' ' + h + '" preserveAspectRatio="none" aria-hidden="true">' +
+    '<svg class="rmCompareSvg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + w + ' ' + h + '" preserveAspectRatio="none" aria-hidden="true">' +
     grid + xSvg +
-    '<polyline class="rmCompareLine rmCompareLine--prev" points="' + linePoints(prevVals) + '"></polyline>' +
-    '<polyline class="rmCompareLine rmCompareLine--current" points="' + linePoints(curVals) + '"></polyline>' +
+    '<polyline points="' + linePoints(prevVals) + '" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="4 4"></polyline>' +
+    lineDots(prevVals, '#64748b', '#0b182b') +
+    '<polyline points="' + linePoints(curVals) + '" fill="none" stroke="#60a5fa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></polyline>' +
+    lineDots(curVals, '#60a5fa', '#0b182b') +
     '</svg>' +
     '<div class="rmCompareLegend">' +
     '<span class="rmCompareLegendItem"><i class="isCurrent"></i>今月（' + rmFormatMonthLabel(y, m) + '）</span>' +
     '<span class="rmCompareLegendItem"><i class="isPrev"></i>前月（' + rmFormatMonthLabel(prev.y, prev.m) + '）</span>' +
     '</div></div>';
+  } catch (e) {}
 }
 
 function rmRenderChartSummary() {
   let el = document.getElementById('rmChartSummary');
   if (!el) return;
 
-  let y = rmView.y;
-  let m = rmView.m;
-  let prev = rmPrevMonth(y, m);
-  let curTotal = Math.round(rmMonthTotal(y, m) * 100) / 100;
-  let prevTotal = Math.round(rmMonthTotal(prev.y, prev.m) * 100) / 100;
-  let pct = rmPctChange(curTotal, prevTotal);
+  try {
+  let summary = rmGetDemoChartSummary();
+  let curTotal = summary.currentTotal;
+  let prevTotal = summary.prevTotal;
+  let pct = summary.pctChange;
   let pctCls = pct >= 0 ? 'isUp' : 'isDown';
   let arrow = pct >= 0 ? '↗' : '↘';
 
@@ -360,6 +508,7 @@ function rmRenderChartSummary() {
     '<div class="rmChartSummaryItem"><span class="rmChartSummaryLabel">今月合計</span><span class="rmChartSummaryVal">' + rmMoney(curTotal) + '</span></div>' +
     '<div class="rmChartSummaryItem"><span class="rmChartSummaryLabel">前月合計</span><span class="rmChartSummaryVal isPrev">' + rmMoney(prevTotal) + '</span></div>' +
     '<div class="rmChartSummaryItem"><span class="rmChartSummaryLabel">前月比</span><span class="rmChartSummaryVal ' + pctCls + '">' + (pct >= 0 ? '+' : '') + pct + '% ' + arrow + '</span></div>';
+  } catch (e) {}
 }
 
 function rmScanAllDateKeys() {
@@ -429,18 +578,28 @@ function rmRenderProjectStats() {
   let el = document.getElementById('rmProjectStats');
   if (!el) return;
 
+  try {
   el.innerHTML =
-    '<div class="rmStatHead">' +
-    '<span>項目</span><span>最高日収</span><span>最高月収</span>' +
+    '<div class="rmStatTable">' +
+    '<div class="rmStatTableHead">' +
+    '<div class="rmStatTableCol rmStatTableCol--project"></div>' +
+    '<div class="rmStatTableCol rmStatTableCol--metric">最高日収</div>' +
+    '<div class="rmStatTableCol rmStatTableCol--metric">最高月収</div>' +
     '</div>' +
     RM_PROJECTS.map(function (p) {
-    let stats = rmGetProjectStats(p.key);
-    return '<div class="rmStatRow">' +
-      '<div class="rmStatProject">' + rmRenderProjectIcon(p.iconKey, 'rmRowIcon') + rmEscape(p.name) + '</div>' +
-      '<div class="rmStatMetric"><span class="rmStatMetricLabel">最高日収</span><span class="rmStatMetricVal">' + rmMoney(stats.bestDayAmount) + '</span><span class="rmStatMetricSub">' + rmEscape(stats.bestDayLabel) + '</span></div>' +
-      '<div class="rmStatMetric"><span class="rmStatMetricLabel">最高月収</span><span class="rmStatMetricVal">' + rmMoney(stats.bestMonthAmount) + '</span><span class="rmStatMetricSub">' + rmEscape(stats.bestMonthLabel) + '</span></div>' +
-      '</div>';
-  }).join('');
+      let stats = RM_DEMO_STATS[p.key] || { bestDayAmount: 0, bestDayLabel: '—', bestMonthAmount: 0, bestMonthLabel: '—' };
+      return '<div class="rmStatTableRow">' +
+        '<div class="rmStatTableCol rmStatTableCol--project">' + rmRenderProjectIcon(p.iconKey, 'rmRowIcon') + rmEscape(p.name) + '</div>' +
+        '<div class="rmStatTableCol rmStatTableCol--metric">' +
+        '<span class="rmStatAmt">' + rmMoney(stats.bestDayAmount) + '</span>' +
+        '<span class="rmStatDate">' + rmEscape(stats.bestDayLabel) + '</span></div>' +
+        '<div class="rmStatTableCol rmStatTableCol--metric">' +
+        '<span class="rmStatAmt">' + rmMoney(stats.bestMonthAmount) + '</span>' +
+        '<span class="rmStatDate">' + rmEscape(stats.bestMonthLabel) + '</span></div>' +
+        '</div>';
+    }).join('') +
+    '</div>';
+  } catch (e) {}
 }
 
 function rmUpdateHeaderMeta() {
@@ -459,15 +618,16 @@ function rmUpdateHeaderMeta() {
   if (dailyTitle) dailyTitle.textContent = '日別収益一覧' + rmGetScopeSuffix();
 
   let chartTitle = document.getElementById('rmLineChartTitle');
-  if (chartTitle) chartTitle.textContent = '① 月間収益グラフ' + rmGetScopeSuffix();
+  if (chartTitle) chartTitle.textContent = '月間収益グラフ' + rmGetScopeSuffix();
+
+  let statsTitle = document.getElementById('rmStatsTitle');
+  if (statsTitle) statsTitle.textContent = '過去最高実績' + rmGetScopeSuffix();
 }
 
 function rmOnFilterChange() {
   let sel = document.getElementById('rmProjectFilter');
   rmFilter = sel ? sel.value : 'all';
-  rmRenderDailyTable();
-  rmRenderCompareChart();
-  rmRenderChartSummary();
+  rmRenderAllPanels();
   rmUpdateHeaderMeta();
 }
 
@@ -487,6 +647,17 @@ function rmExportPlaceholder() {
   if (typeof showToast === 'function') showToast('エクスポートは準備中です');
 }
 
+function rmRenderBottomPanels() {
+  rmRenderCompareChart();
+  rmRenderChartSummary();
+  rmRenderProjectStats();
+}
+
+function rmRenderAllPanels() {
+  rmRenderDailyTable();
+  rmRenderBottomPanels();
+}
+
 function renderRevenueManage() {
   rmInitViewFromReference();
   if (typeof pfSyncMainTabs === 'function') pfSyncMainTabs('revenueManage');
@@ -495,14 +666,12 @@ function renderRevenueManage() {
   if (sel) sel.value = rmFilter;
 
   rmUpdateHeaderMeta();
-  rmRenderDailyTable();
-  rmRenderCompareChart();
-  rmRenderChartSummary();
-  rmRenderProjectStats();
+  rmRenderAllPanels();
 }
 
 function rmEnsureInit() {
-  rmInitViewFromReference();
+  if (typeof revenueManagePage === 'undefined') return;
+  renderRevenueManage();
 }
 
 if (typeof document !== 'undefined') {
