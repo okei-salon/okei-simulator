@@ -1,4 +1,4 @@
-/* OUKEI HUB Revenue Management — Ver1.8.1 */
+/* OUKEI HUB Revenue Management — Ver1.8.2 */
 
 .revenueManagePage {
   padding: 0;
@@ -283,6 +283,70 @@
   border-radius: 6px !important;
   background-size: 13px 13px !important;
   flex-shrink: 0;
+}
+
+.rmExpandBtn {
+  border: none;
+  background: transparent;
+  color: #93c5fd;
+  cursor: pointer;
+  padding: 0 2px 0 0;
+  margin: 0;
+  font-size: 11px;
+  line-height: 1;
+  flex-shrink: 0;
+  width: 16px;
+  text-align: center;
+  position: relative;
+  z-index: 4;
+  pointer-events: auto;
+}
+
+.rmExpandBtn:hover {
+  color: #dbeafe;
+}
+
+.rmRowLabel--account {
+  gap: 6px;
+}
+
+.rmRowLabel--detail {
+  padding-left: 24px;
+  color: #c9d8ea;
+  font-size: 13px;
+}
+
+.rmRowLabel--subTotal {
+  font-weight: 900;
+  color: #f8fafc;
+}
+
+.rmAccountHeadRow.isExpanded td:not(.rmStickyCol) {
+  color: #4b6280;
+}
+
+.rmDetailRow td {
+  background: rgba(15, 26, 46, 0.55);
+}
+
+.rmDetailRow td.rmStickyCol {
+  background: #0d1729;
+}
+
+.rmDetailSubTotalRow td {
+  background: rgba(37, 99, 235, 0.18);
+  font-weight: 900;
+  color: #f8fafc;
+}
+
+.rmDetailSubTotalRow td.rmStickyCol {
+  background: #122038;
+  box-shadow: 2px 0 8px rgba(0, 0, 0, .22);
+}
+
+.rmDetailSubTotalRow td.rmDetailSubTotalCol,
+.rmDetailSubTotalRow td.rmMonthTotalCol {
+  background: #122038;
 }
 
 .rmBottomGrid {

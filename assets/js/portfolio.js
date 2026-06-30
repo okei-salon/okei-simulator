@@ -1,4 +1,4 @@
-/* OUKEI HUB Portfolio UI — Ver1.8.1 */
+/* OUKEI HUB Portfolio UI — Ver1.8.2 */
 
 var PF_COLORS = {
   ram: '#f97316',

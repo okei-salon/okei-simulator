@@ -1,7 +1,22 @@
-/* OUKEI HUB Revenue Management — Ver1.8.1 */
+/* OUKEI HUB Revenue Management — Ver1.8.2 */
 
 var rmView = { y: new Date().getFullYear(), m: new Date().getMonth() };
 var rmFilter = 'all';
+var rmExpandedAccounts = {};
+var rmDailyTableBound = false;
+
+var RM_ACCOUNT_DETAIL_DEFS = {
+  ram: [
+    { key: 'operation', label: '運用' },
+    { key: 'title', label: 'タイトル' },
+    { key: 'total', label: '合計', isSubTotal: true }
+  ],
+  orca: [
+    { key: 'ai', label: 'AI運用' },
+    { key: 'affiliate', label: 'アフィリエイト' },
+    { key: 'total', label: '合計', isSubTotal: true }
+  ]
+};
 
 var RM_PROJECTS = [
   { key: 'ram', name: 'RAM', iconKey: 'ram' },
@@ -120,7 +135,41 @@ function rmGetDemoAccountsForProject(projectKey) {
   return RM_DEMO_ACCOUNTS[projectKey] ? RM_DEMO_ACCOUNTS[projectKey].slice() : [];
 }
 
+function rmAccountDemoSeed(accountId) {
+  let seed = 0;
+  for (let i = 0; i < accountId.length; i++) seed += accountId.charCodeAt(i);
+  return seed;
+}
+
+function rmGetDemoRamBreakdown(accountId, d) {
+  let seed = rmAccountDemoSeed(accountId);
+  let operation = 115 + (seed % 4) * 5;
+  let title = 6 + (seed % 3) + ((d % 5) + Math.floor(d / 7)) % 4;
+  if (d % 11 === 0) title += 1;
+  if (d % 13 === 0) title -= 1;
+  title = Math.max(5, title);
+  return { operation: operation, title: title, total: operation + title };
+}
+
+function rmGetDemoOrcaBreakdown(accountId, d) {
+  let seed = rmAccountDemoSeed(accountId);
+  let ai = 88 + (seed % 6) * 4 + Math.round(Math.sin((d + seed) * 0.7) * 7) + (d % 4) * 2;
+  let affiliate = 5 + (seed % 4) + (d % 7) + (d % 3 === 0 ? 2 : 0);
+  ai = Math.max(75, ai);
+  affiliate = Math.max(3, affiliate);
+  return { ai: ai, affiliate: affiliate, total: ai + affiliate };
+}
+
+function rmGetDemoAccountBreakdown(projectKey, accountId, d) {
+  if (projectKey === 'ram') return rmGetDemoRamBreakdown(accountId, d);
+  if (projectKey === 'orca') return rmGetDemoOrcaBreakdown(accountId, d);
+  return { total: 0 };
+}
+
 function rmGetDemoAccountDayAmount(projectKey, accountId, d, daysInMonth) {
+  if (projectKey === 'ram' || projectKey === 'orca') {
+    return rmGetDemoAccountBreakdown(projectKey, accountId, d).total;
+  }
   let accounts = rmGetDemoAccountsForProject(projectKey);
   let projectAmt = rmGetDemoProjectDayAmount(projectKey, d, daysInMonth);
   return rmSplitAmountAcrossAccounts(projectAmt, accounts, accountId);
@@ -174,6 +223,13 @@ function rmGetRowDayAmountFromLog(row, y, m, d) {
 
 function rmEscape(text) {
   return typeof escapeHtml === 'function' ? escapeHtml(text) : String(text);
+}
+
+function rmEscapeAttr(text) {
+  return String(text)
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 function rmMoney(n) {
@@ -256,6 +312,19 @@ function rmGetAccountDayAmount(entry, projectKey, account, accounts) {
 }
 
 function rmGetRowDayAmount(row, y, m, d) {
+  if (row.isAccount && rmSupportsAccountDetail(row.projectKey)) {
+    let direct = null;
+    try {
+      if (typeof getRevenueEntry === 'function' && typeof revenueDateKey === 'function') {
+        let entry = getRevenueEntry(revenueDateKey(y, m, d));
+        direct = rmGetAccountDirectAmount(entry, row.projectKey, row.key);
+      }
+    } catch (e) {}
+    if (direct === null || direct === undefined) {
+      return rmGetDemoAccountBreakdown(row.projectKey, row.key, d).total;
+    }
+  }
+
   let fromLog = 0;
   try {
     fromLog = rmGetRowDayAmountFromLog(row, y, m, d);
@@ -293,6 +362,136 @@ function rmGetTableRows() {
       isAccount: true
     };
   }).concat([{ key: 'total', name: '合計', iconKey: '', isTotal: true }]);
+}
+
+function rmSupportsAccountDetail(projectKey) {
+  return projectKey === 'ram' || projectKey === 'orca';
+}
+
+function rmAccountExpandKey(projectKey, accountId) {
+  return projectKey + ':' + accountId;
+}
+
+function rmIsAccountExpanded(projectKey, accountId) {
+  return !!rmExpandedAccounts[rmAccountExpandKey(projectKey, accountId)];
+}
+
+function rmToggleAccountDetail(projectKey, accountId) {
+  let key = rmAccountExpandKey(projectKey, accountId);
+  rmExpandedAccounts[key] = !rmExpandedAccounts[key];
+  rmRenderDailyTable();
+}
+
+function rmBindDailyTableEvents() {
+  if (rmDailyTableBound) return;
+  let table = document.getElementById('rmDailyTable');
+  if (!table) return;
+  rmDailyTableBound = true;
+  table.addEventListener('click', function (e) {
+    let btn = e.target.closest('.rmExpandBtn');
+    if (!btn) return;
+    e.preventDefault();
+    e.stopPropagation();
+    let projectKey = btn.getAttribute('data-project');
+    let accountId = btn.getAttribute('data-account');
+    if (!projectKey || !accountId) return;
+    rmToggleAccountDetail(projectKey, accountId);
+  });
+}
+
+function rmSplitRamTotal(total, accountId, d) {
+  if (!total) return { operation: 0, title: 0, total: 0 };
+  let seed = 0;
+  for (let i = 0; i < accountId.length; i++) seed += accountId.charCodeAt(i);
+  seed += d || 1;
+  let opRatio = 0.91 + (seed % 7) * 0.01;
+  let operation = Math.round(total * opRatio * 100) / 100;
+  let title = Math.round((total - operation) * 100) / 100;
+  return { operation: operation, title: title, total: total };
+}
+
+function rmSplitOrcaTotal(total, accountId, d) {
+  if (!total) return { ai: 0, affiliate: 0, total: 0 };
+  let seed = 0;
+  for (let i = 0; i < accountId.length; i++) seed += accountId.charCodeAt(i);
+  seed += (d || 1) * 3;
+  let aiRatio = 0.85 + (seed % 9) * 0.01;
+  let ai = Math.round(total * aiRatio * 100) / 100;
+  let affiliate = Math.round((total - ai) * 100) / 100;
+  return { ai: ai, affiliate: affiliate, total: total };
+}
+
+function rmGetAccountBreakdown(projectKey, accountId, y, m, d) {
+  try {
+    if (typeof getRevenueEntry === 'function' && typeof revenueDateKey === 'function') {
+      let entry = getRevenueEntry(revenueDateKey(y, m, d));
+      if (projectKey === 'ram' && typeof getRamAccountEntry === 'function') {
+        let ae = getRamAccountEntry(entry, accountId);
+        if (ae) {
+          let total = Number(ae.todayRevenue) || 0;
+          if (ae.operationRevenue != null && ae.titleRevenue != null) {
+            return {
+              operation: Number(ae.operationRevenue) || 0,
+              title: Number(ae.titleRevenue) || 0,
+              total: total
+            };
+          }
+          return rmSplitRamTotal(total, accountId, d);
+        }
+      }
+      if (projectKey === 'orca' && typeof getOrcaAccountEntry === 'function') {
+        let ae = getOrcaAccountEntry(entry, accountId);
+        if (ae && typeof calcOrcaAccountTotal === 'function') {
+          return {
+            ai: ae.yesterdayAiProfit,
+            affiliate: ae.todayAffiliateProfit,
+            total: calcOrcaAccountTotal(ae)
+          };
+        }
+      }
+    }
+  } catch (e) {}
+
+  return rmGetDemoAccountBreakdown(projectKey, accountId, d);
+}
+
+function rmGetAccountDetailDayAmount(projectKey, accountId, detailKey, y, m, d) {
+  let breakdown = rmGetAccountBreakdown(projectKey, accountId, y, m, d);
+  return breakdown[detailKey] != null ? breakdown[detailKey] : 0;
+}
+
+function rmSumAccountDetailMonth(projectKey, accountId, detailKey, y, m) {
+  let days = new Date(y, m + 1, 0).getDate();
+  let sum = 0;
+  for (let d = 1; d <= days; d++) {
+    sum += rmGetAccountDetailDayAmount(projectKey, accountId, detailKey, y, m, d);
+  }
+  return Math.round(sum * 100) / 100;
+}
+
+function rmBuildTableDisplayRows() {
+  let rows = rmGetTableRows();
+  let out = [];
+  rows.forEach(function (row) {
+    if (row.isAccount && rmSupportsAccountDetail(row.projectKey)) {
+      let expanded = rmIsAccountExpanded(row.projectKey, row.key);
+      out.push({ type: 'accountHead', row: row, expanded: expanded });
+      if (expanded) {
+        (RM_ACCOUNT_DETAIL_DEFS[row.projectKey] || []).forEach(function (line) {
+          out.push({
+            type: 'accountDetail',
+            row: row,
+            detailKey: line.key,
+            label: line.label,
+            isSubTotal: !!line.isSubTotal
+          });
+        });
+      }
+    } else {
+      out.push({ type: 'normal', row: row });
+    }
+  });
+  return out;
 }
 
 function rmSumRowMonth(row, y, m) {
@@ -371,6 +570,17 @@ function rmRenderProjectIcon(iconKey, extraClass) {
   return '<span class="homeProjIcon homeProjIcon--' + iconKey + ' ' + (extraClass || '') + '"></span>';
 }
 
+function rmRenderAccountHeadLabel(row, expanded) {
+  let toggle = expanded ? '▼' : '▶';
+  let btn = '<button type="button" class="rmExpandBtn" data-project="' + rmEscapeAttr(row.projectKey) + '" data-account="' + rmEscapeAttr(row.key) + '" aria-expanded="' + expanded + '" aria-label="' + (expanded ? '詳細を閉じる' : '詳細を表示') + '">' + toggle + '</button>';
+  return '<span class="rmRowLabel rmRowLabel--account">' + btn + rmRenderProjectIcon(row.iconKey, 'rmRowIcon') + rmEscape(row.name) + '</span>';
+}
+
+function rmRenderDetailLabel(label, isSubTotal) {
+  let cls = isSubTotal ? ' rmRowLabel--subTotal' : '';
+  return '<span class="rmRowLabel rmRowLabel--detail' + cls + '">' + rmEscape(label) + '</span>';
+}
+
 function rmRenderDailyTable() {
   let table = document.getElementById('rmDailyTable');
   if (!table) return;
@@ -379,7 +589,7 @@ function rmRenderDailyTable() {
   let y = rmView.y;
   let m = rmView.m;
   let days = new Date(y, m + 1, 0).getDate();
-  let rows = rmGetTableRows();
+  let displayRows = rmBuildTableDisplayRows();
 
   let head = '<thead><tr><th class="rmStickyCol">項目</th>';
   for (let d = 1; d <= days; d++) {
@@ -389,31 +599,61 @@ function rmRenderDailyTable() {
   }
   head += '<th class="rmMonthTotalCol">月間合計<br><span style="font-size:10px;font-weight:700;color:#7f97b3">(USD)</span></th></tr></thead>';
 
-  let body = '<tbody>' + rows.map(function (row) {
-    let trCls = row.isTotal ? ' class="rmTotalRow"' : '';
-    let label = row.isTotal
-      ? '<span class="rmRowLabel"><b>' + rmEscape(row.name) + '</b></span>'
-      : '<span class="rmRowLabel">' + (row.iconKey ? rmRenderProjectIcon(row.iconKey, 'rmRowIcon') : '') + rmEscape(row.name) + '</span>';
-
+  let body = '<tbody>' + displayRows.map(function (dr) {
+    let row = dr.row;
+    let trCls = '';
+    let label = '';
     let cells = '';
+    let monthSum = 0;
+    let showAmounts = true;
+
+    if (dr.type === 'accountHead') {
+      trCls = ' class="rmAccountHeadRow' + (dr.expanded ? ' isExpanded' : '') + '"';
+      label = rmRenderAccountHeadLabel(row, dr.expanded);
+      showAmounts = !dr.expanded;
+    } else if (dr.type === 'accountDetail') {
+      trCls = ' class="rmDetailRow' + (dr.isSubTotal ? ' rmDetailSubTotalRow' : '') + '"';
+      label = rmRenderDetailLabel(dr.label, dr.isSubTotal);
+    } else if (row.isTotal) {
+      trCls = ' class="rmTotalRow"';
+      label = '<span class="rmRowLabel"><b>' + rmEscape(row.name) + '</b></span>';
+    } else {
+      label = '<span class="rmRowLabel">' + (row.iconKey ? rmRenderProjectIcon(row.iconKey, 'rmRowIcon') : '') + rmEscape(row.name) + '</span>';
+    }
+
     for (let d = 1; d <= days; d++) {
       let wd = new Date(y, m, d).getDay();
       let cls = wd === 0 ? ' isSun' : (wd === 6 ? ' isSat' : '');
-      if (row.isEmpty) {
+
+      if (row.isEmpty || !showAmounts) {
         cells += '<td class="' + cls.trim() + ' isEmpty">—</td>';
         continue;
       }
-      let amt = rmGetRowDayAmount(row, y, m, d);
+
+      let amt = 0;
+      if (dr.type === 'accountDetail') {
+        amt = rmGetAccountDetailDayAmount(row.projectKey, row.key, dr.detailKey, y, m, d);
+      } else {
+        amt = rmGetRowDayAmount(row, y, m, d);
+      }
       cells += '<td class="' + cls.trim() + (amt ? '' : ' isEmpty') + '">' + (amt ? rmMoney(amt) : '—') + '</td>';
     }
 
-    let monthSum = row.isEmpty ? 0 : rmSumRowMonth(row, y, m);
-    cells += '<td class="rmMonthTotalCol">' + (row.isEmpty ? '—' : rmMoney(monthSum)) + '</td>';
+    if (row.isEmpty || !showAmounts) {
+      cells += '<td class="rmMonthTotalCol isEmpty">—</td>';
+    } else if (dr.type === 'accountDetail') {
+      monthSum = rmSumAccountDetailMonth(row.projectKey, row.key, dr.detailKey, y, m);
+      cells += '<td class="rmMonthTotalCol' + (dr.isSubTotal ? ' rmDetailSubTotalCol' : '') + '">' + rmMoney(monthSum) + '</td>';
+    } else {
+      monthSum = rmSumRowMonth(row, y, m);
+      cells += '<td class="rmMonthTotalCol">' + rmMoney(monthSum) + '</td>';
+    }
 
     return '<tr' + trCls + '><td class="rmStickyCol">' + label + '</td>' + cells + '</tr>';
   }).join('') + '</tbody>';
 
   table.innerHTML = head + body;
+  rmBindDailyTableEvents();
   } catch (e) {
     table.innerHTML = '<tbody><tr><td class="rmStickyCol">項目</td><td>読込中...</td></tr></tbody>';
   }
@@ -627,6 +867,7 @@ function rmUpdateHeaderMeta() {
 function rmOnFilterChange() {
   let sel = document.getElementById('rmProjectFilter');
   rmFilter = sel ? sel.value : 'all';
+  rmExpandedAccounts = {};
   rmRenderAllPanels();
   rmUpdateHeaderMeta();
 }
@@ -671,7 +912,12 @@ function renderRevenueManage() {
 
 function rmEnsureInit() {
   if (typeof revenueManagePage === 'undefined') return;
+  rmBindDailyTableEvents();
   renderRevenueManage();
+}
+
+if (typeof window !== 'undefined') {
+  window.rmToggleAccountDetail = rmToggleAccountDetail;
 }
 
 if (typeof document !== 'undefined') {
