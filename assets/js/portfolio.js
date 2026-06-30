@@ -1,4 +1,4 @@
-/* OUKEI HUB Portfolio UI — Ver1.8.0 */
+/* OUKEI HUB Portfolio UI — Ver1.8.1 */
 
 var PF_COLORS = {
   ram: '#f97316',
@@ -552,7 +552,49 @@ function pfRenderStackedBars() {
     '<div class="pfStackLegend">' + legend + '</div>';
 }
 
+function pfSyncMainTabs(active) {
+  document.querySelectorAll('[data-pf-main-tab]').forEach(function (btn) {
+    let on = btn.getAttribute('data-pf-main-tab') === active;
+    btn.classList.toggle('isActive', on);
+    btn.setAttribute('aria-selected', on ? 'true' : 'false');
+  });
+}
+
+function pfMirrorNodeContent(fromId, toId) {
+  let from = document.getElementById(fromId);
+  let to = document.getElementById(toId);
+  if (!from || !to) return;
+  if (from.tagName === 'INPUT' || from.tagName === 'TEXTAREA') {
+    to.value = from.value;
+    return;
+  }
+  to.innerHTML = from.innerHTML;
+  if (from.textContent && !from.children.length) to.textContent = from.textContent;
+}
+
+function pfMirrorTextContent(fromId, toId) {
+  let from = document.getElementById(fromId);
+  let to = document.getElementById(toId);
+  if (from && to) to.textContent = from.textContent;
+}
+
+function renderRevenueManage() {
+  pfSyncMainTabs('revenueManage');
+  pfMirrorNodeContent('homeCalendar', 'rmCalendar');
+  pfMirrorTextContent('homeMonthly', 'rmMonthly');
+  pfMirrorTextContent('homeMonthlyYen', 'rmMonthlyYen');
+  pfMirrorNodeContent('homeMonthlyLineChart', 'rmMonthlyLineChart');
+  pfMirrorNodeContent('homeMonthlyProjGrid', 'rmMonthlyProjGrid');
+  pfMirrorTextContent('homeDaily', 'rmDaily');
+  pfMirrorTextContent('homeDailyYen', 'rmDailyYen');
+  pfMirrorNodeContent('homeTodayDonut', 'rmTodayDonut');
+  pfMirrorNodeContent('homeTodayCompare', 'rmTodayCompare');
+  pfMirrorNodeContent('homeDailyProjGrid', 'rmDailyProjGrid');
+}
+
 function renderPortfolio() {
+  if (typeof portfolioPage !== 'undefined' && portfolioPage.classList.contains('hidden')) return;
+  pfSyncMainTabs('portfolio');
   pfEnsurePortfolioGoalSettings();
   pfRenderSummaryCards();
   pfRenderProjectCards();

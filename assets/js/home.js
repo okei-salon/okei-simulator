@@ -1,4 +1,4 @@
-/* OUKEI HUB Home UI — Ver1.8.0 */
+/* OUKEI HUB Home UI — Ver1.8.1 */
 let homeCalView = { y: new Date().getFullYear(), m: new Date().getMonth() };
 let ramSavePending = null;
 let orcaSavePending = null;
@@ -655,6 +655,9 @@ function homeCalPrevMonth() {
   renderHomeCalendar();
   renderHomeMonthlyLineChart();
   updateHomeMonthlyProjects(typeof allOrgSummary === 'function' ? allOrgSummary() : null);
+  if (typeof revenueManagePage !== 'undefined' && !revenueManagePage.classList.contains('hidden') && typeof renderRevenueManage === 'function') {
+    renderRevenueManage();
+  }
 }
 
 function homeCalNextMonth() {
@@ -663,6 +666,9 @@ function homeCalNextMonth() {
   renderHomeCalendar();
   renderHomeMonthlyLineChart();
   updateHomeMonthlyProjects(typeof allOrgSummary === 'function' ? allOrgSummary() : null);
+  if (typeof revenueManagePage !== 'undefined' && !revenueManagePage.classList.contains('hidden') && typeof renderRevenueManage === 'function') {
+    renderRevenueManage();
+  }
 }
 
 function formatAxisDollar(n) {
@@ -1141,6 +1147,9 @@ function updateHomeDashboard(sAll) {
   renderHomeMonthlyLineChart();
   updateHomeMonthlyProjects(sAll);
   updateHomeTodaySection(sAll);
+  if (typeof revenueManagePage !== 'undefined' && !revenueManagePage.classList.contains('hidden') && typeof renderRevenueManage === 'function') {
+    renderRevenueManage();
+  }
   if (typeof updateOchanMessage === 'function') updateOchanMessage();
   if (typeof renderPortfolio === 'function') renderPortfolio();
 }
@@ -1808,7 +1817,7 @@ function openPortfolioNav() {
 function syncMobileNav(page) {
   let nav = document.getElementById('mobileBottomNav');
   if (!nav) return;
-  let map = { home: 'home', ram: 'ram', portfolio: 'portfolio', settings: 'settings', accountManage: 'ram' };
+  let map = { home: 'home', ram: 'ram', portfolio: 'portfolio', revenueManage: 'portfolio', settings: 'settings', accountManage: 'ram' };
   let active = map[page] || '';
   nav.querySelectorAll('[data-nav]').forEach(function (btn) {
     btn.classList.toggle('isActive', btn.getAttribute('data-nav') === active);

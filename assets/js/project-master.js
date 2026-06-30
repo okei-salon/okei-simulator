@@ -1,4 +1,4 @@
-/* OUKEI HUB Project Master — Ver1.8.0 */
+/* OUKEI HUB Project Master — Ver1.8.1 */
 
 var PM_BUILTIN = {
   ram: { key: 'ram', name: 'RAM', startDate: '2024/01/20', inclusionRate: 100, visible: true, registered: true },

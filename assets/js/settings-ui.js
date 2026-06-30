@@ -1,4 +1,4 @@
-/* OUKEI HUB Settings UI — Ver1.8.0 */
+/* OUKEI HUB Settings UI — Ver1.8.1 */
 
 var pmDraftState = null;
 var pmDraftSnapshot = '';
