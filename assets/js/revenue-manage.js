@@ -292,7 +292,7 @@ function rmGetTableRows() {
       projectKey: rmFilter,
       isAccount: true
     };
-  });
+  }).concat([{ key: 'total', name: '合計', iconKey: '', isTotal: true }]);
 }
 
 function rmSumRowMonth(row, y, m) {

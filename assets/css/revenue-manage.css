@@ -531,6 +531,80 @@
     margin-left: 0;
   }
 
+  .rmDailyPanel {
+    padding: 12px 10px 10px;
+  }
+
+  .rmTableScroll {
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .rmDailyTable {
+    font-size: 11px;
+  }
+
+  .rmDailyTable th,
+  .rmDailyTable td {
+    padding: 7px 5px;
+  }
+
+  .rmDailyTable th {
+    font-size: 10px;
+  }
+
+  .rmDailyTable th.rmStickyCol,
+  .rmDailyTable td.rmStickyCol {
+    min-width: 84px;
+    max-width: 84px;
+    padding-left: 8px;
+    padding-right: 6px;
+  }
+
+  .rmDailyTable th:not(.rmStickyCol):not(.rmMonthTotalCol),
+  .rmDailyTable td:not(.rmStickyCol):not(.rmMonthTotalCol) {
+    min-width: calc((100vw - 128px) / 7);
+    width: calc((100vw - 128px) / 7);
+    max-width: calc((100vw - 128px) / 7);
+  }
+
+  .rmDailyTable th.rmMonthTotalCol,
+  .rmDailyTable td.rmMonthTotalCol {
+    position: static;
+    right: auto;
+    z-index: 1;
+    min-width: 76px;
+    max-width: none;
+    box-shadow: none;
+    padding-left: 8px;
+    padding-right: 10px;
+  }
+
+  .rmDailyTable thead th.rmMonthTotalCol {
+    z-index: 1;
+  }
+
+  .rmDailyTable tr.rmTotalRow td.rmStickyCol,
+  .rmDailyTable tr.rmTotalRow td.rmMonthTotalCol {
+    box-shadow: 2px 0 0 #102038, 4px 0 14px rgba(0, 0, 0, .28);
+  }
+
+  .rmDailyTable tr.rmTotalRow td.rmMonthTotalCol {
+    box-shadow: none;
+  }
+
+  .rmRowLabel {
+    gap: 5px;
+    font-size: 11px;
+  }
+
+  .rmRowLabel .homeProjIcon {
+    width: 18px !important;
+    height: 18px !important;
+    background-size: 11px 11px !important;
+  }
+
   .rmChartSummary {
     grid-template-columns: 1fr;
   }
