@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>OUKEI HUB Ver1.9.5</title>
+<title>OUKEI HUB Ver2.0.0</title>
 <link rel="manifest" href="site.webmanifest?v=20260628-pwa1">
 <link rel="icon" type="image/png" sizes="32x32" href="assets/brand/favicon-32.png?v=20260628-pwa1">
 <link rel="apple-touch-icon" sizes="180x180" href="assets/brand/apple-touch-icon.png?v=20260628-pwa1">
@@ -189,16 +189,19 @@ body.simulationMode .simBanner{display:block}
 <link rel="stylesheet" href="assets/css/home.css?v=20260626-pf181">
 <link rel="stylesheet" href="assets/css/portfolio-ui.css?v=20260626-pf186">
 <link rel="stylesheet" href="assets/css/settings-ui.css?v=20260626-pf181">
+<link rel="stylesheet" href="assets/css/excel-import.css?v=20260626-xi201">
 <link rel="stylesheet" href="assets/css/revenue-manage.css?v=20260626-pd195b">
-<script src="assets/js/home.js?v=20260626-pd195b"></script>
-<script src="assets/js/home-demo.js?v=20260626-pd195b"></script>
-<script src="assets/js/performance-data.js?v=20260626-pd195b"></script>
-<script src="assets/js/portfolio.js?v=20260626-pd195b"></script>
-<script src="assets/js/project-master.js?v=20260626-pd195b"></script>
-<script src="assets/js/settings-ui.js?v=20260626-pd195b"></script>
-<script src="assets/js/manage-entry-ui.js?v=20260626-pd195b"></script>
-<script src="assets/js/revenue-manage.js?v=20260626-pd195b"></script>
-<script src="assets/js/sales-manage.js?v=20260626-pd195b"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="assets/js/home.js?v=20260701-xi200"></script>
+<script src="assets/js/home-demo.js?v=20260701-xi200"></script>
+<script src="assets/js/performance-data.js?v=20260626-xi201"></script>
+<script src="assets/js/excel-import.js?v=20260626-xi201"></script>
+<script src="assets/js/portfolio.js?v=20260701-xi200"></script>
+<script src="assets/js/project-master.js?v=20260701-xi200"></script>
+<script src="assets/js/settings-ui.js?v=20260701-xi200"></script>
+<script src="assets/js/manage-entry-ui.js?v=20260701-xi200"></script>
+<script src="assets/js/revenue-manage.js?v=20260701-xi200"></script>
+<script src="assets/js/sales-manage.js?v=20260701-xi200"></script>
 <script src="assets/js/ochan-lines.js?v=20260628-dict-v3"></script>
 <script src="assets/js/ochan-engine.js?v=20260628-dict-v3"></script>
 </head>
@@ -481,6 +484,10 @@ body.simulationMode .simBanner{display:block}
 <span class="settingsHubIcon settingsHubIcon--fx" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M7 7h10"/><path d="M7 17h10"/><path d="M9 7v3a3 3 0 0 0 3 3"/><path d="M15 17v-3a3 3 0 0 0-3-3"/><circle cx="7" cy="12" r="2"/><circle cx="17" cy="12" r="2"/></svg></span>
 <div><div class="settingsHubTitle">為替設定</div><p class="settingsHubDesc">USD⇔JPYの為替レートを設定します。</p></div>
 </button>
+<button type="button" class="settingsHubCard" onclick="openExcelImportPage()">
+<span class="settingsHubIcon settingsHubIcon--import" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M5 21h14"/></svg></span>
+<div><div class="settingsHubTitle">Excelインポート</div><p class="settingsHubDesc">RAM管理Excelから過去実績（収益R7.12月）を移行します。</p></div>
+</button>
 </div>
 <div class="settingBlock settingsRestoreBlock">
 <div class="settingBlockTitle">おーちゃん</div>
@@ -508,6 +515,19 @@ body.simulationMode .simBanner{display:block}
 <div class="settingBlockTitle">編集後の保存</div>
 <button type="button" onclick="saveSettings()">💾 設定を保存</button>
 <div class="backupInfo">最終保存：<span id="settingsLastUpdate">-</span><br>最終バックアップ：<span id="settingsLastBackup">-</span></div>
+</div>
+</div>
+</section>
+
+<section id="excelImportPage" class="hidden settingsSubPage">
+<div class="settingsSubShell">
+<div class="settingsSubHead">
+<button type="button" class="btn2" onclick="showPage('settings')">← 戻る</button>
+<h2 class="pfTitle">Excelインポート</h2>
+<p class="pfSubtitle">RAM管理Excelから過去実績をOUKEI HUBへ移行（Ver2.0.0 第一段階）</p>
+</div>
+<div class="settingsSubPanel panel">
+<div id="xiMain" class="xiMain"></div>
 </div>
 </div>
 </section>

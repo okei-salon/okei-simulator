@@ -1,0 +1,124 @@
+/* OUKEI HUB Excel Import — Ver2.0.0 */
+
+.xiMain {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.xiStep {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+}
+
+.xiStepNum {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(37, 99, 235, 0.2);
+  border: 1px solid rgba(96, 165, 250, 0.45);
+  color: #dbeafe;
+  font-weight: 900;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.xiStepBody {
+  flex: 1;
+  min-width: 0;
+}
+
+.xiStepTitle {
+  font-size: 15px;
+  font-weight: 900;
+  margin-bottom: 6px;
+}
+
+.xiPreview {
+  border-color: rgba(52, 211, 153, 0.35);
+  background: linear-gradient(180deg, rgba(16, 48, 36, 0.55), rgba(13, 27, 48, 0.95));
+}
+
+.xiPreviewTitle {
+  font-size: 16px;
+  font-weight: 900;
+  margin-bottom: 12px;
+  color: #bbf7d0;
+}
+
+.xiPreviewMeta {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+  font-size: 13px;
+}
+
+.xiPreviewMeta span {
+  color: #9fb3cc;
+}
+
+.xiPreviewRow {
+  display: grid;
+  grid-template-columns: 72px 1fr auto;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 0;
+  border-top: 1px solid rgba(53, 87, 119, 0.35);
+  font-size: 13px;
+}
+
+.xiPreviewRow small {
+  color: #8fa8c5;
+  font-size: 11px;
+}
+
+.xiPreviewOk {
+  margin-top: 12px;
+  color: #bbf7d0;
+}
+
+.xiPreviewActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.xiWarn {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(251, 191, 36, 0.1);
+  border: 1px solid rgba(251, 191, 36, 0.35);
+  color: #fde68a;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.xiUndo {
+  padding: 12px;
+}
+
+.xiSuccess {
+  border-color: rgba(34, 197, 94, 0.45);
+  background: rgba(34, 197, 94, 0.08);
+}
+
+.xiSuccess .xiPreviewTitle {
+  color: #86efac;
+}
+
+@media (max-width: 900px) {
+  .xiPreviewRow {
+    grid-template-columns: 56px 1fr;
+  }
+
+  .xiPreviewRow small {
+    grid-column: 1 / -1;
+  }
+}

@@ -174,8 +174,11 @@ function rmGetProjectAccountRows(projectKey) {
 }
 
 function rmCalcRamOperationAmount(accountId, ae, dateKey) {
-  if (typeof pdCalcDailyOperation === 'function' && dateKey) {
-    return pdCalcDailyOperation(accountId, 'ram', dateKey);
+  if (ae && ae.operationSource === 'import' && ae.operationRevenue != null && ae.operationRevenue !== '') {
+    return Number(ae.operationRevenue) || 0;
+  }
+  if (typeof pdGetRamOperationRevenue === 'function') {
+    return pdGetRamOperationRevenue(ae, accountId, dateKey);
   }
   if (ae && ae.operationRevenue != null && ae.operationRevenue !== '') {
     return Number(ae.operationRevenue) || 0;

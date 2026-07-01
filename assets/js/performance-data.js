@@ -1,8 +1,8 @@
-/* OUKEI HUB Performance Data — Ver1.9.5
+/* OUKEI HUB Performance Data — Ver2.0.0
  * Single Source of Truth for revenue & sales actuals.
  * Storage: settings.revenueLog[dateKey], settings.salesLog[dateKey]
  *           settings.investmentHistory[accountId] — 投資履歴（運用額の一元管理）
- * Future: Excel import & Firebase sync write through this module.
+ * Excel import writes through pdImportRamRevenueRecords().
  */
 
 function pdIsDemoMode() {
@@ -387,10 +387,20 @@ function pdSyncRamSaveInvestments(ramAccounts, dateKey) {
   });
 }
 
+function pdGetRamOperationRevenue(ae, accountId, dateKey) {
+  if (ae && ae.operationSource === 'import' && ae.operationRevenue != null && ae.operationRevenue !== '') {
+    return pdRound(Number(ae.operationRevenue) || 0);
+  }
+  if (ae && ae.operationRevenue != null && ae.operationRevenue !== '' && ae.operationSource === 'manual') {
+    return pdRound(Number(ae.operationRevenue) || 0);
+  }
+  return pdCalcDailyOperation(accountId, 'ram', dateKey);
+}
+
 function pdRamAccountRevenueTotal(ae, accountId, dateKey) {
   if (!ae || ae.todayRevenue == null || ae.todayRevenue === '') return 0;
   let rev = Number(ae.todayRevenue) || 0;
-  let op = pdCalcDailyOperation(accountId, 'ram', dateKey);
+  let op = pdGetRamOperationRevenue(ae, accountId, dateKey);
   return pdRound(op + rev);
 }
 
@@ -412,6 +422,117 @@ function pdOrcaAccountRevenueTotal(a) {
   if (a.todayRevenue != null) return pdRound(Number(a.todayRevenue) || 0);
   if (typeof calcOrcaAccountTotal === 'function') return pdRound(calcOrcaAccountTotal(a));
   return 0;
+}
+
+function pdCreatePerformanceSnapshot() {
+  ensurePerformanceLogs();
+  return {
+    createdAt: new Date().toLocaleString(),
+    revenueLog: JSON.parse(JSON.stringify(settings.revenueLog || {})),
+    salesLog: JSON.parse(JSON.stringify(settings.salesLog || {})),
+    investmentHistory: JSON.parse(JSON.stringify(settings.investmentHistory || {}))
+  };
+}
+
+function pdRestorePerformanceSnapshot(snapshot) {
+  if (!snapshot) return false;
+  ensurePerformanceLogs();
+  settings.revenueLog = JSON.parse(JSON.stringify(snapshot.revenueLog || {}));
+  settings.salesLog = JSON.parse(JSON.stringify(snapshot.salesLog || {}));
+  settings.investmentHistory = JSON.parse(JSON.stringify(snapshot.investmentHistory || {}));
+  settings.lastUpdate = new Date().toLocaleString();
+  if (typeof markActivity === 'function') markActivity();
+  pdPersist();
+  pdNotifyPerformanceChanged({ type: 'restore' });
+  return true;
+}
+
+function pdImportRamRevenueRecords(records) {
+  if (!records || !records.length) return { imported: 0, dates: 0 };
+  ensurePerformanceLogs();
+  let byDate = {};
+  records.forEach(function (rec) {
+    if (!rec || !rec.dateKey || !rec.accountId) return;
+    if (!byDate[rec.dateKey]) byDate[rec.dateKey] = [];
+    byDate[rec.dateKey].push(rec);
+  });
+  let imported = 0;
+  Object.keys(byDate).sort().forEach(function (dateKey) {
+    let entry = pdGetRevenueEntryRaw(dateKey) || {};
+    entry.ramAccounts = entry.ramAccounts || {};
+    byDate[dateKey].forEach(function (rec) {
+      let prev = entry.ramAccounts[rec.accountId] || {};
+      entry.ramAccounts[rec.accountId] = {
+        todayRevenue: pdRound(rec.todayRevenue),
+        operationRevenue: pdRound(rec.operationRevenue),
+        operationSource: 'import',
+        addInvestment: Number(prev.addInvestment) || 0
+      };
+      imported += 1;
+    });
+    entry = pdRecalculateRevenueEntry(entry, dateKey);
+    pdWriteRevenueEntry(dateKey, entry);
+  });
+  pdNotifyPerformanceChanged({ type: 'import', count: imported });
+  return { imported: imported, dates: Object.keys(byDate).length };
+}
+
+function pdResolveRamAccountIdByExcelKey(excelKey) {
+  if (!excelKey) return null;
+  let key = String(excelKey).trim();
+  if (key.normalize) key = key.normalize('NFKC');
+  key = key.replace(/^@/, '').toLowerCase();
+
+  if (typeof settings !== 'undefined' && settings.ramExcelAccountMap) {
+    let mapped = settings.ramExcelAccountMap[key] || settings.ramExcelAccountMap[excelKey];
+    if (mapped) return mapped;
+  }
+
+  function memberKeys(m) {
+    let keys = [];
+    [m.username, m.name].forEach(function (field) {
+      if (!field) return;
+      let s = String(field).trim();
+      if (s.normalize) s = s.normalize('NFKC');
+      keys.push(s.replace(/^@/, '').toLowerCase());
+    });
+    return keys;
+  }
+
+  function matchesKey(m) {
+    let keys = memberKeys(m);
+    if (keys.indexOf(key) >= 0) return true;
+    if (key === 'kai1' && keys.some(function (k) { return k === 'kai1' || k.indexOf('kai1') >= 0; })) return true;
+    if (key === 'kai2' && keys.some(function (k) { return k === 'kai2' || k.indexOf('kai2') >= 0; })) return true;
+    return false;
+  }
+
+  if (typeof getRamInputAccounts === 'function') {
+    let accounts = getRamInputAccounts();
+    let exact = accounts.find(function (a) {
+      let u = String(a.username || '').trim();
+      if (u.normalize) u = u.normalize('NFKC');
+      u = u.replace(/^@/, '').toLowerCase();
+      return u === key || (key === 'kai1' && u.indexOf('kai1') >= 0) || (key === 'kai2' && u.indexOf('kai2') >= 0);
+    });
+    if (exact) return exact.id;
+  }
+
+  if (typeof getRootIdsForSummary === 'function' && typeof members !== 'undefined') {
+    let ids = getRootIdsForSummary();
+    for (let i = 0; i < ids.length; i++) {
+      let m = members.find(function (x) { return x.id === ids[i]; });
+      if (m && matchesKey(m)) return m.id;
+    }
+  }
+
+  if (typeof members !== 'undefined') {
+    for (let j = 0; j < members.length; j++) {
+      if (matchesKey(members[j])) return members[j].id;
+    }
+  }
+
+  return null;
 }
 
 function pdGetRevenueEntryRaw(dateKey) {
@@ -471,7 +592,7 @@ function pdRecalculateRevenueEntry(entry, dateKey) {
     Object.keys(entry.ramAccounts).forEach(function (id) {
       let ae = entry.ramAccounts[id];
       if (ae.todayRevenue == null || ae.todayRevenue === '') return;
-      let op = pdCalcDailyOperation(id, 'ram', dateKey);
+      let op = pdGetRamOperationRevenue(ae, id, dateKey);
       ae.operationRevenue = op;
       entry.ram += pdRamAccountRevenueTotal(ae, id, dateKey);
     });
@@ -963,4 +1084,9 @@ if (typeof window !== 'undefined') {
   window.pdRamAccountRevenueTotal = pdRamAccountRevenueTotal;
   window.pdOrcaAccountRevenueTotal = pdOrcaAccountRevenueTotal;
   window.pdPreviewRamAccountRevenueTotal = pdPreviewRamAccountRevenueTotal;
+  window.pdGetRamOperationRevenue = pdGetRamOperationRevenue;
+  window.pdCreatePerformanceSnapshot = pdCreatePerformanceSnapshot;
+  window.pdRestorePerformanceSnapshot = pdRestorePerformanceSnapshot;
+  window.pdImportRamRevenueRecords = pdImportRamRevenueRecords;
+  window.pdResolveRamAccountIdByExcelKey = pdResolveRamAccountIdByExcelKey;
 }
