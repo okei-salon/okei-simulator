@@ -1,4 +1,4 @@
-/* OUKEI HUB Sales Management — Ver1.8.5 */
+/* OUKEI HUB Sales Management — Ver1.8.7 */
 
 /*
  * settings.salesLog[dateKey] structure (future Excel / 実績入力):
@@ -68,13 +68,18 @@ var SM_DEMO_SALES_ACCOUNTS = {
   ],
   cary: [
     { id: 'demo_cary_1', name: '甲斐A', parentId: null, depth: 0 },
-    { id: 'demo_cary_2', name: '甲斐B', parentId: 'demo_cary_1', depth: 1 }
+    { id: 'demo_cary_2', name: '甲斐B', parentId: 'demo_cary_1', depth: 1 },
+    { id: 'demo_cary_3', name: '山森C', parentId: null, depth: 0 }
   ],
   genesis: [
-    { id: 'demo_genesis_1', name: 'GENESIS', parentId: null, depth: 0 }
+    { id: 'demo_genesis_1', name: 'GENESIS-A', parentId: null, depth: 0 },
+    { id: 'demo_genesis_2', name: 'GENESIS-B', parentId: 'demo_genesis_1', depth: 1 },
+    { id: 'demo_genesis_3', name: 'GENESIS-C', parentId: null, depth: 0 }
   ],
   other: [
-    { id: 'demo_other_1', name: 'その他', parentId: null, depth: 0 }
+    { id: 'demo_other_1', name: '副業A', parentId: null, depth: 0 },
+    { id: 'demo_other_2', name: '副業B', parentId: 'demo_other_1', depth: 1 },
+    { id: 'demo_other_3', name: 'その他C', parentId: null, depth: 0 }
   ]
 };
 
@@ -225,10 +230,21 @@ function smGetLiveCaryAccounts() {
 
 function smGetProjectAccounts(projectKey) {
   let live = [];
+  let isDemoSource = false;
   if (projectKey === 'ram') live = smGetLiveRamAccountTree();
   else if (projectKey === 'orca') live = smGetLiveOrcaAccounts();
   else if (projectKey === 'cary') live = smGetLiveCaryAccounts();
-  let accounts = live.length ? live : (SM_DEMO_SALES_ACCOUNTS[projectKey] ? SM_DEMO_SALES_ACCOUNTS[projectKey].slice() : []);
+  let accounts;
+  if (live.length) {
+    accounts = live;
+  } else if (SM_DEMO_SALES_ACCOUNTS[projectKey]) {
+    accounts = SM_DEMO_SALES_ACCOUNTS[projectKey].slice();
+    isDemoSource = true;
+  } else {
+    accounts = [];
+  }
+  accounts = pfFilterManageAccounts(projectKey, accounts, { useDemoBypass: isDemoSource });
+  accounts = pfApplyManageAccountLabels(projectKey, accounts);
   return pfAnnotateAccountSeries(accounts);
 }
 
@@ -263,12 +279,35 @@ function smGetDemoAccountDaySales(accountId, projectKey, d) {
     if (accountId === 'demo_ram_2') return 3000 + (d % 3) * 100;
     if (accountId === 'demo_ram_1') return 10000 + (d % 4) * 200;
     if (accountId === 'demo_ram_3') return 5200 + (d % 5) * 80;
+    if (accountId === 'demo_ram_4') return 2800 + (d % 4) * 90;
+    if (accountId === 'demo_ram_5') return 7600 + (d % 5) * 140;
+    if (accountId === 'demo_ram_6') return 2100 + (d % 3) * 80;
     return 4500 + (seed % 4) * 120 + (d % 3) * 60;
   }
+  if (projectKey === 'orca') {
+    if (accountId === 'demo_orca_1') return 9200 + (d % 4) * 180;
+    if (accountId === 'demo_orca_2') return 3400 + (d % 3) * 120;
+    if (accountId === 'demo_orca_3') return 5100 + (d % 5) * 95;
+    if (accountId === 'demo_orca_4') return 2600 + (d % 4) * 85;
+    return 6800 + (seed % 5) * 200 + (d % 4) * 90;
+  }
   if (projectKey === 'cary') {
-    if (accountId === 'demo_cary_2') return 1800 + (d % 4) * 90;
     if (accountId === 'demo_cary_1') return 6200 + (d % 5) * 110;
+    if (accountId === 'demo_cary_2') return 1800 + (d % 4) * 90;
+    if (accountId === 'demo_cary_3') return 4300 + (d % 4) * 100;
     return 4000 + (seed % 3) * 100;
+  }
+  if (projectKey === 'genesis') {
+    if (accountId === 'demo_genesis_1') return 5400 + (d % 5) * 120;
+    if (accountId === 'demo_genesis_2') return 1900 + (d % 4) * 80;
+    if (accountId === 'demo_genesis_3') return 3600 + (d % 4) * 95;
+    return 4200 + (seed % 4) * 110;
+  }
+  if (projectKey === 'other') {
+    if (accountId === 'demo_other_1') return 2800 + (d % 4) * 70;
+    if (accountId === 'demo_other_2') return 1200 + (d % 3) * 60;
+    if (accountId === 'demo_other_3') return 2100 + (d % 4) * 55;
+    return 1800 + (seed % 3) * 80;
   }
   return 8000 + (seed % 5) * 420 + Math.round(Math.sin((d + seed) * 0.65) * 380) + (d % 4) * 120;
 }
@@ -329,11 +368,14 @@ function smGetDemoProjectDayAmount(projectKey, d, daysInMonth) {
 }
 
 function smOpenSalesEntryModal(projectKey, accountId, accountName, dateKey, amount) {
+  pfRegisterManageDisplayFromEntry(projectKey, accountId);
   let projLabel = pfGetProjectLabel(projectKey, SM_PROJECTS);
   let dateVal = dateKey || pfFormatIsoDate(smView.y, smView.m, 1);
   let demoSales = Number(amount) || 10000;
   if (!amount && accountId === 'demo_ram_2') demoSales = 3000;
   let body =
+    '<input type="hidden" id="smEntryProjectKey" value="' + pfEscapeAttr(projectKey) + '">' +
+    '<input type="hidden" id="smEntryAccountId" value="' + pfEscapeAttr(accountId) + '">' +
     pfEntryDateField('日付', 'smEntryDate', dateVal) +
     pfEntryReadonlyField('プロジェクト', projLabel) +
     pfEntryReadonlyField('アカウント', accountName || accountId) +
@@ -342,6 +384,11 @@ function smOpenSalesEntryModal(projectKey, accountId, accountName, dateKey, amou
 }
 
 function smSaveSalesEntryDummy() {
+  let accountId = document.getElementById('smEntryAccountId');
+  let projectKey = document.getElementById('smEntryProjectKey');
+  if (projectKey && accountId) {
+    pfRegisterManageDisplayFromEntry(projectKey.value, accountId.value);
+  }
   pfEntrySaveDummy('保存は次回バージョンで実装予定です');
 }
 
@@ -367,19 +414,9 @@ function smGetTableRows() {
     }).concat([{ key: 'total', name: '合計', iconKey: '', isTotal: true }]);
   }
 
-  if (smFilter === 'genesis' || smFilter === 'other') {
-    let p = SM_PROJECTS.find(function (x) { return x.key === smFilter; });
-    return [{
-      key: smFilter,
-      name: p ? p.name : smFilter,
-      iconKey: smFilter,
-      isProject: true
-    }, { key: 'total', name: '合計', iconKey: '', isTotal: true }];
-  }
-
   let accounts = smGetProjectAccounts(smFilter);
   if (!accounts.length) {
-    return [{ key: 'empty', name: '（登録アカウントなし）', iconKey: smFilter, isEmpty: true }];
+    return [{ key: 'empty', name: '（表示アカウントなし）', iconKey: smFilter, isEmpty: true }];
   }
   return accounts.map(function (acc) {
     return {
@@ -489,6 +526,10 @@ function smBindDailyTableEvents() {
   pfBindEditableAmountClicks(table, function (meta) {
     smOpenSalesEntryModal(meta.projectKey, meta.accountId, meta.accountName, meta.dateKey, meta.amount);
   });
+  pfBindManageAccountContextMenu(table, function () {
+    smRenderAllPanels();
+    smUpdateHeaderMeta();
+  });
 }
 
 function smRenderProjectIcon(iconKey, extraClass) {
@@ -498,7 +539,12 @@ function smRenderProjectIcon(iconKey, extraClass) {
 }
 
 function smRenderAccountRowLabel(row) {
-  return pfRenderAccountLabel(smEscape(row.name), row.seriesIndex || 0);
+  return pfRenderManageAccountTrigger(
+    row.projectKey,
+    row.key,
+    row.name,
+    pfRenderAccountLabel(smEscape(row.name), row.seriesIndex || 0)
+  );
 }
 
 function smBuildTableDisplayRows() {

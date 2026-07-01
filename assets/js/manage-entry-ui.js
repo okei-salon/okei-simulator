@@ -1,7 +1,11 @@
-/* OUKEI HUB Manage Entry UI — Ver1.8.5 */
+/* OUKEI HUB Manage Entry UI — Ver1.8.7 */
 
 var pfEntryModalFooterDefault = '';
 var pfOriginalCloseModal = null;
+var pfManageContextMenuEl = null;
+var pfManageContextPressTimer = null;
+var pfManageContextMeta = null;
+var pfManageContextHandlers = null;
 
 var PF_SERIES_COLORS = ['#ef4444', '#3b82f6', '#22c55e', '#f59e0b', '#a855f7', '#ec4899', '#14b8a6'];
 
@@ -175,4 +179,331 @@ function pfBindEditableAmountClicks(table, openHandler) {
       amount: Number(cell.getAttribute('data-amount')) || 0
     });
   });
+}
+
+var PF_MANAGE_PROJECT_KEYS = ['ram', 'orca', 'cary', 'genesis', 'other'];
+
+function pfEscapeHtml(text) {
+  if (typeof escapeHtml === 'function') return escapeHtml(text);
+  return String(text || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function pfEnsureManageDisplayAccounts() {
+  if (typeof settings === 'undefined') return;
+  if (!settings.manageDisplayAccounts || typeof settings.manageDisplayAccounts !== 'object') {
+    settings.manageDisplayAccounts = {};
+  }
+  PF_MANAGE_PROJECT_KEYS.forEach(function (key) {
+    if (!settings.manageDisplayAccounts[key]) {
+      settings.manageDisplayAccounts[key] = { orgAdded: [], removed: [], labels: {} };
+    } else {
+      if (!Array.isArray(settings.manageDisplayAccounts[key].orgAdded)) {
+        settings.manageDisplayAccounts[key].orgAdded = [];
+      }
+      if (!Array.isArray(settings.manageDisplayAccounts[key].removed)) {
+        settings.manageDisplayAccounts[key].removed = [];
+      }
+      if (!settings.manageDisplayAccounts[key].labels || typeof settings.manageDisplayAccounts[key].labels !== 'object') {
+        settings.manageDisplayAccounts[key].labels = {};
+      }
+    }
+  });
+}
+
+function pfPersistManageDisplayAccounts() {
+  pfEnsureManageDisplayAccounts();
+  if (typeof markSettingsDirty === 'function') markSettingsDirty();
+  if (typeof persistHubSettings === 'function') persistHubSettings();
+}
+
+function pfGetManageDisplayBucket(projectKey) {
+  pfEnsureManageDisplayAccounts();
+  return settings.manageDisplayAccounts[projectKey] || { orgAdded: [], removed: [] };
+}
+
+function pfHasManageRevenueEntryData(projectKey, accountId) {
+  if (typeof settings === 'undefined' || !settings.revenueLog) return false;
+  return Object.keys(settings.revenueLog).some(function (key) {
+    let entry = settings.revenueLog[key];
+    if (!entry) return false;
+    if (projectKey === 'ram' && entry.ramAccounts && entry.ramAccounts[accountId]) {
+      let rev = entry.ramAccounts[accountId].todayRevenue;
+      return rev !== null && rev !== undefined && rev !== '';
+    }
+    if (entry.accounts && entry.accounts[accountId]) {
+      let ae = entry.accounts[accountId];
+      if (ae.projectKey && ae.projectKey !== projectKey) return false;
+      return ae.todayRevenue != null || ae.revenue != null;
+    }
+    return false;
+  });
+}
+
+function pfHasManageSalesEntryData(projectKey, accountId) {
+  if (typeof settings === 'undefined' || !settings.salesLog) return false;
+  return Object.keys(settings.salesLog).some(function (key) {
+    let entry = settings.salesLog[key];
+    if (!entry || !entry.accounts || !entry.accounts[accountId]) return false;
+    let ae = entry.accounts[accountId];
+    if (ae.projectKey && ae.projectKey !== projectKey) return false;
+    return ae.todaySales != null;
+  });
+}
+
+function pfIsManageAccountVisible(projectKey, accountId) {
+  let bucket = pfGetManageDisplayBucket(projectKey);
+  if (bucket.removed.indexOf(accountId) >= 0) return false;
+  if (bucket.orgAdded.indexOf(accountId) >= 0) return true;
+  if (pfHasManageRevenueEntryData(projectKey, accountId)) return true;
+  if (pfHasManageSalesEntryData(projectKey, accountId)) return true;
+  return false;
+}
+
+function pfFilterManageAccounts(projectKey, accounts, options) {
+  if (!accounts || !accounts.length) return [];
+  if (options && options.useDemoBypass) return accounts.slice();
+  return accounts.filter(function (acc) {
+    return pfIsManageAccountVisible(projectKey, acc.id);
+  });
+}
+
+function pfAddManageDisplayFromOrg(projectKey, accountId) {
+  if (!projectKey || !accountId) return;
+  let bucket = pfGetManageDisplayBucket(projectKey);
+  if (bucket.orgAdded.indexOf(accountId) < 0) bucket.orgAdded.push(accountId);
+  bucket.removed = bucket.removed.filter(function (id) { return id !== accountId; });
+  pfPersistManageDisplayAccounts();
+}
+
+function pfRegisterManageDisplayFromEntry(projectKey, accountId) {
+  if (!projectKey || !accountId) return;
+  let bucket = pfGetManageDisplayBucket(projectKey);
+  bucket.removed = bucket.removed.filter(function (id) { return id !== accountId; });
+  if (bucket.orgAdded.indexOf(accountId) < 0 && !pfHasManageRevenueEntryData(projectKey, accountId) &&
+      !pfHasManageSalesEntryData(projectKey, accountId)) {
+    bucket.orgAdded.push(accountId);
+  }
+  pfPersistManageDisplayAccounts();
+}
+
+function pfGetManageAccountDisplayName(projectKey, accountId, defaultName) {
+  let bucket = pfGetManageDisplayBucket(projectKey);
+  if (bucket.labels && bucket.labels[accountId]) return bucket.labels[accountId];
+  return defaultName || accountId;
+}
+
+function pfApplyManageAccountLabels(projectKey, accounts) {
+  return (accounts || []).map(function (acc) {
+    return Object.assign({}, acc, {
+      name: pfGetManageAccountDisplayName(projectKey, acc.id, acc.name || acc.username)
+    });
+  });
+}
+
+function pfRenameManageAccount(projectKey, accountId, currentName) {
+  let next = prompt('表示名を変更', currentName || accountId);
+  if (next === null) return false;
+  next = String(next).trim();
+  if (!next || next === currentName) return false;
+  let bucket = pfGetManageDisplayBucket(projectKey);
+  bucket.labels[accountId] = next;
+  if (typeof members !== 'undefined') {
+    let m = members.find(function (x) { return x.id === accountId; });
+    if (m) {
+      m.name = next;
+      if (typeof markActivity === 'function') markActivity();
+      if (typeof render === 'function') render();
+    }
+  }
+  pfPersistManageDisplayAccounts();
+  if (typeof showToast === 'function') showToast('✅ 表示名を変更しました');
+  return true;
+}
+
+function pfRemoveManageDisplayAccount(projectKey, accountId) {
+  if (!projectKey || !accountId) return;
+  let bucket = pfGetManageDisplayBucket(projectKey);
+  if (bucket.removed.indexOf(accountId) < 0) bucket.removed.push(accountId);
+  pfPersistManageDisplayAccounts();
+}
+
+function pfRenderManageAccountTrigger(projectKey, accountId, accountName, innerHtml) {
+  return '<span class="pfManageAccountTrigger"' +
+    ' data-project="' + pfEscapeAttr(projectKey) + '"' +
+    ' data-account="' + pfEscapeAttr(accountId) + '"' +
+    ' data-account-name="' + pfEscapeAttr(accountName) + '">' +
+    innerHtml +
+    '</span>';
+}
+
+function pfEnsureManageContextMenu() {
+  if (pfManageContextMenuEl) return pfManageContextMenuEl;
+  pfManageContextMenuEl = document.createElement('div');
+  pfManageContextMenuEl.id = 'pfManageContextMenu';
+  pfManageContextMenuEl.className = 'pfManageContextMenu isHidden';
+  pfManageContextMenuEl.innerHTML =
+    '<button type="button" class="pfManageContextMenuItem" data-action="rename">✏️ 名前変更</button>' +
+    '<button type="button" class="pfManageContextMenuItem pfManageContextMenuItem--danger" data-action="remove">🗑 表示一覧から削除</button>' +
+    '<button type="button" class="pfManageContextMenuItem pfManageContextMenuItem--cancel" data-action="cancel">キャンセル</button>';
+  document.body.appendChild(pfManageContextMenuEl);
+  pfManageContextMenuEl.addEventListener('click', function (e) {
+    let btn = e.target.closest('[data-action]');
+    if (!btn || !pfManageContextMeta) return;
+    e.preventDefault();
+    e.stopPropagation();
+    let action = btn.getAttribute('data-action');
+    let meta = pfManageContextMeta;
+    let handlers = pfManageContextHandlers || {};
+    pfCloseManageContextMenu();
+    if (action === 'cancel') return;
+    if (action === 'rename') {
+      if (pfRenameManageAccount(meta.projectKey, meta.accountId, meta.accountName) &&
+          typeof handlers.onChanged === 'function') {
+        handlers.onChanged();
+      }
+      return;
+    }
+    if (action === 'remove') {
+      pfConfirmManageRemove(meta.projectKey, meta.accountId, meta.accountName, handlers.onChanged);
+    }
+  });
+  document.addEventListener('click', pfCloseManageContextMenu);
+  document.addEventListener('contextmenu', function (e) {
+    if (!pfManageContextMenuEl || pfManageContextMenuEl.classList.contains('isHidden')) return;
+    if (!e.target.closest('#pfManageContextMenu')) pfCloseManageContextMenu();
+  });
+  window.addEventListener('scroll', pfCloseManageContextMenu, true);
+  window.addEventListener('resize', pfCloseManageContextMenu);
+  return pfManageContextMenuEl;
+}
+
+function pfCloseManageContextMenu() {
+  if (pfManageContextMenuEl) pfManageContextMenuEl.classList.add('isHidden');
+  pfManageContextMeta = null;
+  pfManageContextHandlers = null;
+}
+
+function pfOpenManageAccountContextMenu(clientX, clientY, meta, handlers) {
+  let menu = pfEnsureManageContextMenu();
+  pfManageContextMeta = meta;
+  pfManageContextHandlers = handlers || {};
+  menu.classList.remove('isHidden');
+  let pad = 8;
+  let rect = menu.getBoundingClientRect();
+  let left = clientX;
+  let top = clientY;
+  if (left + rect.width > window.innerWidth - pad) left = window.innerWidth - rect.width - pad;
+  if (top + rect.height > window.innerHeight - pad) top = window.innerHeight - rect.height - pad;
+  if (left < pad) left = pad;
+  if (top < pad) top = pad;
+  menu.style.left = left + 'px';
+  menu.style.top = top + 'px';
+}
+
+function pfReadManageAccountMeta(el) {
+  return {
+    projectKey: el.getAttribute('data-project'),
+    accountId: el.getAttribute('data-account'),
+    accountName: el.getAttribute('data-account-name')
+  };
+}
+
+function pfBindManageAccountContextMenu(table, onChanged) {
+  if (!table || table._pfContextMenuBound) return;
+  table._pfContextMenuBound = true;
+  pfEnsureManageContextMenu();
+
+  table.addEventListener('contextmenu', function (e) {
+    let trigger = e.target.closest('.pfManageAccountTrigger');
+    if (!trigger || e.target.closest('.rmExpandBtn')) return;
+    e.preventDefault();
+    pfOpenManageAccountContextMenu(e.clientX, e.clientY, pfReadManageAccountMeta(trigger), { onChanged: onChanged });
+  });
+
+  table.addEventListener('touchstart', function (e) {
+    let trigger = e.target.closest('.pfManageAccountTrigger');
+    if (!trigger || e.target.closest('.rmExpandBtn')) return;
+    if (pfManageContextPressTimer) clearTimeout(pfManageContextPressTimer);
+    let touch = e.touches[0];
+    if (!touch) return;
+    pfManageContextPressTimer = setTimeout(function () {
+      pfManageContextPressTimer = null;
+      pfOpenManageAccountContextMenu(touch.clientX, touch.clientY, pfReadManageAccountMeta(trigger), { onChanged: onChanged });
+    }, 520);
+  }, { passive: true });
+
+  table.addEventListener('touchmove', function () {
+    if (pfManageContextPressTimer) {
+      clearTimeout(pfManageContextPressTimer);
+      pfManageContextPressTimer = null;
+    }
+  }, { passive: true });
+
+  table.addEventListener('touchend', function () {
+    if (pfManageContextPressTimer) {
+      clearTimeout(pfManageContextPressTimer);
+      pfManageContextPressTimer = null;
+    }
+  }, { passive: true });
+}
+
+function pfConfirmManageRemove(projectKey, accountId, accountName, onRemoved) {
+  pfCaptureModalFooterDefault();
+  if (typeof modalTitle !== 'undefined') modalTitle.textContent = '表示一覧から削除';
+  if (typeof modalContent !== 'undefined') {
+    modalContent.innerHTML =
+      '<div class="pfConfirmBody">' +
+      '<p class="pfConfirmMessage">このアカウントを表示一覧から削除しますか？</p>' +
+      '<p class="pfConfirmAccountName">' + pfEscapeHtml(accountName || accountId) + '</p>' +
+      '<p class="pfEntryHelp">組織図データ・アカウント情報は削除されません。収益管理・売上管理の一覧から非表示になります。</p>' +
+      '</div>';
+  }
+  let footer = document.querySelector('#modalBg .modalFooter');
+  if (footer) {
+    footer.style.display = 'flex';
+    footer.innerHTML =
+      '<button type="button" class="btn2" onclick="pfCloseEntryModal()">キャンセル</button>' +
+      '<button type="button" class="btnDanger" id="pfManageRemoveConfirmBtn">削除</button>';
+    let confirmBtn = document.getElementById('pfManageRemoveConfirmBtn');
+    if (confirmBtn) {
+      confirmBtn.onclick = function () {
+        pfRemoveManageDisplayAccount(projectKey, accountId);
+        pfCloseEntryModal();
+        if (typeof showToast === 'function') {
+          showToast('✅ 表示一覧から削除しました');
+        }
+        if (typeof onRemoved === 'function') onRemoved();
+      };
+    }
+  }
+  if (typeof modalBg !== 'undefined') modalBg.style.display = 'flex';
+}
+
+function pfAddManageDisplayFromOrgUi(projectKey, accountId) {
+  pfAddManageDisplayFromOrg(projectKey, accountId);
+  let label = accountId;
+  if (typeof members !== 'undefined') {
+    let m = members.find(function (x) { return x.id === accountId; });
+    if (m && typeof displayName === 'function') label = displayName(m);
+  }
+  if (typeof showToast === 'function') {
+    showToast('✅ ' + label + ' を収益管理・売上管理の表示一覧に追加しました');
+  }
+  if (typeof revenueManagePage !== 'undefined' && !revenueManagePage.classList.contains('hidden') &&
+      typeof renderRevenueManage === 'function') {
+    renderRevenueManage();
+  }
+  if (typeof salesManagePage !== 'undefined' && !salesManagePage.classList.contains('hidden') &&
+      typeof renderSalesManage === 'function') {
+    renderSalesManage();
+  }
+}
+
+if (typeof window !== 'undefined') {
+  window.pfAddManageDisplayFromOrgUi = pfAddManageDisplayFromOrgUi;
+  window.pfEnsureManageDisplayAccounts = pfEnsureManageDisplayAccounts;
 }

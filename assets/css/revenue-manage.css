@@ -403,6 +403,93 @@ td.pfEditableCell {
   position: relative;
 }
 
+.pfManageAccountTrigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  min-width: 0;
+  cursor: context-menu;
+  -webkit-touch-callout: none;
+  user-select: none;
+}
+
+.pfManageAccountTrigger--expand {
+  gap: 7px;
+}
+
+.pfManageAccountTrigger .pfAccountLabel {
+  flex: 1;
+  min-width: 0;
+}
+
+.pfManageContextMenu {
+  position: fixed;
+  z-index: 12000;
+  min-width: 220px;
+  padding: 6px;
+  border-radius: 12px;
+  border: 1px solid rgba(96, 165, 250, .28);
+  background: linear-gradient(165deg, rgba(18, 32, 52, .98) 0%, rgba(8, 18, 32, .98) 100%);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, .42);
+}
+
+.pfManageContextMenu.isHidden {
+  display: none;
+}
+
+.pfManageContextMenuItem {
+  display: block;
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: #dbeafe;
+  text-align: left;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.pfManageContextMenuItem:hover {
+  background: rgba(37, 99, 235, .18);
+}
+
+.pfManageContextMenuItem--danger {
+  color: #fca5a5;
+}
+
+.pfManageContextMenuItem--danger:hover {
+  background: rgba(185, 28, 28, .22);
+}
+
+.pfManageContextMenuItem--cancel {
+  color: #8fa8c5;
+  margin-top: 2px;
+  border-top: 1px solid rgba(96, 165, 250, .14);
+  border-radius: 0 0 8px 8px;
+}
+
+.pfConfirmBody {
+  padding: 2px 0 4px;
+}
+
+.pfConfirmMessage {
+  margin: 0 0 8px;
+  font-size: 14px;
+  font-weight: 800;
+  color: #e2e8f0;
+  line-height: 1.5;
+}
+
+.pfConfirmAccountName {
+  margin: 0 0 10px;
+  font-size: 15px;
+  font-weight: 900;
+  color: #f8fafc;
+}
+
 .smDetailLabelWrap {
   display: flex;
   align-items: center;

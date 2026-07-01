@@ -1,4 +1,4 @@
-/* OUKEI HUB Revenue Management — Ver1.8.5 */
+/* OUKEI HUB Revenue Management — Ver1.8.7 */
 
 var rmView = { y: new Date().getFullYear(), m: new Date().getMonth() };
 var rmFilter = 'all';
@@ -61,7 +61,18 @@ var RM_DEMO_ACCOUNTS = {
   ],
   cary: [
     { id: 'demo_cary_1', username: '甲斐A' },
-    { id: 'demo_cary_2', username: '甲斐B' }
+    { id: 'demo_cary_2', username: '甲斐B' },
+    { id: 'demo_cary_3', username: '山森C' }
+  ],
+  genesis: [
+    { id: 'demo_genesis_1', username: 'GENESIS-A' },
+    { id: 'demo_genesis_2', username: 'GENESIS-B' },
+    { id: 'demo_genesis_3', username: 'GENESIS-C' }
+  ],
+  other: [
+    { id: 'demo_other_1', username: '副業A' },
+    { id: 'demo_other_2', username: '副業B' },
+    { id: 'demo_other_3', username: 'その他C' }
   ]
 };
 
@@ -82,7 +93,18 @@ var RM_DEMO_ACCOUNT_TREE = {
   ],
   cary: [
     { id: 'demo_cary_1', name: '甲斐A', parentId: null, depth: 0 },
-    { id: 'demo_cary_2', name: '甲斐B', parentId: 'demo_cary_1', depth: 1 }
+    { id: 'demo_cary_2', name: '甲斐B', parentId: 'demo_cary_1', depth: 1 },
+    { id: 'demo_cary_3', name: '山森C', parentId: null, depth: 0 }
+  ],
+  genesis: [
+    { id: 'demo_genesis_1', name: 'GENESIS-A', parentId: null, depth: 0 },
+    { id: 'demo_genesis_2', name: 'GENESIS-B', parentId: 'demo_genesis_1', depth: 1 },
+    { id: 'demo_genesis_3', name: 'GENESIS-C', parentId: null, depth: 0 }
+  ],
+  other: [
+    { id: 'demo_other_1', name: '副業A', parentId: null, depth: 0 },
+    { id: 'demo_other_2', name: '副業B', parentId: 'demo_other_1', depth: 1 },
+    { id: 'demo_other_3', name: 'その他C', parentId: null, depth: 0 }
   ]
 };
 
@@ -109,9 +131,15 @@ function rmGetLiveRamAccountTree() {
 
 function rmGetProjectAccountRows(projectKey) {
   let accounts = [];
+  let isDemoSource = false;
   if (projectKey === 'ram') {
     let live = rmGetLiveRamAccountTree();
-    accounts = live.length ? live : (RM_DEMO_ACCOUNT_TREE.ram ? RM_DEMO_ACCOUNT_TREE.ram.slice() : []);
+    if (live.length) {
+      accounts = live;
+    } else if (RM_DEMO_ACCOUNT_TREE.ram) {
+      accounts = RM_DEMO_ACCOUNT_TREE.ram.slice();
+      isDemoSource = true;
+    }
   } else if (projectKey === 'orca') {
     if (typeof getOrcaInputAccounts === 'function') {
       let live = getOrcaInputAccounts();
@@ -123,6 +151,7 @@ function rmGetProjectAccountRows(projectKey) {
     }
     if (!accounts.length && RM_DEMO_ACCOUNT_TREE.orca) {
       accounts = RM_DEMO_ACCOUNT_TREE.orca.slice();
+      isDemoSource = true;
     }
   } else if (projectKey === 'cary') {
     if (typeof getCaryInputAccounts === 'function') {
@@ -135,18 +164,29 @@ function rmGetProjectAccountRows(projectKey) {
     }
     if (!accounts.length && RM_DEMO_ACCOUNT_TREE.cary) {
       accounts = RM_DEMO_ACCOUNT_TREE.cary.slice();
+      isDemoSource = true;
+    }
+  } else if (projectKey === 'genesis' || projectKey === 'other') {
+    if (RM_DEMO_ACCOUNT_TREE[projectKey]) {
+      accounts = RM_DEMO_ACCOUNT_TREE[projectKey].slice();
+      isDemoSource = true;
     }
   }
+  accounts = pfFilterManageAccounts(projectKey, accounts, { useDemoBypass: isDemoSource });
+  accounts = pfApplyManageAccountLabels(projectKey, accounts);
   return pfAnnotateAccountSeries(accounts);
 }
 
 function rmOpenRevenueEntryModal(projectKey, accountId, accountName, dateKey, amount) {
+  pfRegisterManageDisplayFromEntry(projectKey, accountId);
   let projLabel = pfGetProjectLabel(projectKey, RM_PROJECTS);
   let dateVal = dateKey || pfFormatIsoDate(rmView.y, rmView.m, 1);
   let total = Number(amount) || 0;
   let demoOp = total ? Math.round(total * 0.94 * 100) / 100 : (projectKey === 'orca' ? 95 : 120);
   let demoRev = total || (projectKey === 'orca' ? 103 : 128);
   let body =
+    '<input type="hidden" id="rmEntryProjectKey" value="' + pfEscapeAttr(projectKey) + '">' +
+    '<input type="hidden" id="rmEntryAccountId" value="' + pfEscapeAttr(accountId) + '">' +
     pfEntryDateField('日付', 'rmEntryDate', dateVal) +
     pfEntryReadonlyField('プロジェクト', projLabel) +
     pfEntryReadonlyField('アカウント', accountName || accountId) +
@@ -157,6 +197,11 @@ function rmOpenRevenueEntryModal(projectKey, accountId, accountName, dateKey, am
 }
 
 function rmSaveRevenueEntryDummy() {
+  let accountId = document.getElementById('rmEntryAccountId');
+  let projectKey = document.getElementById('rmEntryProjectKey');
+  if (projectKey && accountId) {
+    pfRegisterManageDisplayFromEntry(projectKey.value, accountId.value);
+  }
   pfEntrySaveDummy('保存は次回バージョンで実装予定です');
 }
 
@@ -266,6 +311,11 @@ function rmGetDemoAccountDayAmount(projectKey, accountId, d, daysInMonth) {
     return rmGetDemoAccountBreakdown(projectKey, accountId, d).total;
   }
   let accounts = rmGetDemoAccountsForProject(projectKey);
+  if (!accounts.length && RM_DEMO_ACCOUNT_TREE[projectKey]) {
+    accounts = RM_DEMO_ACCOUNT_TREE[projectKey].map(function (a) {
+      return { id: a.id, username: a.name };
+    });
+  }
   let projectAmt = rmGetDemoProjectDayAmount(projectKey, d, daysInMonth);
   return rmSplitAmountAcrossAccounts(projectAmt, accounts, accountId);
 }
@@ -435,19 +485,9 @@ function rmGetTableRows() {
     }).concat([{ key: 'total', name: '合計', iconKey: '', isTotal: true }]);
   }
 
-  if (rmFilter === 'genesis' || rmFilter === 'other') {
-    let p = RM_PROJECTS.find(function (x) { return x.key === rmFilter; });
-    return [{
-      key: rmFilter,
-      name: p ? p.name : rmFilter,
-      iconKey: rmFilter,
-      isProject: true
-    }, { key: 'total', name: '合計', iconKey: '', isTotal: true }];
-  }
-
   let accounts = rmGetProjectAccountRows(rmFilter);
   if (!accounts.length) {
-    return [{ key: 'empty', name: '（登録アカウントなし）', iconKey: rmFilter, isEmpty: true }];
+    return [{ key: 'empty', name: '（表示アカウントなし）', iconKey: rmFilter, isEmpty: true }];
   }
   return accounts.map(function (acc) {
     return {
@@ -499,6 +539,10 @@ function rmBindDailyTableEvents() {
   });
   pfBindEditableAmountClicks(table, function (meta) {
     rmOpenRevenueEntryModal(meta.projectKey, meta.accountId, meta.accountName, meta.dateKey, meta.amount);
+  });
+  pfBindManageAccountContextMenu(table, function () {
+    rmRenderAllPanels();
+    rmUpdateHeaderMeta();
   });
 }
 
@@ -631,13 +675,25 @@ function rmSumRowMonth(row, y, m) {
 }
 
 function rmGetFilteredDayTotal(y, m, d) {
+  let daysInMonth = new Date(y, m + 1, 0).getDate();
   let entry = typeof getRevenueEntry === 'function' ? getRevenueEntry(revenueDateKey(y, m, d)) : null;
-  if (rmFilter === 'all') return entry ? (Number(entry.total) || 0) : 0;
-  if (rmFilter === 'genesis' || rmFilter === 'other') return rmGetProjectDayAmount(entry, rmFilter);
-  let accounts = rmGetAccountsForProject(rmFilter);
-  return accounts.reduce(function (sum, acc) {
-    return sum + rmGetAccountDayAmount(entry, rmFilter, acc, accounts);
-  }, 0);
+  if (rmFilter === 'all') {
+    if (entry && Number(entry.total) > 0) return Number(entry.total) || 0;
+    return rmGetDemoDayTotal(d, daysInMonth);
+  }
+  let liveAccounts = rmGetAccountsForProject(rmFilter);
+  if (liveAccounts.length) {
+    return liveAccounts.reduce(function (sum, acc) {
+      return sum + rmGetAccountDayAmount(entry, rmFilter, acc, liveAccounts);
+    }, 0);
+  }
+  let demoAccounts = rmGetProjectAccountRows(rmFilter);
+  if (demoAccounts.length) {
+    return demoAccounts.reduce(function (sum, acc) {
+      return sum + rmGetDemoAccountDayAmount(rmFilter, acc.id, d, daysInMonth);
+    }, 0);
+  }
+  return rmGetDemoProjectDayAmount(rmFilter, d, daysInMonth);
 }
 
 function rmHasChartData(vals) {
@@ -659,7 +715,13 @@ function rmGetDemoDailySeries(y, m) {
 function rmResolveDailySeries(y, m) {
   let vals = rmCollectDailySeries(y, m);
   if (rmHasChartData(vals)) return vals;
-  return rmGetDemoDailySeries(y, m);
+  let days = new Date(y, m + 1, 0).getDate();
+  if (rmFilter === 'all') return rmGetDemoChartCurrentSeries(days);
+  let out = [];
+  for (let d = 1; d <= days; d++) {
+    out.push(rmGetFilteredDayTotal(y, m, d));
+  }
+  return out;
 }
 
 function rmCollectDailySeries(y, m) {
@@ -700,13 +762,19 @@ function rmRenderProjectIcon(iconKey, extraClass) {
 function rmRenderAccountHeadLabel(row, expanded) {
   let toggle = expanded ? '▼' : '▶';
   let btn = '<button type="button" class="rmExpandBtn" data-project="' + rmEscapeAttr(row.projectKey) + '" data-account="' + rmEscapeAttr(row.key) + '" aria-expanded="' + expanded + '" aria-label="' + (expanded ? '詳細を閉じる' : '詳細を表示') + '">' + toggle + '</button>';
-  return '<span class="pfAccountLabel pfAccountLabel--expand">' + btn +
+  let inner = btn +
     pfRenderSeriesMarker(row.seriesIndex || 0) +
-    '<span class="pfAccountLabelText">' + rmEscape(row.name) + '</span></span>';
+    '<span class="pfAccountLabelText">' + rmEscape(row.name) + '</span>';
+  return pfRenderManageAccountTrigger(row.projectKey, row.key, row.name, inner);
 }
 
 function rmRenderAccountFlatLabel(row) {
-  return pfRenderAccountLabel(rmEscape(row.name), row.seriesIndex || 0);
+  return pfRenderManageAccountTrigger(
+    row.projectKey,
+    row.key,
+    row.name,
+    pfRenderAccountLabel(rmEscape(row.name), row.seriesIndex || 0)
+  );
 }
 
 function rmRenderDetailLabel(label, isSubTotal) {

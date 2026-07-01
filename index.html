@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>OUKEI HUB Ver1.8.5</title>
+<title>OUKEI HUB Ver1.8.7</title>
 <link rel="manifest" href="site.webmanifest?v=20260628-pwa1">
 <link rel="icon" type="image/png" sizes="32x32" href="assets/brand/favicon-32.png?v=20260628-pwa1">
 <link rel="apple-touch-icon" sizes="180x180" href="assets/brand/apple-touch-icon.png?v=20260628-pwa1">
@@ -189,15 +189,15 @@ body.simulationMode .simBanner{display:block}
 <link rel="stylesheet" href="assets/css/home.css?v=20260626-pf181">
 <link rel="stylesheet" href="assets/css/portfolio-ui.css?v=20260626-pf186">
 <link rel="stylesheet" href="assets/css/settings-ui.css?v=20260626-pf181">
-<link rel="stylesheet" href="assets/css/revenue-manage.css?v=20260626-pf189">
+<link rel="stylesheet" href="assets/css/revenue-manage.css?v=20260626-pf191">
 <script src="assets/js/home.js?v=20260626-pf181"></script>
 <script src="assets/js/home-demo.js?v=20260626-pf181"></script>
 <script src="assets/js/portfolio.js?v=20260626-pf181"></script>
 <script src="assets/js/project-master.js?v=20260626-pf181"></script>
 <script src="assets/js/settings-ui.js?v=20260626-pf181"></script>
-<script src="assets/js/manage-entry-ui.js?v=20260626-pf189"></script>
-<script src="assets/js/revenue-manage.js?v=20260626-pf189"></script>
-<script src="assets/js/sales-manage.js?v=20260626-pf189"></script>
+<script src="assets/js/manage-entry-ui.js?v=20260626-pf191"></script>
+<script src="assets/js/revenue-manage.js?v=20260626-pf191"></script>
+<script src="assets/js/sales-manage.js?v=20260626-pf191"></script>
 <script src="assets/js/ochan-lines.js?v=20260628-dict-v3"></script>
 <script src="assets/js/ochan-engine.js?v=20260628-dict-v3"></script>
 </head>
@@ -897,7 +897,7 @@ function reorderSibling(id,dir){
  markActivity();render();
 }
 
-function showDetail(id){focusId=id;let m=members.find(x=>x.id===id),kids=childrenOf(id);if(!m)return;modalTitle.textContent=displayName(m)+' 詳細';modalContent.innerHTML=`<div class="detailGrid"><div class="detailBox"><div class="label">タイトル</div><div class="val">${titleLabel(m.rank||0)}</div></div><div class="detailBox"><div class="label">個人投資額</div><div class="val">${money(m.investment)}</div></div><div class="detailBox"><div class="label">チームボリューム</div><div class="val">${money(calcVolume(id))}</div></div><div class="detailBox"><div class="label">配下数</div><div class="val">${kids.length}件</div></div></div><div class="lineBox"><b>管理</b><p class="help">収益情報は組織図では表示しません。RAM集計で確認します。</p><div class="accountManageActions"><button onclick="openEdit(members.find(x=>x.id==='${id}'))">編集</button><button class="btn2" onclick="addChild('${id}')">配下追加</button><button class="btn2" onclick="exportSubtree('${id}')">配下保存</button><button class="btn2" onclick="importSubtree('${id}')">配下導入</button>${m.id!==rootId?`<button class="btn2" onclick="openMove('${id}')">移動</button><button class="btnDanger" onclick="deleteMember('${id}')">削除</button>`:''}</div></div>`;modalBg.style.display='flex'}
+function showDetail(id){focusId=id;let m=members.find(x=>x.id===id),kids=childrenOf(id);if(!m)return;modalTitle.textContent=displayName(m)+' 詳細';modalContent.innerHTML=`<div class="detailGrid"><div class="detailBox"><div class="label">タイトル</div><div class="val">${titleLabel(m.rank||0)}</div></div><div class="detailBox"><div class="label">個人投資額</div><div class="val">${money(m.investment)}</div></div><div class="detailBox"><div class="label">チームボリューム</div><div class="val">${money(calcVolume(id))}</div></div><div class="detailBox"><div class="label">配下数</div><div class="val">${kids.length}件</div></div></div><div class="lineBox"><b>管理</b><p class="help">収益管理・売上管理の表示一覧に追加できます。RAM集計で収益詳細を確認します。</p><div class="accountManageActions"><button class="btn2" onclick="pfAddManageDisplayFromOrgUi('ram','${id}')">表示に追加</button><button onclick="openEdit(members.find(x=>x.id==='${id}'))">編集</button><button class="btn2" onclick="addChild('${id}')">配下追加</button><button class="btn2" onclick="exportSubtree('${id}')">配下保存</button><button class="btn2" onclick="importSubtree('${id}')">配下導入</button>${m.id!==rootId?`<button class="btn2" onclick="openMove('${id}')">移動</button><button class="btnDanger" onclick="deleteMember('${id}')">削除</button>`:''}</div></div>`;modalBg.style.display='flex'}
 function openEdit(data={}){let opts='<option value="">親なし</option>'+members.map(m=>`<option value="${m.id}" ${data.parent===m.id?'selected':''}>${displayName(m)}</option>`).join('');modalTitle.textContent=data.id?'メンバー編集':'メンバー追加';modalContent.innerHTML=`<input type="hidden" id="editId" value="${data.id||''}"><label>親</label><select id="parentInput">${opts}</select><label>名前</label><input id="nameInput" value="${data.name||''}"><label>ユーザーネーム</label><input id="usernameInput" value="${data.username||''}"><div class="grid2"><div><label>保有ランク</label><select id="rankInput">${[5,4,3,2,1,0].map(r=>`<option value="${r}" ${Number(data.rank||0)===r?'selected':''}>${rankName[r]}</option>`).join('')}</select></div><div><label>個人投資額</label><input id="investmentInput" type="number" value="${data.investment||''}"></div></div><label>チームボリューム</label><input id="volumeInput" type="number" value="${data.manualVolume||''}"><div style="display:flex;gap:8px;margin-top:14px;justify-content:flex-end"><button class="btn2" onclick="closeModal()">キャンセル</button><button onclick="saveMember()">保存</button></div>`;modalBg.style.display='flex'}
 function checkAncestorVolumes(parentId){let p=members.find(x=>x.id===parentId);while(p){let need=directLineSum(p.id),cur=Number(p.manualVolume)||0;if(need>cur){p.manualVolume=need;p.bvMode='AUTO'}p=members.find(x=>x.id===p.parent)}}
 function adjustAncestorManualVolumes(parentId,delta){delta=Number(delta)||0;if(!parentId||!delta)return;let p=members.find(x=>x.id===parentId);while(p){let cur=Number(p.manualVolume)||0;p.manualVolume=Math.max(0,cur+delta);p.bvMode=p.bvMode||'MANUAL_PLUS';p=members.find(x=>x.id===p.parent)}}
@@ -951,7 +951,7 @@ function initPinchZoom(){const vp=document.getElementById('viewport');if(vp){vp.
  },{passive:false});
 }
 
-(function(){initPinchZoom();try{let s=JSON.parse(localStorage.getItem('oukei_hub_v15_data')||localStorage.getItem('okei_v14_data')||'null');if(s){members=s.members||members;currentData=s.currentData||currentData;settings={...settings,...(s.settings||{})};scenarios=s.scenarios||[];rootId=s.rootId||rootId;rootAccountIds=s.rootAccountIds||rootAccountIds||[]}}catch(e){}if(!settings.revenueLog||typeof settings.revenueLog!=='object')settings.revenueLog={};settings.lastLogin=new Date().toLocaleString();if(typeof pmEnsureProjectMaster==='function')pmEnsureProjectMaster();if(typeof pmEnsureFxSettings==='function')pmEnsureFxSettings();if(typeof initHomeDemo==='function')initHomeDemo();render();showPage('home')})();
+(function(){initPinchZoom();try{let s=JSON.parse(localStorage.getItem('oukei_hub_v15_data')||localStorage.getItem('okei_v14_data')||'null');if(s){members=s.members||members;currentData=s.currentData||currentData;settings={...settings,...(s.settings||{})};scenarios=s.scenarios||[];rootId=s.rootId||rootId;rootAccountIds=s.rootAccountIds||rootAccountIds||[]}}catch(e){}if(!settings.revenueLog||typeof settings.revenueLog!=='object')settings.revenueLog={};if(typeof pfEnsureManageDisplayAccounts==='function')pfEnsureManageDisplayAccounts();settings.lastLogin=new Date().toLocaleString();if(typeof pmEnsureProjectMaster==='function')pmEnsureProjectMaster();if(typeof pmEnsureFxSettings==='function')pmEnsureFxSettings();if(typeof initHomeDemo==='function')initHomeDemo();render();showPage('home')})();
 </script>
 <nav class="mobileBottomNav" id="mobileBottomNav" aria-label="メインナビゲーション">
 <button type="button" class="mobileNavItem isActive" data-nav="home" onclick="showPage('home')"><svg viewBox="0 0 24 24"><path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1v-9.5Z"/></svg><span>ホーム</span></button>
