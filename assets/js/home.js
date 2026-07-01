@@ -246,10 +246,15 @@ function getRamAccountEntry(entry, accountId) {
   if (!acc) return null;
   let todayRevenue = normalizeRamRevenueNumber(acc.todayRevenue);
   if (todayRevenue === null) return null;
-  return {
+  let out = {
     todayRevenue: todayRevenue,
     addInvestment: Number(acc.addInvestment) || 0
   };
+  if (acc.operationRevenue != null && acc.operationRevenue !== '') {
+    out.operationRevenue = Number(acc.operationRevenue) || 0;
+  }
+  if (acc.operationSource) out.operationSource = acc.operationSource;
+  return out;
 }
 
 function isRamAccountEntered(entry, accountId) {

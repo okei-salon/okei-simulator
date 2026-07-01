@@ -1,8 +1,8 @@
-/* OUKEI HUB Performance Data — Ver2.0.0
+/* OUKEI HUB Performance Data — Ver2.0.2
  * Single Source of Truth for revenue & sales actuals.
  * Storage: settings.revenueLog[dateKey], settings.salesLog[dateKey]
  *           settings.investmentHistory[accountId] — 投資履歴（運用額の一元管理）
- * Excel import writes through pdImportRamRevenueRecords().
+ * Excel import writes through pdImportRamExcelMonth() → revenueLog + salesLog
  */
 
 function pdIsDemoMode() {
@@ -430,7 +430,8 @@ function pdCreatePerformanceSnapshot() {
     createdAt: new Date().toLocaleString(),
     revenueLog: JSON.parse(JSON.stringify(settings.revenueLog || {})),
     salesLog: JSON.parse(JSON.stringify(settings.salesLog || {})),
-    investmentHistory: JSON.parse(JSON.stringify(settings.investmentHistory || {}))
+    investmentHistory: JSON.parse(JSON.stringify(settings.investmentHistory || {})),
+    excelImportMonths: JSON.parse(JSON.stringify(settings.excelImportMonths || {}))
   };
 }
 
@@ -440,11 +441,185 @@ function pdRestorePerformanceSnapshot(snapshot) {
   settings.revenueLog = JSON.parse(JSON.stringify(snapshot.revenueLog || {}));
   settings.salesLog = JSON.parse(JSON.stringify(snapshot.salesLog || {}));
   settings.investmentHistory = JSON.parse(JSON.stringify(snapshot.investmentHistory || {}));
+  settings.excelImportMonths = JSON.parse(JSON.stringify(snapshot.excelImportMonths || {}));
   settings.lastUpdate = new Date().toLocaleString();
   if (typeof markActivity === 'function') markActivity();
   pdPersist();
   pdNotifyPerformanceChanged({ type: 'restore' });
   return true;
+}
+
+function pdSumProjectDayRevenue(entry, projectKey, dateKey) {
+  if (!entry) return 0;
+  if (projectKey === 'other') {
+    let known = ['ram', 'orca', 'cary', 'genesis'];
+    let sumKnown = known.reduce(function (s, k) { return s + (Number(entry[k]) || 0); }, 0);
+    let total = Number(entry.total) || 0;
+    return pdRound(Math.max(0, total - sumKnown));
+  }
+  if (projectKey === 'ram' && entry.ramAccounts) {
+    let sum = 0;
+    let hasAny = false;
+    Object.keys(entry.ramAccounts).forEach(function (id) {
+      let ae = entry.ramAccounts[id];
+      if (!ae || ae.todayRevenue == null || ae.todayRevenue === '') return;
+      hasAny = true;
+      sum += pdRamAccountRevenueTotal(ae, id, dateKey);
+    });
+    if (hasAny) return pdRound(sum);
+  }
+  if (projectKey === 'orca' && entry.orcaAccounts) {
+    let sum = 0;
+    let hasAny = false;
+    Object.keys(entry.orcaAccounts).forEach(function (id) {
+      let ae = entry.orcaAccounts[id];
+      if (!ae) return;
+      let v = pdOrcaAccountRevenueTotal(ae);
+      if (v > 0 || ae.yesterdayAiProfit != null || ae.todayAffiliateProfit != null || ae.todayRevenue != null) {
+        hasAny = true;
+        sum += v;
+      }
+    });
+    if (hasAny) return pdRound(sum);
+  }
+  if (projectKey === 'cary' && entry.caryAccounts) {
+    let sum = 0;
+    let hasAny = false;
+    Object.keys(entry.caryAccounts).forEach(function (id) {
+      let ae = entry.caryAccounts[id];
+      if (!ae) return;
+      if (ae.todayReward != null || ae.operationRevenue != null) {
+        hasAny = true;
+        sum += pdRound((Number(ae.operationRevenue) || 0) + (Number(ae.todayReward) || 0));
+      }
+    });
+    if (hasAny) return pdRound(sum);
+  }
+  return pdRound(Number(entry[projectKey]) || 0);
+}
+
+function pdProjectDayHasRevenue(entry, projectKey, dateKey) {
+  if (!entry) return false;
+  if (projectKey === 'ram' && entry.ramAccounts) {
+    return Object.keys(entry.ramAccounts).some(function (id) {
+      let ae = entry.ramAccounts[id];
+      return ae && ae.todayRevenue != null && ae.todayRevenue !== '';
+    });
+  }
+  if (projectKey === 'orca' && entry.orcaAccounts) {
+    return Object.keys(entry.orcaAccounts).some(function (id) {
+      let ae = entry.orcaAccounts[id];
+      return ae && (ae.yesterdayAiProfit != null || ae.todayAffiliateProfit != null || ae.todayRevenue != null);
+    });
+  }
+  if (projectKey === 'cary' && entry.caryAccounts) {
+    return Object.keys(entry.caryAccounts).some(function (id) {
+      let ae = entry.caryAccounts[id];
+      return ae && (ae.todayReward != null || ae.operationRevenue != null);
+    });
+  }
+  if (projectKey === 'other') {
+    return pdSumProjectDayRevenue(entry, projectKey, dateKey) > 0;
+  }
+  return Number(entry[projectKey]) > 0;
+}
+
+function pdGetExcelImportMonthKey(year, month) {
+  return year + '-' + String(month + 1).padStart(2, '0');
+}
+
+function pdFormatExcelImportMonthLabel(year, month) {
+  let rYear = year - 2018;
+  return 'R' + rYear + '.' + (month + 1) + '月';
+}
+
+function pdDetectImportedRamMonth(year, month) {
+  ensurePerformanceLogs();
+  let daysInMonth = new Date(year, month + 1, 0).getDate();
+  let importDays = 0;
+  for (let d = 1; d <= daysInMonth; d++) {
+    let dateKey = typeof revenueDateKey === 'function'
+      ? revenueDateKey(year, month, d)
+      : year + '-' + String(month + 1).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+    let entry = settings.revenueLog[dateKey];
+    if (!entry || !entry.ramAccounts) continue;
+    let dayImported = Object.keys(entry.ramAccounts).some(function (id) {
+      let ae = entry.ramAccounts[id];
+      return ae && ae.operationSource === 'import';
+    });
+    if (dayImported) importDays += 1;
+  }
+  let threshold = Math.max(10, Math.floor(daysInMonth * 0.5));
+  return importDays >= threshold;
+}
+
+function pdDetectImportedRamSalesMonth(year, month) {
+  ensurePerformanceLogs();
+  let daysInMonth = new Date(year, month + 1, 0).getDate();
+  let importDays = 0;
+  for (let d = 1; d <= daysInMonth; d++) {
+    let dateKey = typeof revenueDateKey === 'function'
+      ? revenueDateKey(year, month, d)
+      : year + '-' + String(month + 1).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+    let entry = settings.salesLog[dateKey];
+    if (!entry || !entry.accounts) continue;
+    let dayImported = Object.keys(entry.accounts).some(function (id) {
+      let ae = entry.accounts[id];
+      return ae && ae.projectKey === 'ram' && ae.salesSource === 'import';
+    });
+    if (dayImported) importDays += 1;
+  }
+  let threshold = Math.max(10, Math.floor(daysInMonth * 0.5));
+  return importDays >= threshold;
+}
+
+function pdIsExcelMonthFullyImported(year, month, hasSalesData) {
+  let revenueDone = pdDetectImportedRamMonth(year, month);
+  if (!revenueDone) return false;
+  if (hasSalesData === false) return true;
+  return pdDetectImportedRamSalesMonth(year, month);
+}
+
+function pdGetExcelMonthImportStatus(year, month, hasSalesData) {
+  return {
+    revenueDone: pdDetectImportedRamMonth(year, month),
+    salesDone: hasSalesData === false ? true : pdDetectImportedRamSalesMonth(year, month)
+  };
+}
+
+function pdIsExcelMonthImported(year, month) {
+  return pdDetectImportedRamMonth(year, month);
+}
+
+function pdMarkExcelMonthImported(year, month, meta) {
+  ensurePerformanceLogs();
+  settings.excelImportMonths = settings.excelImportMonths || {};
+  let key = pdGetExcelImportMonthKey(year, month);
+  settings.excelImportMonths[key] = Object.assign({
+    importedAt: new Date().toLocaleString(),
+    sheetName: '',
+    recordCount: 0
+  }, meta || {});
+  pdPersist();
+}
+
+function pdListExcelImportedMonthKeys() {
+  ensurePerformanceLogs();
+  settings.excelImportMonths = settings.excelImportMonths || {};
+  let keys = Object.keys(settings.excelImportMonths);
+  if (typeof pdListRevenueDateKeys === 'function') {
+    pdListRevenueDateKeys().forEach(function (dateKey) {
+      let parts = dateKey.split('-');
+      if (parts.length !== 3) return;
+      let y = Number(parts[0]);
+      let mo = Number(parts[1]) - 1;
+      if (pdDetectImportedRamMonth(y, mo)) {
+        let mk = pdGetExcelImportMonthKey(y, mo);
+        if (keys.indexOf(mk) === -1) keys.push(mk);
+      }
+    });
+  }
+  return keys.sort();
 }
 
 function pdImportRamRevenueRecords(records) {
@@ -475,6 +650,77 @@ function pdImportRamRevenueRecords(records) {
   });
   pdNotifyPerformanceChanged({ type: 'import', count: imported });
   return { imported: imported, dates: Object.keys(byDate).length };
+}
+
+function pdImportRamSalesRecords(records) {
+  if (!records || !records.length) return { imported: 0, dates: 0 };
+  ensurePerformanceLogs();
+  let byDate = {};
+  records.forEach(function (rec) {
+    if (!rec || !rec.dateKey || !rec.accountId) return;
+    if (!byDate[rec.dateKey]) byDate[rec.dateKey] = [];
+    byDate[rec.dateKey].push(rec);
+  });
+  let imported = 0;
+  Object.keys(byDate).sort().forEach(function (dateKey) {
+    let entry = pdGetSalesEntryRaw(dateKey) || {};
+    entry.accounts = entry.accounts || {};
+    byDate[dateKey].forEach(function (rec) {
+      entry.accounts[rec.accountId] = {
+        projectKey: 'ram',
+        todaySales: pdRound(rec.todaySales),
+        totalSales: rec.totalSales != null ? pdRound(rec.totalSales) : null,
+        salesSource: 'import'
+      };
+      imported += 1;
+    });
+    entry = pdRecalculateSalesEntry(entry);
+    pdWriteSalesEntry(dateKey, entry);
+  });
+  pdNotifyPerformanceChanged({ type: 'import-sales', count: imported });
+  return { imported: imported, dates: Object.keys(byDate).length };
+}
+
+function pdImportRamExcelMonth(revenueRecords, salesRecords, meta) {
+  meta = meta || {};
+  let revResult = { imported: 0, dates: 0 };
+  let salesResult = { imported: 0, dates: 0 };
+  if (!meta.revenueDone && revenueRecords && revenueRecords.length) {
+    revResult = pdImportRamRevenueRecords(revenueRecords);
+  }
+  if (!meta.salesDone && salesRecords && salesRecords.length) {
+    salesResult = pdImportRamSalesRecords(salesRecords);
+  }
+  if (meta.year != null && meta.month != null) {
+    let status = pdGetExcelMonthImportStatus(meta.year, meta.month, meta.hasSalesData);
+    if (status.revenueDone && status.salesDone) {
+      pdMarkExcelMonthImported(meta.year, meta.month, {
+        sheetName: meta.sheetName || '',
+        salesSheetName: meta.salesSheetName || '',
+        layoutPattern: meta.layoutPattern || '',
+        revenueCount: revResult.imported,
+        salesCount: salesResult.imported,
+        recordCount: revResult.imported + salesResult.imported
+      });
+    }
+  }
+  return {
+    imported: revResult.imported + salesResult.imported,
+    revenueImported: revResult.imported,
+    salesImported: salesResult.imported,
+    dates: Math.max(revResult.dates, salesResult.dates)
+  };
+}
+
+function pdImportRamRevenueRecordsWithMeta(records, meta) {
+  let result = pdImportRamRevenueRecords(records);
+  if (meta && meta.year != null && meta.month != null) {
+    pdMarkExcelMonthImported(meta.year, meta.month, {
+      sheetName: meta.sheetName || '',
+      recordCount: result.imported
+    });
+  }
+  return result;
 }
 
 function pdResolveRamAccountIdByExcelKey(excelKey) {
@@ -1088,5 +1334,18 @@ if (typeof window !== 'undefined') {
   window.pdCreatePerformanceSnapshot = pdCreatePerformanceSnapshot;
   window.pdRestorePerformanceSnapshot = pdRestorePerformanceSnapshot;
   window.pdImportRamRevenueRecords = pdImportRamRevenueRecords;
+  window.pdImportRamRevenueRecordsWithMeta = pdImportRamRevenueRecordsWithMeta;
+  window.pdImportRamSalesRecords = pdImportRamSalesRecords;
+  window.pdImportRamExcelMonth = pdImportRamExcelMonth;
   window.pdResolveRamAccountIdByExcelKey = pdResolveRamAccountIdByExcelKey;
+  window.pdSumProjectDayRevenue = pdSumProjectDayRevenue;
+  window.pdProjectDayHasRevenue = pdProjectDayHasRevenue;
+  window.pdIsExcelMonthImported = pdIsExcelMonthImported;
+  window.pdIsExcelMonthFullyImported = pdIsExcelMonthFullyImported;
+  window.pdGetExcelMonthImportStatus = pdGetExcelMonthImportStatus;
+  window.pdDetectImportedRamSalesMonth = pdDetectImportedRamSalesMonth;
+  window.pdMarkExcelMonthImported = pdMarkExcelMonthImported;
+  window.pdFormatExcelImportMonthLabel = pdFormatExcelImportMonthLabel;
+  window.pdListExcelImportedMonthKeys = pdListExcelImportedMonthKeys;
+  window.pdDetectImportedRamMonth = pdDetectImportedRamMonth;
 }

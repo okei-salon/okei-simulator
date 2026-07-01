@@ -1,4 +1,4 @@
-/* OUKEI HUB Revenue Management — Ver1.9.5 */
+/* OUKEI HUB Revenue Management — Ver2.0.1 */
 
 var rmView = { y: new Date().getFullYear(), m: new Date().getMonth() };
 var rmFilter = 'all';
@@ -529,26 +529,16 @@ function rmGetRowDayAmountFromLog(row, y, m, d) {
 
   if (row.isTotal) {
     if (rmFilter === 'all') return Number(entry.total) || 0;
-    let accounts = rmGetProjectAccountRows(rmFilter);
-    let sum = 0;
-    let hasAny = false;
-    accounts.forEach(function (acc) {
-      let v = rmGetAccountDayAmount(entry, rmFilter, acc, accounts, dateKey);
-      if (v !== null && v !== undefined) {
-        hasAny = true;
-        sum += v;
-      }
-    });
-    return hasAny ? Math.round(sum * 100) / 100 : null;
+    return rmGetProjectDayAmount(entry, rmFilter, dateKey);
   }
 
   if (row.isAccount || row.isProject) {
-    if (row.isProject) return rmGetProjectDayAmount(entry, row.key);
+    if (row.isProject) return rmGetProjectDayAmount(entry, row.key, dateKey);
     let accounts = rmGetProjectAccountRows(row.projectKey);
     return rmGetAccountDayAmount(entry, row.projectKey, { id: row.key, name: row.name }, accounts, dateKey);
   }
 
-  return rmGetProjectDayAmount(entry, row.key);
+  return rmGetProjectDayAmount(entry, row.key, dateKey);
 }
 
 function rmEscape(text) {
@@ -597,8 +587,11 @@ function rmGetAccountsForProject(projectKey) {
   return [];
 }
 
-function rmGetProjectDayAmount(entry, projectKey) {
+function rmGetProjectDayAmount(entry, projectKey, dateKey) {
   if (!entry) return 0;
+  if (typeof pdSumProjectDayRevenue === 'function' && dateKey) {
+    return pdSumProjectDayRevenue(entry, projectKey, dateKey);
+  }
   if (projectKey === 'other') {
     let known = ['ram', 'orca', 'cary', 'genesis'];
     let sumKnown = known.reduce(function (s, k) { return s + (Number(entry[k]) || 0); }, 0);
@@ -610,15 +603,15 @@ function rmGetProjectDayAmount(entry, projectKey) {
 
 function rmGetAccountDirectAmount(entry, projectKey, accountId, dateKey) {
   if (!entry) return null;
-  if (projectKey === 'ram' && typeof getRamAccountEntry === 'function') {
-    let ae = getRamAccountEntry(entry, accountId);
-    if (!ae) return null;
+  if (projectKey === 'ram' && entry.ramAccounts && entry.ramAccounts[accountId]) {
+    let ae = entry.ramAccounts[accountId];
+    if (ae.todayRevenue == null || ae.todayRevenue === '') return null;
     if (typeof pdRamAccountRevenueTotal === 'function' && dateKey) {
       return pdRamAccountRevenueTotal(ae, accountId, dateKey);
     }
     let op = typeof pdCalcDailyOperation === 'function' && dateKey
       ? pdCalcDailyOperation(accountId, 'ram', dateKey) : 0;
-    return Math.round((op + ae.todayRevenue) * 100) / 100;
+    return Math.round((op + (Number(ae.todayRevenue) || 0)) * 100) / 100;
   }
   if (projectKey === 'orca' && typeof getOrcaAccountEntry === 'function') {
     let ae = getOrcaAccountEntry(entry, accountId);
@@ -891,6 +884,15 @@ function rmGetFilteredDayTotal(y, m, d) {
   if (rmFilter === 'all') {
     if (entry) return Number(entry.total) || 0;
     return rmIsDemoMode() ? rmGetDemoDayTotal(d, daysInMonth) : null;
+  }
+  if (entry && dateKey) {
+    if (typeof pdProjectDayHasRevenue === 'function') {
+      if (pdProjectDayHasRevenue(entry, rmFilter, dateKey)) {
+        return rmGetProjectDayAmount(entry, rmFilter, dateKey);
+      }
+    } else if (Number(entry[rmFilter]) > 0) {
+      return rmGetProjectDayAmount(entry, rmFilter, dateKey);
+    }
   }
   let accounts = rmGetProjectAccountRows(rmFilter);
   if (entry && accounts.length) {
@@ -1212,7 +1214,8 @@ function rmComputeProjectStats(projectKey) {
     let mo = Number(parts[1]) - 1;
     let d = Number(parts[2]);
     let entry = typeof getRevenueEntry === 'function' ? getRevenueEntry(key) : null;
-    let amt = rmGetProjectDayAmount(entry, projectKey);
+    if (typeof pdProjectDayHasRevenue === 'function' && !pdProjectDayHasRevenue(entry, projectKey, key)) return;
+    let amt = rmGetProjectDayAmount(entry, projectKey, key);
     if (amt > bestDay.amount) {
       bestDay = { amount: amt, dateKey: key };
     }
