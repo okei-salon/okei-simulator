@@ -1,4 +1,4 @@
-/* OUKEI HUB Portfolio UI — Ver1.8.4 */
+/* OUKEI HUB Portfolio UI — Ver1.9.4 */
 
 var PF_COLORS = {
   ram: '#f97316',
@@ -92,6 +92,24 @@ function pfYenRef(amountUsd) {
   return typeof yen === 'function' ? yen(amountUsd) : pfFormatYenPlain((amountUsd || 0) * pfGetYenRate());
 }
 
+function pfIsDemoMode() {
+  return typeof pdIsDemoMode === 'function' && pdIsDemoMode();
+}
+
+function pfEmptyMark() {
+  return typeof pdEmptyMark === 'function' ? pdEmptyMark() : '−';
+}
+
+function pfDisplayUsd(amount, hasValue) {
+  if (!hasValue && !pfIsDemoMode()) return pfEmptyMark();
+  return pfMoneyUsd(amount || 0);
+}
+
+function pfDisplayPct(pct, hasValue) {
+  if (!hasValue && !pfIsDemoMode()) return pfEmptyMark();
+  return pct + '%';
+}
+
 function pfGetProjectMock(key) {
   return PF_MOCK_PROJECTS[key] || {
     start: '—', operatingUsd: 0, profitUsd: 0, recovery: 0,
@@ -144,6 +162,12 @@ function pfSerializeGoalState(state) {
   return JSON.stringify(state);
 }
 
+function pfGetLiveOperatingUsd(projectKey) {
+  if (typeof pdGetProjectOperatingUsd !== 'function') return 0;
+  let dateKey = typeof todayKey === 'function' ? todayKey() : '';
+  return pdGetProjectOperatingUsd(projectKey, dateKey);
+}
+
 function pfGetEnabledOperatingRows() {
   let list = typeof getEnabledHomeProjects === 'function'
     ? getEnabledHomeProjects()
@@ -153,7 +177,7 @@ function pfGetEnabledOperatingRows() {
     return {
       key: p.key,
       name: p.name,
-      operatingUsd: mock.operatingUsd
+      operatingUsd: pfIsDemoMode() ? mock.operatingUsd : pfGetLiveOperatingUsd(p.key)
     };
   });
 }
@@ -162,19 +186,32 @@ function pfGetEnabledProjectRows() {
   let list = typeof getEnabledHomeProjects === 'function'
     ? getEnabledHomeProjects()
     : [{ key: 'ram', name: 'RAM' }, { key: 'orca', name: 'ORCA' }, { key: 'cary', name: 'Cary Pact' }];
+  let cumulative = typeof pdSumAllTimeRevenue === 'function' ? pdSumAllTimeRevenue() : null;
+  let hasRevenueLog = cumulative && cumulative.total > 0;
   return list.map(function (p) {
     let mock = pfGetProjectMock(p.key);
+    let operatingUsd = pfIsDemoMode() ? mock.operatingUsd : pfGetLiveOperatingUsd(p.key);
+    let profitUsd = 0;
+    if (cumulative && cumulative.byProject[p.key] > 0) {
+      profitUsd = cumulative.byProject[p.key];
+    } else if (pfIsDemoMode()) {
+      profitUsd = mock.profitUsd;
+    }
+    let recovery = operatingUsd > 0
+      ? Math.round((profitUsd / operatingUsd) * 1000) / 10
+      : (pfIsDemoMode() ? mock.recovery : 0);
     return {
       key: p.key,
       name: p.name,
       start: typeof pmGetStartDate === 'function' ? pmGetStartDate(p.key) : mock.start,
-      operatingUsd: mock.operatingUsd,
-      operating: pfMoneyUsd(mock.operatingUsd),
-      profit: pfMoneyUsd(mock.profitUsd),
-      profitUsd: mock.profitUsd,
-      recovery: mock.recovery,
-      fill: pfRecoveryFillPct(mock.recovery),
-      recoveryDate: mock.recoveryDate,
+      operatingUsd: operatingUsd,
+      operating: pfDisplayUsd(operatingUsd, operatingUsd > 0),
+      profit: pfDisplayUsd(profitUsd, profitUsd > 0 || hasRevenueLog),
+      profitUsd: profitUsd,
+      recovery: recovery,
+      recoveryDisplay: pfDisplayPct(recovery, operatingUsd > 0 && profitUsd > 0),
+      fill: pfRecoveryFillPct(recovery),
+      recoveryDate: pfIsDemoMode() ? mock.recoveryDate : pfEmptyMark(),
       status: mock.status,
       statusCls: mock.statusCls
     };
@@ -194,11 +231,15 @@ function pfSumEnabledProfitUsd() {
 }
 
 function pfCalcCurrentValuationUsd() {
-  return pfGetAllPortfolioProjects().reduce(function (sum, p) {
-    let mock = pfGetProjectMock(p.key);
-    let rate = pfGetInclusionRate(p.key) / 100;
-    return sum + (mock.operatingUsd * rate) + mock.profitUsd;
-  }, 0);
+  if (pfIsDemoMode()) {
+    return pfGetAllPortfolioProjects().reduce(function (sum, p) {
+      let mock = pfGetProjectMock(p.key);
+      let rate = pfGetInclusionRate(p.key) / 100;
+      return sum + (mock.operatingUsd * rate) + mock.profitUsd;
+    }, 0);
+  }
+  let cumulative = typeof pdSumAllTimeRevenue === 'function' ? pdSumAllTimeRevenue() : null;
+  return cumulative ? cumulative.total : 0;
 }
 
 function pfCalcCurrentValuationYen() {
@@ -245,6 +286,13 @@ function pfSummaryIcon(type) {
   return '<span class="pfSummaryIcon pfSummaryIcon--' + type + '">' + (icons[type] || icons.chart) + '</span>';
 }
 
+function pfGetPerformanceSummary() {
+  if (typeof pdGetPortfolioSummary === 'function') {
+    return pdGetPortfolioSummary();
+  }
+  return null;
+}
+
 function pfRenderSummaryCards() {
   let el = document.getElementById('pfSummaryGrid');
   if (!el) return;
@@ -253,15 +301,43 @@ function pfRenderSummaryCards() {
 
   let operatingTotal = pfSumEnabledOperatingUsd();
   let profitTotal = pfSumEnabledProfitUsd();
-  let recoveryPct = operatingTotal > 0
+  let perf = pfGetPerformanceSummary();
+  let hasRevenueLog = perf && perf.hasRevenueLog;
+  if (hasRevenueLog && typeof pdSumAllTimeRevenue === 'function') {
+    let cumulative = pdSumAllTimeRevenue();
+    profitTotal = cumulative.total;
+  }
+  let hasOperating = operatingTotal > 0;
+  let hasProfit = profitTotal > 0;
+  let recoveryPct = hasOperating
     ? (Math.round((profitTotal / operatingTotal) * 1000) / 10)
     : 0;
-  let profitRatio = operatingTotal > 0
+  let profitRatio = hasOperating
     ? (Math.round((profitTotal / operatingTotal) * 1000) / 10) + '%'
     : '0%';
   let goal = pfCalcGoalProgress();
-  let monthly = PF_MOCK_SUMMARY_DATA.monthly;
-  let daily = PF_MOCK_SUMMARY_DATA.daily;
+
+  let monthly = { value: pfEmptyMark(), sub: '', trend: '' };
+  let daily = { value: pfEmptyMark(), sub: '', trend: '' };
+  if (pfIsDemoMode() && !hasRevenueLog) {
+    monthly = PF_MOCK_SUMMARY_DATA.monthly;
+    daily = PF_MOCK_SUMMARY_DATA.daily;
+  }
+  if (hasRevenueLog) {
+    let todayHasEntry = perf.viewingCurrentMonth && perf.dailyRevenue != null &&
+      typeof getRevenueEntry === 'function' && typeof todayKey === 'function' &&
+      !!getRevenueEntry(todayKey());
+    monthly = {
+      value: pfDisplayUsd(perf.monthlyRevenue, perf.monthlyRevenue > 0 || hasRevenueLog),
+      sub: perf.monthlyRevenue > 0 ? pfYenRef(perf.monthlyRevenue) : pfEmptyMark(),
+      trend: perf.monthlyRevenueTrend
+    };
+    daily = {
+      value: todayHasEntry ? pfMoneyUsd(perf.dailyRevenue || 0) : pfEmptyMark(),
+      sub: todayHasEntry && perf.dailyRevenue > 0 ? pfYenRef(perf.dailyRevenue) : pfEmptyMark(),
+      trend: perf.dailyRevenueTrend
+    };
+  }
 
   function cardHtml(opts) {
     let attrs = 'class="pfSummaryCard pfSummaryCard--' + opts.accent + (opts.clickable ? ' isClickable' : '') + '"';
@@ -285,17 +361,17 @@ function pfRenderSummaryCards() {
   el.innerHTML =
     cardHtml({
       accent: 'invest', icon: 'wallet', label: '運用額',
-      value: pfMoneyUsd(operatingTotal), sub: pfYenRef(operatingTotal),
+      value: pfDisplayUsd(operatingTotal, hasOperating), sub: hasOperating ? pfYenRef(operatingTotal) : pfEmptyMark(),
       clickable: true, click: 'pfOpenOperatingBreakdown()'
     }) +
     cardHtml({
       accent: 'profit', icon: 'coins', label: '総利益',
-      value: pfMoneyUsd(profitTotal), sub: pfYenRef(profitTotal),
-      trend: profitRatio, trendLabel: '運用額比', trendArrow: false
+      value: pfDisplayUsd(profitTotal, hasProfit || hasRevenueLog), sub: (hasProfit || hasRevenueLog) ? pfYenRef(profitTotal) : pfEmptyMark(),
+      trend: hasOperating ? profitRatio : pfEmptyMark(), trendLabel: '運用額比', trendArrow: false
     }) +
     cardHtml({
       accent: 'recovery', icon: 'chart', label: '回収率',
-      value: recoveryPct + '%', sub: '総利益 ÷ 運用額'
+      value: pfDisplayPct(recoveryPct, hasOperating && hasProfit), sub: '総利益 ÷ 運用額'
     }) +
     cardHtml({
       accent: 'monthly', icon: 'calendar', label: '月間収益',
@@ -336,10 +412,10 @@ function pfRenderProjectCard(row) {
     '<div class="pfProjectMetrics">' +
     '<div class="pfProjectMetric"><span class="pfProjectMetricLabel">運用額</span><span class="pfProjectMetricVal">' + row.operating + '</span></div>' +
     '<div class="pfProjectMetric"><span class="pfProjectMetricLabel">累計利益</span><span class="pfProjectMetricVal isProfit">' + row.profit + '</span></div>' +
-    '<div class="pfProjectMetric"><span class="pfProjectMetricLabel">回収率</span><span class="pfProjectMetricVal isRecovery">' + row.recovery + '%</span></div>' +
+    '<div class="pfProjectMetric"><span class="pfProjectMetricLabel">回収率</span><span class="pfProjectMetricVal isRecovery">' + (row.recoveryDisplay || row.recovery + '%') + '</span></div>' +
     '</div>' +
     '<div class="pfRecoveryBlock">' +
-    '<div class="pfRecoveryLabel"><span>回収率</span><b>' + row.recovery + '%</b></div>' +
+    '<div class="pfRecoveryLabel"><span>回収率</span><b>' + (row.recoveryDisplay || row.recovery + '%') + '</b></div>' +
     '<div class="pfRecoveryTrack"><div class="pfRecoveryFill" style="width:' + row.fill + '%"></div><i class="pfRecoveryMark"></i></div>' +
     '<div class="pfRecoveryScale"><span>0%</span><span>100%</span><span>200%</span></div></div>' +
     '<div class="pfRecoveryDateRow"><span>回収予定日</span><b>' + pfEscape(row.recoveryDate) + '</b></div>' +
@@ -364,6 +440,12 @@ function pfOpenOperatingBreakdown() {
   if (typeof modalTitle === 'undefined' || typeof modalContent === 'undefined' || typeof modalBg === 'undefined') return;
   let rows = pfGetEnabledOperatingRows();
   let total = rows.reduce(function (sum, row) { return sum + row.operatingUsd; }, 0);
+  if (!pfIsDemoMode() && total <= 0) {
+    modalTitle.textContent = '運用額の内訳';
+    modalContent.innerHTML = '<div class="lineBox"><p class="help">' + pfEmptyMark() + ' 運用額はまだ入力されていません。</p></div>';
+    modalBg.style.display = 'flex';
+    return;
+  }
   let body = rows.map(function (row) {
     return '<div class="pfBreakdownBlock">' +
       '<div class="pfBreakdownName">' + pfEscape(row.name) + '</div>' +
@@ -490,13 +572,19 @@ function pfRenderAllocation() {
   let el = document.getElementById('pfAllocationChart');
   if (!el) return;
   let operatingTotal = pfSumEnabledOperatingUsd();
+  let alloc = pfIsDemoMode() ? PF_MOCK_ALLOC : [];
+  if (!pfIsDemoMode() && operatingTotal <= 0) {
+    el.innerHTML = '<div class="pfAllocLayout pfAllocLayout--empty"><p class="pfEmptyHint">' + pfEmptyMark() + ' 運用額未入力</p></div>';
+    return;
+  }
+  if (!alloc.length) alloc = PF_MOCK_ALLOC;
   let acc = 0;
-  let gradient = PF_MOCK_ALLOC.map(function (row) {
+  let gradient = alloc.map(function (row) {
     let start = acc;
     acc += row.pct;
     return row.color + ' ' + start.toFixed(2) + '% ' + acc.toFixed(2) + '%';
   }).join(', ');
-  let legend = PF_MOCK_ALLOC.map(function (row) {
+  let legend = alloc.map(function (row) {
     return '<div class="pfLegendRow">' +
       '<span class="pfLegendDot" style="background:' + row.color + '"></span>' +
       '<span class="pfLegendName">' + pfEscape(row.name) + '</span>' +
@@ -508,18 +596,35 @@ function pfRenderAllocation() {
     '<div class="pfDonutWrap">' +
     '<div class="pfDonut" style="background:conic-gradient(from -90deg,' + gradient + ')">' +
     '<div class="pfDonutHole"></div></div>' +
-    '<div class="pfDonutCenter"><span>運用額</span><b>' + pfMoneyUsd(operatingTotal) + '</b><small>(' + pfYenRef(operatingTotal) + ')</small></div></div>' +
+    '<div class="pfDonutCenter"><span>運用額</span><b>' + pfDisplayUsd(operatingTotal, operatingTotal > 0) + '</b><small>(' + (operatingTotal > 0 ? pfYenRef(operatingTotal) : pfEmptyMark()) + ')</small></div></div>' +
     '<div class="pfLegendList">' + legend + '</div></div>';
 }
 
 function pfRenderStackedBars() {
   let el = document.getElementById('pfMonthlyChart');
   if (!el) return;
-  let maxTotal = Math.max.apply(null, PF_MOCK_STACKED.map(function (m) { return m.total; }));
+
+  let view = typeof hubGetViewMonth === 'function' ? hubGetViewMonth() : null;
+  let ref = view || (typeof getHomeReferenceDate === 'function' ? getHomeReferenceDate() : new Date());
+  let endY = view ? view.y : ref.getFullYear();
+  let endM = view ? view.m : ref.getMonth();
+  let stacked = typeof pdGetStackedMonthlyRevenue === 'function'
+    ? pdGetStackedMonthlyRevenue(endY, endM, 6)
+    : [];
+  let hasLog = stacked.some(function (m) { return m.hasLog; });
+  if (!hasLog && !pfIsDemoMode()) {
+    el.innerHTML = '<div class="pfStackEmpty"><p class="pfEmptyHint">' + pfEmptyMark() + ' 実績データなし</p></div>';
+    return;
+  }
+  if (!hasLog && pfIsDemoMode()) {
+    stacked = PF_MOCK_STACKED;
+  }
+
+  let maxTotal = Math.max.apply(null, stacked.map(function (m) { return m.total; }).concat([1]));
   let axisMax = typeof niceChartAxisMax === 'function' ? niceChartAxisMax(maxTotal) : maxTotal * 1.1;
   let chartH = 168;
 
-  let cols = PF_MOCK_STACKED.map(function (month) {
+  let cols = stacked.map(function (month) {
     let segments = [];
     PF_STACK_ORDER.forEach(function (key) {
       let val = month[key] || 0;
@@ -562,6 +667,8 @@ function pfSyncMainTabs(active) {
 
 function renderPortfolio() {
   if (typeof portfolioPage !== 'undefined' && portfolioPage.classList.contains('hidden')) return;
+  if (typeof hubEnsureViewMonth === 'function') hubEnsureViewMonth();
+  if (typeof hubUpdateMonthLabels === 'function') hubUpdateMonthLabels();
   pfSyncMainTabs('portfolio');
   pfEnsurePortfolioGoalSettings();
   pfRenderSummaryCards();

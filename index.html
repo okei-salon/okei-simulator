@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>OUKEI HUB Ver1.8.7</title>
+<title>OUKEI HUB Ver1.9.5</title>
 <link rel="manifest" href="site.webmanifest?v=20260628-pwa1">
 <link rel="icon" type="image/png" sizes="32x32" href="assets/brand/favicon-32.png?v=20260628-pwa1">
 <link rel="apple-touch-icon" sizes="180x180" href="assets/brand/apple-touch-icon.png?v=20260628-pwa1">
@@ -189,15 +189,16 @@ body.simulationMode .simBanner{display:block}
 <link rel="stylesheet" href="assets/css/home.css?v=20260626-pf181">
 <link rel="stylesheet" href="assets/css/portfolio-ui.css?v=20260626-pf186">
 <link rel="stylesheet" href="assets/css/settings-ui.css?v=20260626-pf181">
-<link rel="stylesheet" href="assets/css/revenue-manage.css?v=20260626-pf191">
-<script src="assets/js/home.js?v=20260626-pf181"></script>
-<script src="assets/js/home-demo.js?v=20260626-pf181"></script>
-<script src="assets/js/portfolio.js?v=20260626-pf181"></script>
-<script src="assets/js/project-master.js?v=20260626-pf181"></script>
-<script src="assets/js/settings-ui.js?v=20260626-pf181"></script>
-<script src="assets/js/manage-entry-ui.js?v=20260626-pf191"></script>
-<script src="assets/js/revenue-manage.js?v=20260626-pf191"></script>
-<script src="assets/js/sales-manage.js?v=20260626-pf191"></script>
+<link rel="stylesheet" href="assets/css/revenue-manage.css?v=20260626-pd195b">
+<script src="assets/js/home.js?v=20260626-pd195b"></script>
+<script src="assets/js/home-demo.js?v=20260626-pd195b"></script>
+<script src="assets/js/performance-data.js?v=20260626-pd195b"></script>
+<script src="assets/js/portfolio.js?v=20260626-pd195b"></script>
+<script src="assets/js/project-master.js?v=20260626-pd195b"></script>
+<script src="assets/js/settings-ui.js?v=20260626-pd195b"></script>
+<script src="assets/js/manage-entry-ui.js?v=20260626-pd195b"></script>
+<script src="assets/js/revenue-manage.js?v=20260626-pd195b"></script>
+<script src="assets/js/sales-manage.js?v=20260626-pd195b"></script>
 <script src="assets/js/ochan-lines.js?v=20260628-dict-v3"></script>
 <script src="assets/js/ochan-engine.js?v=20260628-dict-v3"></script>
 </head>
@@ -301,10 +302,17 @@ body.simulationMode .simBanner{display:block}
 <section id="portfolioPage" class="hidden portfolioPage">
 <div class="pfShell">
 <div class="pfHead">
+<div class="pfHeadTop">
 <div class="pfMainTabs" role="tablist" aria-label="画面切替">
 <button type="button" class="pfMainTab isActive" data-pf-main-tab="portfolio" role="tab" aria-selected="true" onclick="showPage('portfolio')">ポートフォリオ</button>
 <button type="button" class="pfMainTab" data-pf-main-tab="revenueManage" role="tab" aria-selected="false" onclick="showPage('revenueManage')">収益管理</button>
 <button type="button" class="pfMainTab" data-pf-main-tab="salesManage" role="tab" aria-selected="false" onclick="showPage('salesManage')">売上管理</button>
+</div>
+<div class="rmMonthNav pfMonthNav">
+<button type="button" class="rmMonthNavBtn" onclick="hubPrevMonth()" aria-label="前の月">◀</button>
+<span class="rmMonthLabel" id="pfMonthLabel">2026年6月</span>
+<button type="button" class="rmMonthNavBtn" onclick="hubNextMonth()" aria-label="次の月">▶</button>
+</div>
 </div>
 <p class="pfSubtitle">あなたの資産全体を一元管理</p>
 </div>
@@ -340,9 +348,9 @@ body.simulationMode .simBanner{display:block}
 </div>
 <div class="rmTopBarRight">
 <div class="rmMonthNav">
-<button type="button" class="rmMonthNavBtn" onclick="rmPrevMonth()" aria-label="前の月">◀</button>
+<button type="button" class="rmMonthNavBtn" onclick="hubPrevMonth()" aria-label="前の月">◀</button>
 <span class="rmMonthLabel" id="rmMonthLabel">2026年6月</span>
-<button type="button" class="rmMonthNavBtn" onclick="rmNextMonth()" aria-label="次の月">▶</button>
+<button type="button" class="rmMonthNavBtn" onclick="hubNextMonth()" aria-label="次の月">▶</button>
 </div>
 <button type="button" class="rmIconBtn" aria-label="カレンダー"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M8 2v4M16 2v4M3 10h18"/></svg></button>
 <span class="rmUpdated" id="rmLastUpdate">最終更新：—</span>
@@ -394,9 +402,9 @@ body.simulationMode .simBanner{display:block}
 </div>
 <div class="rmTopBarRight">
 <div class="rmMonthNav">
-<button type="button" class="rmMonthNavBtn" onclick="smPrevMonth()" aria-label="前の月">◀</button>
+<button type="button" class="rmMonthNavBtn" onclick="hubPrevMonth()" aria-label="前の月">◀</button>
 <span class="rmMonthLabel" id="smMonthLabel">2026年6月</span>
-<button type="button" class="rmMonthNavBtn" onclick="smNextMonth()" aria-label="次の月">▶</button>
+<button type="button" class="rmMonthNavBtn" onclick="hubNextMonth()" aria-label="次の月">▶</button>
 </div>
 <button type="button" class="rmIconBtn" aria-label="カレンダー"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M8 2v4M16 2v4M3 10h18"/></svg></button>
 <span class="rmUpdated" id="smLastUpdate">最終更新：—</span>
@@ -951,7 +959,7 @@ function initPinchZoom(){const vp=document.getElementById('viewport');if(vp){vp.
  },{passive:false});
 }
 
-(function(){initPinchZoom();try{let s=JSON.parse(localStorage.getItem('oukei_hub_v15_data')||localStorage.getItem('okei_v14_data')||'null');if(s){members=s.members||members;currentData=s.currentData||currentData;settings={...settings,...(s.settings||{})};scenarios=s.scenarios||[];rootId=s.rootId||rootId;rootAccountIds=s.rootAccountIds||rootAccountIds||[]}}catch(e){}if(!settings.revenueLog||typeof settings.revenueLog!=='object')settings.revenueLog={};if(typeof pfEnsureManageDisplayAccounts==='function')pfEnsureManageDisplayAccounts();settings.lastLogin=new Date().toLocaleString();if(typeof pmEnsureProjectMaster==='function')pmEnsureProjectMaster();if(typeof pmEnsureFxSettings==='function')pmEnsureFxSettings();if(typeof initHomeDemo==='function')initHomeDemo();render();showPage('home')})();
+(function(){initPinchZoom();try{let s=JSON.parse(localStorage.getItem('oukei_hub_v15_data')||localStorage.getItem('okei_v14_data')||'null');if(s){members=s.members||members;currentData=s.currentData||currentData;settings={...settings,...(s.settings||{})};scenarios=s.scenarios||[];rootId=s.rootId||rootId;rootAccountIds=s.rootAccountIds||rootAccountIds||[]}}catch(e){}if(!settings.revenueLog||typeof settings.revenueLog!=='object')settings.revenueLog={};if(typeof ensurePerformanceLogs==='function')ensurePerformanceLogs();if(typeof pfEnsureManageDisplayAccounts==='function')pfEnsureManageDisplayAccounts();settings.lastLogin=new Date().toLocaleString();if(typeof pmEnsureProjectMaster==='function')pmEnsureProjectMaster();if(typeof pmEnsureFxSettings==='function')pmEnsureFxSettings();if(typeof initHomeDemo==='function')initHomeDemo();render();showPage('home')})();
 </script>
 <nav class="mobileBottomNav" id="mobileBottomNav" aria-label="メインナビゲーション">
 <button type="button" class="mobileNavItem isActive" data-nav="home" onclick="showPage('home')"><svg viewBox="0 0 24 24"><path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1v-9.5Z"/></svg><span>ホーム</span></button>

@@ -1,4 +1,4 @@
-/* OUKEI HUB Revenue Management — Ver1.8.7 */
+/* OUKEI HUB Revenue Management — Ver1.9.5 */
 
 var rmView = { y: new Date().getFullYear(), m: new Date().getMonth() };
 var rmFilter = 'all';
@@ -8,13 +8,12 @@ var rmDailyTableBound = false;
 var RM_ACCOUNT_DETAIL_DEFS = {
   ram: [
     { key: 'operation', label: '運用' },
-    { key: 'title', label: 'タイトル' },
-    { key: 'total', label: '合計', isSubTotal: true }
+    { key: 'todayRevenue', label: '本日収益' }
   ],
   orca: [
-    { key: 'ai', label: 'AI運用' },
-    { key: 'affiliate', label: 'アフィリエイト' },
-    { key: 'total', label: '合計', isSubTotal: true }
+    { key: 'yesterdayAiProfit', label: '昨日AI利益' },
+    { key: 'todayAffiliateProfit', label: '本日AF収益' },
+    { key: 'total', label: '合計' }
   ]
 };
 
@@ -129,80 +128,237 @@ function rmGetLiveRamAccountTree() {
   return out;
 }
 
+function rmEmptyMark() {
+  return typeof pdEmptyMark === 'function' ? pdEmptyMark() : '−';
+}
+
+function rmIsDemoMode() {
+  return typeof pdIsDemoMode === 'function' && pdIsDemoMode();
+}
+
+function rmFormatStatAmount(amount, label) {
+  if (!amount && (!label || label === '—')) return rmEmptyMark();
+  return rmMoney(amount);
+}
+
 function rmGetProjectAccountRows(projectKey) {
-  let accounts = [];
-  let isDemoSource = false;
+  let live = [];
+  let demo = [];
   if (projectKey === 'ram') {
-    let live = rmGetLiveRamAccountTree();
-    if (live.length) {
-      accounts = live;
-    } else if (RM_DEMO_ACCOUNT_TREE.ram) {
-      accounts = RM_DEMO_ACCOUNT_TREE.ram.slice();
-      isDemoSource = true;
-    }
+    live = rmGetLiveRamAccountTree();
+    if (RM_DEMO_ACCOUNT_TREE.ram) demo = RM_DEMO_ACCOUNT_TREE.ram.slice();
   } else if (projectKey === 'orca') {
     if (typeof getOrcaInputAccounts === 'function') {
-      let live = getOrcaInputAccounts();
-      if (live.length) {
-        accounts = live.map(function (acc) {
-          return { id: acc.id, name: acc.username, parentId: null, depth: 0 };
-        });
-      }
+      live = getOrcaInputAccounts().map(function (acc) {
+        return { id: acc.id, name: acc.username, parentId: null, depth: 0 };
+      });
     }
-    if (!accounts.length && RM_DEMO_ACCOUNT_TREE.orca) {
-      accounts = RM_DEMO_ACCOUNT_TREE.orca.slice();
-      isDemoSource = true;
-    }
+    if (RM_DEMO_ACCOUNT_TREE.orca) demo = RM_DEMO_ACCOUNT_TREE.orca.slice();
   } else if (projectKey === 'cary') {
     if (typeof getCaryInputAccounts === 'function') {
-      let live = getCaryInputAccounts();
-      if (live.length) {
-        accounts = live.map(function (acc) {
-          return { id: acc.id, name: acc.username, parentId: null, depth: 0 };
-        });
-      }
+      live = getCaryInputAccounts().map(function (acc) {
+        return { id: acc.id, name: acc.username, parentId: null, depth: 0 };
+      });
     }
-    if (!accounts.length && RM_DEMO_ACCOUNT_TREE.cary) {
-      accounts = RM_DEMO_ACCOUNT_TREE.cary.slice();
-      isDemoSource = true;
-    }
+    if (RM_DEMO_ACCOUNT_TREE.cary) demo = RM_DEMO_ACCOUNT_TREE.cary.slice();
   } else if (projectKey === 'genesis' || projectKey === 'other') {
-    if (RM_DEMO_ACCOUNT_TREE[projectKey]) {
-      accounts = RM_DEMO_ACCOUNT_TREE[projectKey].slice();
-      isDemoSource = true;
-    }
+    if (RM_DEMO_ACCOUNT_TREE[projectKey]) demo = RM_DEMO_ACCOUNT_TREE[projectKey].slice();
   }
-  accounts = pfFilterManageAccounts(projectKey, accounts, { useDemoBypass: isDemoSource });
+  if (typeof pfResolveManageAccounts === 'function') {
+    return pfResolveManageAccounts(projectKey, live, demo);
+  }
+  let accounts = live.length ? live : (rmIsDemoMode() ? demo : []);
+  accounts = pfFilterManageAccounts(projectKey, accounts, { useDemoBypass: rmIsDemoMode() && !live.length });
   accounts = pfApplyManageAccountLabels(projectKey, accounts);
   return pfAnnotateAccountSeries(accounts);
 }
 
+function rmCalcRamOperationAmount(accountId, ae, dateKey) {
+  if (typeof pdCalcDailyOperation === 'function' && dateKey) {
+    return pdCalcDailyOperation(accountId, 'ram', dateKey);
+  }
+  if (ae && ae.operationRevenue != null && ae.operationRevenue !== '') {
+    return Number(ae.operationRevenue) || 0;
+  }
+  if (typeof members === 'undefined' || typeof calcRamOperatingProfit !== 'function') return null;
+  let m = members.find(function (x) { return x.id === accountId; });
+  if (!m) return null;
+  let inv = typeof pdGetOperatingUsdAsOf === 'function' && dateKey
+    ? pdGetOperatingUsdAsOf(accountId, 'ram', dateKey)
+    : (typeof calcRamEffectiveInvestment === 'function'
+      ? calcRamEffectiveInvestment(m.investment, ae ? ae.addInvestment : 0)
+      : (Number(m.investment) || 0));
+  return calcRamOperatingProfit(inv);
+}
+
+function rmReadStoredEntryValues(projectKey, accountId, dateKey) {
+  let op = null;
+  let rev = null;
+  let entry = typeof pdGetRevenueEntryRaw === 'function' ? pdGetRevenueEntryRaw(dateKey) : null;
+  if (!entry) {
+    if (projectKey === 'ram') op = rmCalcRamOperationAmount(accountId, null, dateKey);
+    return { operationRevenue: op, todayRevenue: rev };
+  }
+  if (projectKey === 'ram' && entry.ramAccounts && entry.ramAccounts[accountId]) {
+    let ae = entry.ramAccounts[accountId];
+    if (ae.todayRevenue != null) rev = Number(ae.todayRevenue) || 0;
+    op = rmCalcRamOperationAmount(accountId, ae, dateKey);
+  } else if (projectKey === 'orca' && entry.orcaAccounts && entry.orcaAccounts[accountId]) {
+    let ae = entry.orcaAccounts[accountId];
+    if (ae.yesterdayAiProfit != null || ae.todayAffiliateProfit != null) {
+      return {
+        yesterdayAiProfit: Number(ae.yesterdayAiProfit) || 0,
+        todayAffiliateProfit: Number(ae.todayAffiliateProfit) || 0,
+        total: typeof calcOrcaAccountTotal === 'function'
+          ? calcOrcaAccountTotal(ae)
+          : (Number(ae.yesterdayAiProfit) || 0) + (Number(ae.todayAffiliateProfit) || 0)
+      };
+    }
+    if (ae.todayRevenue != null) {
+      return { yesterdayAiProfit: null, todayAffiliateProfit: null, total: Number(ae.todayRevenue) || 0 };
+    }
+  } else if (entry.accounts && entry.accounts[accountId]) {
+    let ae = entry.accounts[accountId];
+    if (!ae.projectKey || ae.projectKey === projectKey) {
+      if (ae.todayRevenue != null) rev = Number(ae.todayRevenue) || 0;
+      if (ae.operationRevenue != null) op = Number(ae.operationRevenue) || 0;
+    }
+  }
+  return { operationRevenue: op, todayRevenue: rev };
+}
+
 function rmOpenRevenueEntryModal(projectKey, accountId, accountName, dateKey, amount) {
   pfRegisterManageDisplayFromEntry(projectKey, accountId);
-  let projLabel = pfGetProjectLabel(projectKey, RM_PROJECTS);
   let dateVal = dateKey || pfFormatIsoDate(rmView.y, rmView.m, 1);
-  let total = Number(amount) || 0;
-  let demoOp = total ? Math.round(total * 0.94 * 100) / 100 : (projectKey === 'orca' ? 95 : 120);
-  let demoRev = total || (projectKey === 'orca' ? 103 : 128);
+  if (projectKey === 'orca') {
+    rmOpenOrcaRevenueEntryModal(accountId, accountName, dateVal);
+    return;
+  }
+  let projLabel = pfGetProjectLabel(projectKey, RM_PROJECTS);
+  let stored = rmReadStoredEntryValues(projectKey, accountId, dateVal);
+  let opVal = stored.operationRevenue != null ? stored.operationRevenue : '';
+  let revVal = stored.todayRevenue != null ? stored.todayRevenue : (amount || '');
+  if (rmIsDemoMode() && revVal === '' && !stored.todayRevenue) {
+    revVal = 128;
+    if (opVal === '') opVal = 120;
+  }
   let body =
     '<input type="hidden" id="rmEntryProjectKey" value="' + pfEscapeAttr(projectKey) + '">' +
     '<input type="hidden" id="rmEntryAccountId" value="' + pfEscapeAttr(accountId) + '">' +
     pfEntryDateField('日付', 'rmEntryDate', dateVal) +
     pfEntryReadonlyField('プロジェクト', projLabel) +
     pfEntryReadonlyField('アカウント', accountName || accountId) +
-    pfEntryNumberField('運用（$）', 'rmEntryOperation', demoOp) +
-    pfEntryNumberField('本日収益（$）', 'rmEntryRevenue', demoRev,
-      '紹介報酬（1段・2段）およびタイトル報酬を含みます。');
-  pfOpenEntryModal('実績入力', body, 'rmSaveRevenueEntryDummy');
+    pfEntryNumberField('運用（$）', 'rmEntryOperation', opVal,
+      '投資額 × 日利で算出される本日の運用配当です。') +
+    pfEntryNumberField('本日収益（$）', 'rmEntryRevenue', revVal,
+      '実績入力した本日収益をそのまま記録します。');
+  pfOpenEntryModal('実績入力', body, 'rmSaveRevenueEntry');
+}
+
+function rmOpenOrcaRevenueEntryModal(accountId, accountName, dateVal) {
+  let stored = rmReadStoredEntryValues('orca', accountId, dateVal);
+  let yesterdayVal = stored.yesterdayAiProfit != null ? stored.yesterdayAiProfit : '';
+  let affVal = stored.todayAffiliateProfit != null ? stored.todayAffiliateProfit : '';
+  let totalVal = stored.total != null
+    ? stored.total
+    : (typeof calcOrcaAccountTotal === 'function'
+      ? calcOrcaAccountTotal({ yesterdayAiProfit: yesterdayVal, todayAffiliateProfit: affVal })
+      : 0);
+  let body =
+    '<input type="hidden" id="rmEntryProjectKey" value="orca">' +
+    '<input type="hidden" id="rmEntryAccountId" value="' + pfEscapeAttr(accountId) + '">' +
+    pfEntryDateField('日付', 'rmEntryDate', dateVal) +
+    pfEntryReadonlyField('プロジェクト', 'ORCA') +
+    pfEntryReadonlyField('アカウント', accountName || accountId) +
+    pfEntryNumberField('昨日AI利益（$）', 'rmEntryYesterdayAi', yesterdayVal,
+      '実績入力した昨日AI利益をそのまま記録します。') +
+    pfEntryNumberField('本日AF収益（$）', 'rmEntryTodayAff', affVal,
+      '実績入力した本日AF収益をそのまま記録します。') +
+    '<label class="pfEntryLabel">本日のORCA合計（$）</label>' +
+    '<input type="text" id="rmEntryOrcaTotal" class="pfEntryInput pfEntryInput--readonly" value="' +
+    String(typeof money === 'function' ? money(totalVal) : ('$' + totalVal)).replace(/"/g, '&quot;') +
+    '" readonly>';
+  pfOpenEntryModal('実績入力', body, 'rmSaveOrcaRevenueEntry');
+  ['rmEntryYesterdayAi', 'rmEntryTodayAff'].forEach(function (id) {
+    let el = document.getElementById(id);
+    if (el) {
+      el.addEventListener('input', rmUpdateOrcaEntryModalTotal);
+    }
+  });
+}
+
+function rmUpdateOrcaEntryModalTotal() {
+  let yesterdayEl = document.getElementById('rmEntryYesterdayAi');
+  let affEl = document.getElementById('rmEntryTodayAff');
+  let totalEl = document.getElementById('rmEntryOrcaTotal');
+  let total = typeof calcOrcaAccountTotal === 'function'
+    ? calcOrcaAccountTotal({
+      yesterdayAiProfit: yesterdayEl && yesterdayEl.value !== '' ? Number(yesterdayEl.value) || 0 : 0,
+      todayAffiliateProfit: affEl && affEl.value !== '' ? Number(affEl.value) || 0 : 0
+    })
+    : 0;
+  if (totalEl) {
+    totalEl.value = typeof money === 'function' ? money(total) : ('$' + total);
+  }
+}
+
+function rmSaveOrcaRevenueEntry() {
+  let dateEl = document.getElementById('rmEntryDate');
+  let accountIdEl = document.getElementById('rmEntryAccountId');
+  let yesterdayEl = document.getElementById('rmEntryYesterdayAi');
+  let affEl = document.getElementById('rmEntryTodayAff');
+  if (!accountIdEl) return;
+
+  let accountId = accountIdEl.value;
+  let dateKey = dateEl && dateEl.value
+    ? dateEl.value
+    : (typeof todayKey === 'function' ? todayKey() : '');
+
+  pfRegisterManageDisplayFromEntry('orca', accountId);
+
+  if (typeof pdSaveRevenueAccountEntry === 'function') {
+    pdSaveRevenueAccountEntry(dateKey, 'orca', accountId, {
+      yesterdayAiProfit: Number(yesterdayEl && yesterdayEl.value) || 0,
+      todayAffiliateProfit: Number(affEl && affEl.value) || 0
+    });
+  }
+
+  pfCloseEntryModal();
+  if (typeof showToast === 'function') {
+    showToast('✅ 実績を保存しました');
+  }
+}
+
+function rmSaveRevenueEntry() {
+  let dateEl = document.getElementById('rmEntryDate');
+  let projectKeyEl = document.getElementById('rmEntryProjectKey');
+  let accountIdEl = document.getElementById('rmEntryAccountId');
+  let opEl = document.getElementById('rmEntryOperation');
+  let revEl = document.getElementById('rmEntryRevenue');
+  if (!projectKeyEl || !accountIdEl) return;
+
+  let projectKey = projectKeyEl.value;
+  let accountId = accountIdEl.value;
+  let dateKey = dateEl && dateEl.value
+    ? dateEl.value
+    : (typeof todayKey === 'function' ? todayKey() : '');
+
+  pfRegisterManageDisplayFromEntry(projectKey, accountId);
+
+  if (typeof pdSaveRevenueAccountEntry === 'function') {
+    pdSaveRevenueAccountEntry(dateKey, projectKey, accountId, {
+      todayRevenue: Number(revEl && revEl.value) || 0
+    });
+  }
+
+  pfCloseEntryModal();
+  if (typeof showToast === 'function') {
+    showToast('✅ 実績を保存しました');
+  }
 }
 
 function rmSaveRevenueEntryDummy() {
-  let accountId = document.getElementById('rmEntryAccountId');
-  let projectKey = document.getElementById('rmEntryProjectKey');
-  if (projectKey && accountId) {
-    pfRegisterManageDisplayFromEntry(projectKey.value, accountId.value);
-  }
-  pfEntrySaveDummy('保存は次回バージョンで実装予定です');
+  rmSaveRevenueEntry();
 }
 
 function rmExpandAnchorSeries(anchors, daysInMonth) {
@@ -283,32 +439,38 @@ function rmAccountDemoSeed(accountId) {
 
 function rmGetDemoRamBreakdown(accountId, d) {
   let seed = rmAccountDemoSeed(accountId);
-  let operation = 115 + (seed % 4) * 5;
-  let title = 6 + (seed % 3) + ((d % 5) + Math.floor(d / 7)) % 4;
-  if (d % 11 === 0) title += 1;
-  if (d % 13 === 0) title -= 1;
-  title = Math.max(5, title);
-  return { operation: operation, title: title, total: operation + title };
+  let operation = 1.2 + (seed % 4) * 0.3;
+  let todayRevenue = 90 + (seed % 5) * 8 + ((d % 5) + Math.floor(d / 7)) % 4;
+  return { operation: Math.round(operation * 100) / 100, todayRevenue: todayRevenue };
 }
 
 function rmGetDemoOrcaBreakdown(accountId, d) {
   let seed = rmAccountDemoSeed(accountId);
-  let ai = 88 + (seed % 6) * 4 + Math.round(Math.sin((d + seed) * 0.7) * 7) + (d % 4) * 2;
-  let affiliate = 5 + (seed % 4) + (d % 7) + (d % 3 === 0 ? 2 : 0);
-  ai = Math.max(75, ai);
-  affiliate = Math.max(3, affiliate);
-  return { ai: ai, affiliate: affiliate, total: ai + affiliate };
+  let yesterdayAiProfit = Math.round((7 + (seed % 4) * 0.55 + (d % 3) * 0.12) * 100) / 100;
+  let todayAffiliateProfit = Math.round((2 + (seed % 5) * 0.28 + (d % 4) * 0.08) * 100) / 100;
+  let total = Math.round((yesterdayAiProfit + todayAffiliateProfit) * 100) / 100;
+  return { yesterdayAiProfit: yesterdayAiProfit, todayAffiliateProfit: todayAffiliateProfit, total: total };
 }
 
 function rmGetDemoAccountBreakdown(projectKey, accountId, d) {
   if (projectKey === 'ram') return rmGetDemoRamBreakdown(accountId, d);
   if (projectKey === 'orca') return rmGetDemoOrcaBreakdown(accountId, d);
-  return { total: 0 };
+  return { operation: null, todayRevenue: null, yesterdayAiProfit: null, todayAffiliateProfit: null, total: null };
+}
+
+function rmGetDemoAccountTotal(projectKey, accountId, d) {
+  let bd = rmGetDemoAccountBreakdown(projectKey, accountId, d);
+  if (projectKey === 'orca') {
+    if (bd.total == null) return null;
+    return bd.total;
+  }
+  if (bd.operation == null && bd.todayRevenue == null) return null;
+  return Math.round(((Number(bd.operation) || 0) + (Number(bd.todayRevenue) || 0)) * 100) / 100;
 }
 
 function rmGetDemoAccountDayAmount(projectKey, accountId, d, daysInMonth) {
   if (projectKey === 'ram' || projectKey === 'orca') {
-    return rmGetDemoAccountBreakdown(projectKey, accountId, d).total;
+    return rmGetDemoAccountTotal(projectKey, accountId, d);
   }
   let accounts = rmGetDemoAccountsForProject(projectKey);
   if (!accounts.length && RM_DEMO_ACCOUNT_TREE[projectKey]) {
@@ -345,22 +507,42 @@ function rmGetDemoRowDayAmount(row, y, m, d) {
   return rmGetDemoProjectDayAmount(row.key, d, daysInMonth);
 }
 
+function rmGetPerformanceEntry(y, m, d) {
+  if (typeof revenueDateKey !== 'function') return null;
+  let key = revenueDateKey(y, m, d);
+  if (typeof pdGetRevenueEntryRaw === 'function') {
+    let raw = pdGetRevenueEntryRaw(key);
+    if (raw) return raw;
+  }
+  if (typeof getRevenueEntry === 'function') return getRevenueEntry(key);
+  return null;
+}
+
 function rmGetRowDayAmountFromLog(row, y, m, d) {
-  if (typeof getRevenueEntry !== 'function' || typeof revenueDateKey !== 'function') return 0;
-  let entry = getRevenueEntry(revenueDateKey(y, m, d));
+  if (typeof revenueDateKey !== 'function') return null;
+  let dateKey = revenueDateKey(y, m, d);
+  let entry = rmGetPerformanceEntry(y, m, d);
+  if (!entry) return null;
 
   if (row.isTotal) {
-    if (rmFilter === 'all') return entry ? (Number(entry.total) || 0) : 0;
-    let accounts = rmGetAccountsForProject(rmFilter);
-    return accounts.reduce(function (sum, acc) {
-      return sum + rmGetAccountDayAmount(entry, rmFilter, acc, accounts);
-    }, 0);
+    if (rmFilter === 'all') return Number(entry.total) || 0;
+    let accounts = rmGetProjectAccountRows(rmFilter);
+    let sum = 0;
+    let hasAny = false;
+    accounts.forEach(function (acc) {
+      let v = rmGetAccountDayAmount(entry, rmFilter, acc, accounts, dateKey);
+      if (v !== null && v !== undefined) {
+        hasAny = true;
+        sum += v;
+      }
+    });
+    return hasAny ? Math.round(sum * 100) / 100 : null;
   }
 
   if (row.isAccount || row.isProject) {
     if (row.isProject) return rmGetProjectDayAmount(entry, row.key);
-    let accounts = rmGetAccountsForProject(row.projectKey);
-    return rmGetAccountDayAmount(entry, row.projectKey, { id: row.key, username: row.name }, accounts);
+    let accounts = rmGetProjectAccountRows(row.projectKey);
+    return rmGetAccountDayAmount(entry, row.projectKey, { id: row.key, name: row.name }, accounts, dateKey);
   }
 
   return rmGetProjectDayAmount(entry, row.key);
@@ -423,19 +605,33 @@ function rmGetProjectDayAmount(entry, projectKey) {
   return Math.round((Number(entry[projectKey]) || 0) * 100) / 100;
 }
 
-function rmGetAccountDirectAmount(entry, projectKey, accountId) {
+function rmGetAccountDirectAmount(entry, projectKey, accountId, dateKey) {
   if (!entry) return null;
   if (projectKey === 'ram' && typeof getRamAccountEntry === 'function') {
     let ae = getRamAccountEntry(entry, accountId);
-    return ae ? ae.todayRevenue : null;
+    if (!ae) return null;
+    if (typeof pdRamAccountRevenueTotal === 'function' && dateKey) {
+      return pdRamAccountRevenueTotal(ae, accountId, dateKey);
+    }
+    let op = typeof pdCalcDailyOperation === 'function' && dateKey
+      ? pdCalcDailyOperation(accountId, 'ram', dateKey) : 0;
+    return Math.round((op + ae.todayRevenue) * 100) / 100;
   }
   if (projectKey === 'orca' && typeof getOrcaAccountEntry === 'function') {
     let ae = getOrcaAccountEntry(entry, accountId);
-    return ae && typeof calcOrcaAccountTotal === 'function' ? calcOrcaAccountTotal(ae) : null;
+    if (!ae) return null;
+    if (typeof calcOrcaAccountTotal === 'function') return calcOrcaAccountTotal(ae);
+    if (typeof pdOrcaAccountRevenueTotal === 'function') return pdOrcaAccountRevenueTotal(ae);
+    return null;
   }
   if (projectKey === 'cary' && typeof getCaryAccountEntry === 'function') {
     let ae = getCaryAccountEntry(entry, accountId);
     return ae ? ae.todayReward : null;
+  }
+  if (entry.accounts && entry.accounts[accountId]) {
+    let ae = entry.accounts[accountId];
+    if (ae.projectKey && ae.projectKey !== projectKey) return null;
+    if (ae.todayRevenue != null) return Number(ae.todayRevenue) || 0;
   }
   return null;
 }
@@ -449,33 +645,40 @@ function rmSplitAmountAcrossAccounts(amount, accounts, accountId) {
   return Math.round(amount * weights[idx] / totalW * 100) / 100;
 }
 
-function rmGetAccountDayAmount(entry, projectKey, account, accounts) {
-  let direct = rmGetAccountDirectAmount(entry, projectKey, account.id);
+function rmGetAccountDayAmount(entry, projectKey, account, accounts, dateKey) {
+  if (!entry) return null;
+  let direct = rmGetAccountDirectAmount(entry, projectKey, account.id, dateKey);
   if (direct !== null && direct !== undefined) return direct;
-  let projectAmt = rmGetProjectDayAmount(entry, projectKey);
-  return rmSplitAmountAcrossAccounts(projectAmt, accounts, account.id);
+  if (rmIsDemoMode()) {
+    let projectAmt = rmGetProjectDayAmount(entry, projectKey);
+    return rmSplitAmountAcrossAccounts(projectAmt, accounts, account.id);
+  }
+  return null;
 }
 
 function rmGetRowDayAmount(row, y, m, d) {
+  let entry = rmGetPerformanceEntry(y, m, d);
+  let dateKey = typeof revenueDateKey === 'function' ? revenueDateKey(y, m, d) : null;
+
   if (row.isAccount && rmSupportsAccountDetail(row.projectKey)) {
-    let direct = null;
-    try {
-      if (typeof getRevenueEntry === 'function' && typeof revenueDateKey === 'function') {
-        let entry = getRevenueEntry(revenueDateKey(y, m, d));
-        direct = rmGetAccountDirectAmount(entry, row.projectKey, row.key);
-      }
-    } catch (e) {}
-    if (direct === null || direct === undefined) {
-      return rmGetDemoAccountBreakdown(row.projectKey, row.key, d).total;
+    if (!entry) {
+      if (!rmIsDemoMode()) return null;
+      return rmGetDemoAccountTotal(row.projectKey, row.key, d);
     }
+    let direct = rmGetAccountDirectAmount(entry, row.projectKey, row.key, dateKey);
+    if (direct === null || direct === undefined) {
+      if (!rmIsDemoMode()) return null;
+      return rmGetDemoAccountTotal(row.projectKey, row.key, d);
+    }
+    return direct;
   }
 
-  let fromLog = 0;
-  try {
-    fromLog = rmGetRowDayAmountFromLog(row, y, m, d);
-  } catch (e) {}
-  if (fromLog > 0) return fromLog;
-  return rmGetDemoRowDayAmount(row, y, m, d);
+  if (entry) {
+    try {
+      return rmGetRowDayAmountFromLog(row, y, m, d);
+    } catch (e) {}
+  }
+  return rmIsDemoMode() ? rmGetDemoRowDayAmount(row, y, m, d) : null;
 }
 
 function rmGetTableRows() {
@@ -549,93 +752,93 @@ function rmBindDailyTableEvents() {
 function rmCanEditAmountCell(dr, row) {
   if (rmFilter === 'all' || row.isEmpty || row.isTotal) return false;
   if (dr.type === 'accountHead' || dr.type === 'accountFlat') return true;
-  if (dr.type === 'accountDetail' && dr.isSubTotal) return true;
+  if (dr.type === 'accountDetail') {
+    if (row.projectKey === 'orca' && dr.detailKey === 'total') return false;
+    return true;
+  }
   return false;
 }
 
 function rmRenderAmountCell(dr, row, y, m, d, amt, wdCls) {
-  if (!amt) return '<td class="' + wdCls + ' isEmpty">—</td>';
+  let empty = amt === null || amt === undefined;
   if (!rmCanEditAmountCell(dr, row)) {
+    if (empty) return '<td class="' + wdCls + ' isEmpty">' + rmEmptyMark() + '</td>';
     return '<td class="' + wdCls + '">' + rmMoney(amt) + '</td>';
   }
   let dateKey = pfFormatIsoDate(y, m, d);
-  let cell = pfRenderEditableAmountCell(amt, rmMoney(amt), {
+  let label = empty ? rmEmptyMark() : rmMoney(amt);
+  let cell = pfRenderEditableAmountCell(empty ? null : amt, label, {
     projectKey: row.projectKey,
     accountId: row.key,
     accountName: row.name,
     dateKey: dateKey
   });
-  return '<td class="' + wdCls + ' pfEditableCell">' + cell + '</td>';
-}
-
-function rmSplitRamTotal(total, accountId, d) {
-  if (!total) return { operation: 0, title: 0, total: 0 };
-  let seed = 0;
-  for (let i = 0; i < accountId.length; i++) seed += accountId.charCodeAt(i);
-  seed += d || 1;
-  let opRatio = 0.91 + (seed % 7) * 0.01;
-  let operation = Math.round(total * opRatio * 100) / 100;
-  let title = Math.round((total - operation) * 100) / 100;
-  return { operation: operation, title: title, total: total };
-}
-
-function rmSplitOrcaTotal(total, accountId, d) {
-  if (!total) return { ai: 0, affiliate: 0, total: 0 };
-  let seed = 0;
-  for (let i = 0; i < accountId.length; i++) seed += accountId.charCodeAt(i);
-  seed += (d || 1) * 3;
-  let aiRatio = 0.85 + (seed % 9) * 0.01;
-  let ai = Math.round(total * aiRatio * 100) / 100;
-  let affiliate = Math.round((total - ai) * 100) / 100;
-  return { ai: ai, affiliate: affiliate, total: total };
+  return '<td class="' + wdCls + ' pfEditableCell' + (empty ? ' isEmpty' : '') + '">' + cell + '</td>';
 }
 
 function rmGetAccountBreakdown(projectKey, accountId, y, m, d) {
+  let empty = {
+    operation: null,
+    todayRevenue: null,
+    yesterdayAiProfit: null,
+    todayAffiliateProfit: null,
+    total: null
+  };
   try {
-    if (typeof getRevenueEntry === 'function' && typeof revenueDateKey === 'function') {
-      let entry = getRevenueEntry(revenueDateKey(y, m, d));
-      if (projectKey === 'ram' && typeof getRamAccountEntry === 'function') {
-        let ae = getRamAccountEntry(entry, accountId);
-        if (ae) {
-          let total = Number(ae.todayRevenue) || 0;
-          if (ae.operationRevenue != null && ae.titleRevenue != null) {
-            return {
-              operation: Number(ae.operationRevenue) || 0,
-              title: Number(ae.titleRevenue) || 0,
-              total: total
-            };
-          }
-          return rmSplitRamTotal(total, accountId, d);
+    if (typeof revenueDateKey === 'function') {
+      let dateKey = revenueDateKey(y, m, d);
+      let entry = typeof pdGetRevenueEntryRaw === 'function'
+        ? pdGetRevenueEntryRaw(dateKey)
+        : (typeof getRevenueEntry === 'function' ? getRevenueEntry(dateKey) : null);
+      if (projectKey === 'ram' && entry && entry.ramAccounts && entry.ramAccounts[accountId]) {
+        let ae = entry.ramAccounts[accountId];
+        let todayRevenue = ae.todayRevenue != null ? Number(ae.todayRevenue) : null;
+        let operation = rmCalcRamOperationAmount(accountId, ae, dateKey);
+        if (todayRevenue != null || operation != null) {
+          return { operation: operation, todayRevenue: todayRevenue };
         }
       }
-      if (projectKey === 'orca' && typeof getOrcaAccountEntry === 'function') {
-        let ae = getOrcaAccountEntry(entry, accountId);
-        if (ae && typeof calcOrcaAccountTotal === 'function') {
-          return {
-            ai: ae.yesterdayAiProfit,
-            affiliate: ae.todayAffiliateProfit,
-            total: calcOrcaAccountTotal(ae)
-          };
+      if (projectKey === 'orca' && entry && entry.orcaAccounts && entry.orcaAccounts[accountId]) {
+        let ae = entry.orcaAccounts[accountId];
+        if (ae.yesterdayAiProfit != null || ae.todayAffiliateProfit != null) {
+          let yesterdayAiProfit = ae.yesterdayAiProfit != null ? Number(ae.yesterdayAiProfit) : null;
+          let todayAffiliateProfit = ae.todayAffiliateProfit != null ? Number(ae.todayAffiliateProfit) : null;
+          let total = typeof calcOrcaAccountTotal === 'function'
+            ? calcOrcaAccountTotal(ae)
+            : Math.round(((Number(yesterdayAiProfit) || 0) + (Number(todayAffiliateProfit) || 0)) * 100) / 100;
+          return { yesterdayAiProfit: yesterdayAiProfit, todayAffiliateProfit: todayAffiliateProfit, total: total };
+        }
+        if (ae.todayRevenue != null) {
+          return { yesterdayAiProfit: null, todayAffiliateProfit: null, total: Number(ae.todayRevenue) || 0 };
         }
       }
     }
   } catch (e) {}
 
-  return rmGetDemoAccountBreakdown(projectKey, accountId, d);
+  if (rmIsDemoMode()) {
+    return rmGetDemoAccountBreakdown(projectKey, accountId, d);
+  }
+  return empty;
 }
 
 function rmGetAccountDetailDayAmount(projectKey, accountId, detailKey, y, m, d) {
   let breakdown = rmGetAccountBreakdown(projectKey, accountId, y, m, d);
-  return breakdown[detailKey] != null ? breakdown[detailKey] : 0;
+  if (breakdown[detailKey] == null) return null;
+  return breakdown[detailKey];
 }
 
 function rmSumAccountDetailMonth(projectKey, accountId, detailKey, y, m) {
   let days = new Date(y, m + 1, 0).getDate();
   let sum = 0;
+  let hasAny = false;
   for (let d = 1; d <= days; d++) {
-    sum += rmGetAccountDetailDayAmount(projectKey, accountId, detailKey, y, m, d);
+    let v = rmGetAccountDetailDayAmount(projectKey, accountId, detailKey, y, m, d);
+    if (v !== null && v !== undefined) {
+      hasAny = true;
+      sum += v;
+    }
   }
-  return Math.round(sum * 100) / 100;
+  return hasAny ? Math.round(sum * 100) / 100 : null;
 }
 
 function rmBuildTableDisplayRows() {
@@ -651,8 +854,7 @@ function rmBuildTableDisplayRows() {
             type: 'accountDetail',
             row: row,
             detailKey: line.key,
-            label: line.label,
-            isSubTotal: !!line.isSubTotal
+            label: line.label
           });
         });
       }
@@ -668,60 +870,71 @@ function rmBuildTableDisplayRows() {
 function rmSumRowMonth(row, y, m) {
   let days = new Date(y, m + 1, 0).getDate();
   let sum = 0;
+  let hasAny = false;
   for (let d = 1; d <= days; d++) {
-    sum += rmGetRowDayAmount(row, y, m, d);
+    let v = rmGetRowDayAmount(row, y, m, d);
+    if (v !== null && v !== undefined) {
+      hasAny = true;
+      sum += v;
+    }
   }
-  return Math.round(sum * 100) / 100;
+  return hasAny ? Math.round(sum * 100) / 100 : null;
 }
 
 function rmGetFilteredDayTotal(y, m, d) {
   let daysInMonth = new Date(y, m + 1, 0).getDate();
-  let entry = typeof getRevenueEntry === 'function' ? getRevenueEntry(revenueDateKey(y, m, d)) : null;
+  let entry = rmGetPerformanceEntry(y, m, d);
+  let dateKey = typeof revenueDateKey === 'function' ? revenueDateKey(y, m, d) : null;
   if (rmFilter === 'all') {
-    if (entry && Number(entry.total) > 0) return Number(entry.total) || 0;
-    return rmGetDemoDayTotal(d, daysInMonth);
+    if (entry) return Number(entry.total) || 0;
+    return rmIsDemoMode() ? rmGetDemoDayTotal(d, daysInMonth) : null;
   }
-  let liveAccounts = rmGetAccountsForProject(rmFilter);
-  if (liveAccounts.length) {
-    return liveAccounts.reduce(function (sum, acc) {
-      return sum + rmGetAccountDayAmount(entry, rmFilter, acc, liveAccounts);
-    }, 0);
+  let accounts = rmGetProjectAccountRows(rmFilter);
+  if (entry && accounts.length) {
+    let sum = 0;
+    let hasAny = false;
+    accounts.forEach(function (acc) {
+      let v = rmGetAccountDayAmount(entry, rmFilter, acc, accounts, dateKey);
+      if (v !== null && v !== undefined) {
+        hasAny = true;
+        sum += v;
+      }
+    });
+    if (hasAny) return Math.round(sum * 100) / 100;
   }
-  let demoAccounts = rmGetProjectAccountRows(rmFilter);
-  if (demoAccounts.length) {
-    return demoAccounts.reduce(function (sum, acc) {
-      return sum + rmGetDemoAccountDayAmount(rmFilter, acc.id, d, daysInMonth);
-    }, 0);
+  if (rmIsDemoMode()) {
+    if (accounts.length) {
+      return accounts.reduce(function (sum, acc) {
+        return sum + rmGetDemoAccountDayAmount(rmFilter, acc.id, d, daysInMonth);
+      }, 0);
+    }
+    return rmGetDemoProjectDayAmount(rmFilter, d, daysInMonth);
   }
-  return rmGetDemoProjectDayAmount(rmFilter, d, daysInMonth);
+  return null;
 }
 
 function rmHasChartData(vals) {
-  return vals.some(function (v) { return v > 0; });
-}
-
-function rmGetDemoDailySeries(y, m) {
-  let days = new Date(y, m + 1, 0).getDate();
-  let vals = [];
-  let monthScale = (m === 4) ? 0.87 : 1;
-  for (let d = 1; d <= days; d++) {
-    let wave = 88 + Math.sin((d + m) * 0.62) * 42 + ((d % 5) * 11);
-    if (d % 7 === 0 || d % 7 === 6) wave *= 0.72;
-    vals.push(Math.round(wave * monthScale));
-  }
-  return vals;
+  return vals.some(function (v) { return v !== null && v !== undefined && v > 0; });
 }
 
 function rmResolveDailySeries(y, m) {
   let vals = rmCollectDailySeries(y, m);
-  if (rmHasChartData(vals)) return vals;
-  let days = new Date(y, m + 1, 0).getDate();
-  if (rmFilter === 'all') return rmGetDemoChartCurrentSeries(days);
-  let out = [];
-  for (let d = 1; d <= days; d++) {
-    out.push(rmGetFilteredDayTotal(y, m, d));
+  if (rmHasChartData(vals)) {
+    return vals.map(function (v) { return v == null ? 0 : v; });
   }
-  return out;
+  if (rmIsDemoMode()) {
+    let days = new Date(y, m + 1, 0).getDate();
+    if (rmFilter === 'all') return rmGetDemoChartCurrentSeries(days);
+    let out = [];
+    for (let d = 1; d <= days; d++) {
+      out.push(rmGetFilteredDayTotal(y, m, d) || 0);
+    }
+    return out;
+  }
+  let days = new Date(y, m + 1, 0).getDate();
+  let empty = [];
+  for (let i = 0; i < days; i++) empty.push(0);
+  return empty;
 }
 
 function rmCollectDailySeries(y, m) {
@@ -762,24 +975,21 @@ function rmRenderProjectIcon(iconKey, extraClass) {
 function rmRenderAccountHeadLabel(row, expanded) {
   let toggle = expanded ? '▼' : '▶';
   let btn = '<button type="button" class="rmExpandBtn" data-project="' + rmEscapeAttr(row.projectKey) + '" data-account="' + rmEscapeAttr(row.key) + '" aria-expanded="' + expanded + '" aria-label="' + (expanded ? '詳細を閉じる' : '詳細を表示') + '">' + toggle + '</button>';
-  let inner = btn +
+  let menu = expanded && typeof pfRenderAccountMenuBtn === 'function'
+    ? pfRenderAccountMenuBtn(row.projectKey, row.key, row.name)
+    : '';
+  return '<span class="rmRowLabel rmAccountHeadLabel">' + btn +
     pfRenderSeriesMarker(row.seriesIndex || 0) +
-    '<span class="pfAccountLabelText">' + rmEscape(row.name) + '</span>';
-  return pfRenderManageAccountTrigger(row.projectKey, row.key, row.name, inner);
+    '<span class="pfAccountLabelText">' + rmEscape(row.name) + '</span>' +
+    menu + '</span>';
 }
 
 function rmRenderAccountFlatLabel(row) {
-  return pfRenderManageAccountTrigger(
-    row.projectKey,
-    row.key,
-    row.name,
-    pfRenderAccountLabel(rmEscape(row.name), row.seriesIndex || 0)
-  );
+  return pfRenderAccountLabel(rmEscape(row.name), row.seriesIndex || 0);
 }
 
-function rmRenderDetailLabel(label, isSubTotal) {
-  let cls = isSubTotal ? ' rmRowLabel--subTotal' : '';
-  return '<span class="rmRowLabel rmRowLabel--detail' + cls + '">' + rmEscape(label) + '</span>';
+function rmRenderDetailLabel(label) {
+  return '<span class="rmRowLabel rmRowLabel--detail">' + rmEscape(label) + '</span>';
 }
 
 function rmRenderDailyTable() {
@@ -816,8 +1026,8 @@ function rmRenderDailyTable() {
       trCls = ' class="rmDetailRow smSalesAccountRow"';
       label = rmRenderAccountFlatLabel(row);
     } else if (dr.type === 'accountDetail') {
-      trCls = ' class="rmDetailRow' + (dr.isSubTotal ? ' rmDetailSubTotalRow' : '') + '"';
-      label = rmRenderDetailLabel(dr.label, dr.isSubTotal);
+      trCls = ' class="rmDetailRow"';
+      label = rmRenderDetailLabel(dr.label);
     } else if (row.isTotal) {
       trCls = ' class="rmTotalRow"';
       label = '<span class="rmRowLabel"><b>' + rmEscape(row.name) + '</b></span>';
@@ -830,7 +1040,7 @@ function rmRenderDailyTable() {
       let cls = wd === 0 ? ' isSun' : (wd === 6 ? ' isSat' : '');
 
       if (row.isEmpty || !showAmounts) {
-        cells += '<td class="' + cls.trim() + ' isEmpty">—</td>';
+        cells += '<td class="' + cls.trim() + ' isEmpty">' + rmEmptyMark() + '</td>';
         continue;
       }
 
@@ -844,23 +1054,19 @@ function rmRenderDailyTable() {
     }
 
     if (row.isEmpty || !showAmounts) {
-      cells += '<td class="rmMonthTotalCol isEmpty">—</td>';
+      cells += '<td class="rmMonthTotalCol isEmpty">' + rmEmptyMark() + '</td>';
     } else if (dr.type === 'accountDetail') {
       monthSum = rmSumAccountDetailMonth(row.projectKey, row.key, dr.detailKey, y, m);
-      if (dr.isSubTotal && rmCanEditAmountCell(dr, row) && monthSum) {
-        cells += '<td class="rmMonthTotalCol rmDetailSubTotalCol pfEditableCell">' +
-          pfRenderEditableAmountCell(monthSum, rmMoney(monthSum), {
-            projectKey: row.projectKey,
-            accountId: row.key,
-            accountName: row.name,
-            dateKey: pfFormatIsoDate(y, m, 1)
-          }) + '</td>';
+      if (monthSum === null || monthSum === undefined) {
+        cells += '<td class="rmMonthTotalCol isEmpty">' + rmEmptyMark() + '</td>';
       } else {
-        cells += '<td class="rmMonthTotalCol' + (dr.isSubTotal ? ' rmDetailSubTotalCol' : '') + '">' + rmMoney(monthSum) + '</td>';
+        cells += '<td class="rmMonthTotalCol">' + rmMoney(monthSum) + '</td>';
       }
     } else {
       monthSum = rmSumRowMonth(row, y, m);
-      if (rmCanEditAmountCell(dr, row) && monthSum) {
+      if (monthSum === null || monthSum === undefined) {
+        cells += '<td class="rmMonthTotalCol isEmpty">' + rmEmptyMark() + '</td>';
+      } else if (rmCanEditAmountCell(dr, row) && monthSum) {
         cells += '<td class="rmMonthTotalCol pfEditableCell">' +
           pfRenderEditableAmountCell(monthSum, rmMoney(monthSum), {
             projectKey: row.projectKey,
@@ -1039,7 +1245,7 @@ function rmComputeProjectStats(projectKey) {
 function rmGetProjectStats(projectKey) {
   let stats = rmComputeProjectStats(projectKey);
   if (stats.bestDayAmount || stats.bestMonthAmount) return stats;
-  return RM_DEMO_STATS[projectKey] || stats;
+  return rmIsDemoMode() ? (RM_DEMO_STATS[projectKey] || stats) : stats;
 }
 
 function rmGetDemoAccountStats(projectKey, accountId) {
@@ -1064,6 +1270,7 @@ function rmComputeAccountStats(projectKey, accountId) {
     let d = Number(parts[2]);
     let row = { key: accountId, projectKey: projectKey, isAccount: true, name: '' };
     let amt = rmGetRowDayAmount(row, y, mo, d);
+    if (amt === null || amt === undefined) return;
     if (amt > bestDay.amount) bestDay = { amount: amt, dateKey: key };
     let monthKey = parts[0] + '-' + parts[1];
     monthTotals[monthKey] = (monthTotals[monthKey] || 0) + amt;
@@ -1091,7 +1298,7 @@ function rmComputeAccountStats(projectKey, accountId) {
 function rmGetAccountStats(projectKey, accountId) {
   let stats = rmComputeAccountStats(projectKey, accountId);
   if (stats.bestDayAmount || stats.bestMonthAmount) return stats;
-  return rmGetDemoAccountStats(projectKey, accountId);
+  return rmIsDemoMode() ? rmGetDemoAccountStats(projectKey, accountId) : stats;
 }
 
 function rmRenderProjectStats() {
@@ -1112,10 +1319,10 @@ function rmRenderProjectStats() {
         return '<div class="rmStatTableRow">' +
           '<div class="rmStatTableCol rmStatTableCol--project">' + rmRenderProjectIcon(p.iconKey, 'rmRowIcon') + rmEscape(p.name) + '</div>' +
           '<div class="rmStatTableCol rmStatTableCol--metric">' +
-          '<span class="rmStatAmt">' + rmMoney(stats.bestDayAmount) + '</span>' +
+          '<span class="rmStatAmt">' + rmFormatStatAmount(stats.bestDayAmount, stats.bestDayLabel) + '</span>' +
           '<span class="rmStatDate">' + rmEscape(stats.bestDayLabel) + '</span></div>' +
           '<div class="rmStatTableCol rmStatTableCol--metric">' +
-          '<span class="rmStatAmt">' + rmMoney(stats.bestMonthAmount) + '</span>' +
+          '<span class="rmStatAmt">' + rmFormatStatAmount(stats.bestMonthAmount, stats.bestMonthLabel) + '</span>' +
           '<span class="rmStatDate">' + rmEscape(stats.bestMonthLabel) + '</span></div>' +
           '</div>';
       }).join('') +
@@ -1148,8 +1355,11 @@ function rmRenderProjectStats() {
 }
 
 function rmUpdateHeaderMeta() {
-  let monthLabel = document.getElementById('rmMonthLabel');
-  if (monthLabel) monthLabel.textContent = rmFormatMonthLabel(rmView.y, rmView.m);
+  if (typeof hubUpdateMonthLabels === 'function') hubUpdateMonthLabels();
+  else {
+    let monthLabel = document.getElementById('rmMonthLabel');
+    if (monthLabel) monthLabel.textContent = rmFormatMonthLabel(rmView.y, rmView.m);
+  }
 
   let lastUpdate = document.getElementById('rmLastUpdate');
   if (lastUpdate) {
@@ -1178,15 +1388,11 @@ function rmOnFilterChange() {
 }
 
 function rmPrevMonth() {
-  rmView.m--;
-  if (rmView.m < 0) { rmView.m = 11; rmView.y--; }
-  renderRevenueManage();
+  if (typeof hubPrevMonth === 'function') hubPrevMonth();
 }
 
 function rmNextMonth() {
-  rmView.m++;
-  if (rmView.m > 11) { rmView.m = 0; rmView.y++; }
-  renderRevenueManage();
+  if (typeof hubNextMonth === 'function') hubNextMonth();
 }
 
 function rmExportPlaceholder() {
@@ -1205,7 +1411,7 @@ function rmRenderAllPanels() {
 }
 
 function renderRevenueManage() {
-  rmInitViewFromReference();
+  if (typeof hubEnsureViewMonth === 'function') hubEnsureViewMonth();
   if (typeof pfSyncMainTabs === 'function') pfSyncMainTabs('revenueManage');
 
   let sel = document.getElementById('rmProjectFilter');
@@ -1223,6 +1429,8 @@ function rmEnsureInit() {
 
 if (typeof window !== 'undefined') {
   window.rmToggleAccountDetail = rmToggleAccountDetail;
+  window.rmSaveRevenueEntry = rmSaveRevenueEntry;
+  window.rmSaveOrcaRevenueEntry = rmSaveOrcaRevenueEntry;
   window.rmSaveRevenueEntryDummy = rmSaveRevenueEntryDummy;
 }
 

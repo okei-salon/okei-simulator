@@ -1,4 +1,4 @@
-/* OUKEI HUB Manage Entry UI — Ver1.8.7 */
+/* OUKEI HUB Manage Entry UI — Ver1.9.3 */
 
 var pfEntryModalFooterDefault = '';
 var pfOriginalCloseModal = null;
@@ -82,16 +82,23 @@ function pfRenderAccountLabel(name, seriesIndex, extraHtml) {
 }
 
 function pfRenderEditableAmountCell(amount, formattedLabel, meta) {
-  if (!amount) return '—';
+  let amtAttr = amount != null && amount !== '' ? amount : '';
   return '<button type="button" class="pfEditableAmount"' +
     ' data-project="' + pfEscapeAttr(meta.projectKey) + '"' +
     ' data-account="' + pfEscapeAttr(meta.accountId) + '"' +
     ' data-account-name="' + pfEscapeAttr(meta.accountName) + '"' +
     ' data-date="' + pfEscapeAttr(meta.dateKey) + '"' +
-    ' data-amount="' + amount + '"' +
+    ' data-amount="' + amtAttr + '"' +
     ' aria-label="' + pfEscapeAttr((meta.dateKey || '') + ' ' + formattedLabel + ' を編集') + '">' +
     formattedLabel +
     '</button>';
+}
+
+function pfRenderAccountMenuBtn(projectKey, accountId, accountName) {
+  return '<button type="button" class="pfAccountMenuBtn" aria-label="アカウントメニュー"' +
+    ' data-project="' + pfEscapeAttr(projectKey) + '"' +
+    ' data-account="' + pfEscapeAttr(accountId) + '"' +
+    ' data-account-name="' + pfEscapeAttr(accountName) + '">⋯</button>';
 }
 
 function pfCaptureModalFooterDefault() {
@@ -234,6 +241,14 @@ function pfHasManageRevenueEntryData(projectKey, accountId) {
       let rev = entry.ramAccounts[accountId].todayRevenue;
       return rev !== null && rev !== undefined && rev !== '';
     }
+    if (projectKey === 'orca' && entry.orcaAccounts && entry.orcaAccounts[accountId]) {
+      let ae = entry.orcaAccounts[accountId];
+      if (ae.todayRevenue != null) return true;
+      return ae.yesterdayAiProfit != null || ae.todayAffiliateProfit != null;
+    }
+    if (projectKey === 'cary' && entry.caryAccounts && entry.caryAccounts[accountId]) {
+      return entry.caryAccounts[accountId].todayReward != null;
+    }
     if (entry.accounts && entry.accounts[accountId]) {
       let ae = entry.accounts[accountId];
       if (ae.projectKey && ae.projectKey !== projectKey) return false;
@@ -265,10 +280,44 @@ function pfIsManageAccountVisible(projectKey, accountId) {
 
 function pfFilterManageAccounts(projectKey, accounts, options) {
   if (!accounts || !accounts.length) return [];
-  if (options && options.useDemoBypass) return accounts.slice();
+  if (options && options.useDemoBypass &&
+      typeof pdIsDemoMode === 'function' && pdIsDemoMode()) {
+    return accounts.slice();
+  }
   return accounts.filter(function (acc) {
     return pfIsManageAccountVisible(projectKey, acc.id);
   });
+}
+
+function pfResolveManageAccounts(projectKey, liveAccounts, demoAccounts) {
+  if (typeof pdIsDemoMode === 'function' && pdIsDemoMode() &&
+      demoAccounts && demoAccounts.length) {
+    return pfAnnotateAccountSeries(
+      pfApplyManageAccountLabels(projectKey,
+        pfFilterManageAccounts(projectKey, demoAccounts, { useDemoBypass: true })
+      )
+    );
+  }
+  let merged = (liveAccounts || []).slice();
+  let seen = {};
+  merged.forEach(function (a) { seen[a.id] = true; });
+  if (typeof pdCollectRevenueAccountIds === 'function') {
+    pdCollectRevenueAccountIds(projectKey).forEach(function (id) {
+      if (seen[id]) return;
+      seen[id] = true;
+      merged.push({ id: id, name: id, parentId: null, depth: 0 });
+    });
+  }
+  if (typeof pdCollectSalesAccountIds === 'function') {
+    pdCollectSalesAccountIds(projectKey).forEach(function (id) {
+      if (seen[id]) return;
+      seen[id] = true;
+      merged.push({ id: id, name: id, parentId: null, depth: 0 });
+    });
+  }
+  merged = pfFilterManageAccounts(projectKey, merged);
+  merged = pfApplyManageAccountLabels(projectKey, merged);
+  return pfAnnotateAccountSeries(merged);
 }
 
 function pfAddManageDisplayFromOrg(projectKey, accountId) {
@@ -346,8 +395,8 @@ function pfEnsureManageContextMenu() {
   pfManageContextMenuEl.id = 'pfManageContextMenu';
   pfManageContextMenuEl.className = 'pfManageContextMenu isHidden';
   pfManageContextMenuEl.innerHTML =
-    '<button type="button" class="pfManageContextMenuItem" data-action="rename">✏️ 名前変更</button>' +
-    '<button type="button" class="pfManageContextMenuItem pfManageContextMenuItem--danger" data-action="remove">🗑 表示一覧から削除</button>' +
+    '<button type="button" class="pfManageContextMenuItem" data-action="rename">✏️ 編集</button>' +
+    '<button type="button" class="pfManageContextMenuItem pfManageContextMenuItem--danger" data-action="deleteData">🗑 アカウント削除</button>' +
     '<button type="button" class="pfManageContextMenuItem pfManageContextMenuItem--cancel" data-action="cancel">キャンセル</button>';
   document.body.appendChild(pfManageContextMenuEl);
   pfManageContextMenuEl.addEventListener('click', function (e) {
@@ -367,8 +416,8 @@ function pfEnsureManageContextMenu() {
       }
       return;
     }
-    if (action === 'remove') {
-      pfConfirmManageRemove(meta.projectKey, meta.accountId, meta.accountName, handlers.onChanged);
+    if (action === 'deleteData') {
+      pfConfirmManageDeleteData(meta.projectKey, meta.accountId, meta.accountName, handlers.onChanged);
     }
   });
   document.addEventListener('click', pfCloseManageContextMenu);
@@ -412,43 +461,56 @@ function pfReadManageAccountMeta(el) {
   };
 }
 
-function pfBindManageAccountContextMenu(table, onChanged) {
-  if (!table || table._pfContextMenuBound) return;
-  table._pfContextMenuBound = true;
+function pfBindManageAccountMenu(table, onChanged) {
+  if (!table || table._pfAccountMenuBound) return;
+  table._pfAccountMenuBound = true;
   pfEnsureManageContextMenu();
-
-  table.addEventListener('contextmenu', function (e) {
-    let trigger = e.target.closest('.pfManageAccountTrigger');
-    if (!trigger || e.target.closest('.rmExpandBtn')) return;
+  table.addEventListener('click', function (e) {
+    let btn = e.target.closest('.pfAccountMenuBtn');
+    if (!btn) return;
     e.preventDefault();
-    pfOpenManageAccountContextMenu(e.clientX, e.clientY, pfReadManageAccountMeta(trigger), { onChanged: onChanged });
+    e.stopPropagation();
+    let rect = btn.getBoundingClientRect();
+    pfOpenManageAccountContextMenu(rect.right, rect.bottom, pfReadManageAccountMeta(btn), { onChanged: onChanged });
   });
+}
 
-  table.addEventListener('touchstart', function (e) {
-    let trigger = e.target.closest('.pfManageAccountTrigger');
-    if (!trigger || e.target.closest('.rmExpandBtn')) return;
-    if (pfManageContextPressTimer) clearTimeout(pfManageContextPressTimer);
-    let touch = e.touches[0];
-    if (!touch) return;
-    pfManageContextPressTimer = setTimeout(function () {
-      pfManageContextPressTimer = null;
-      pfOpenManageAccountContextMenu(touch.clientX, touch.clientY, pfReadManageAccountMeta(trigger), { onChanged: onChanged });
-    }, 520);
-  }, { passive: true });
+function pfBindManageAccountContextMenu(table, onChanged) {
+  pfBindManageAccountMenu(table, onChanged);
+}
 
-  table.addEventListener('touchmove', function () {
-    if (pfManageContextPressTimer) {
-      clearTimeout(pfManageContextPressTimer);
-      pfManageContextPressTimer = null;
+function pfConfirmManageDeleteData(projectKey, accountId, accountName, onDeleted) {
+  pfCaptureModalFooterDefault();
+  if (typeof modalTitle !== 'undefined') modalTitle.textContent = 'アカウント削除';
+  if (typeof modalContent !== 'undefined') {
+    modalContent.innerHTML =
+      '<div class="pfConfirmBody">' +
+      '<p class="pfConfirmMessage">このアカウントの実績データをすべて削除しますか？</p>' +
+      '<p class="pfConfirmAccountName">' + pfEscapeHtml(accountName || accountId) + '</p>' +
+      '<p class="pfEntryHelp">組織図・アカウント情報は削除されません。収益・売上の入力データのみ削除されます。</p>' +
+      '</div>';
+  }
+  let footer = document.querySelector('#modalBg .modalFooter');
+  if (footer) {
+    footer.style.display = 'flex';
+    footer.innerHTML =
+      '<button type="button" class="btn2" onclick="pfCloseEntryModal()">キャンセル</button>' +
+      '<button type="button" class="btnDanger" id="pfManageDeleteDataConfirmBtn">削除</button>';
+    let confirmBtn = document.getElementById('pfManageDeleteDataConfirmBtn');
+    if (confirmBtn) {
+      confirmBtn.onclick = function () {
+        if (typeof pdDeleteAccountPerformanceData === 'function') {
+          pdDeleteAccountPerformanceData(projectKey, accountId);
+        }
+        pfCloseEntryModal();
+        if (typeof showToast === 'function') {
+          showToast('✅ 実績データを削除しました');
+        }
+        if (typeof onDeleted === 'function') onDeleted();
+      };
     }
-  }, { passive: true });
-
-  table.addEventListener('touchend', function () {
-    if (pfManageContextPressTimer) {
-      clearTimeout(pfManageContextPressTimer);
-      pfManageContextPressTimer = null;
-    }
-  }, { passive: true });
+  }
+  if (typeof modalBg !== 'undefined') modalBg.style.display = 'flex';
 }
 
 function pfConfirmManageRemove(projectKey, accountId, accountName, onRemoved) {

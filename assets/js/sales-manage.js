@@ -1,4 +1,4 @@
-/* OUKEI HUB Sales Management — Ver1.8.7 */
+/* OUKEI HUB Sales Management — Ver1.9.5 */
 
 /*
  * settings.salesLog[dateKey] structure (future Excel / 実績入力):
@@ -135,10 +135,20 @@ function smSalesDateKey(y, m, d) {
 }
 
 function getSalesEntry(dateKey) {
+  if (typeof ensurePerformanceLogs === 'function') ensurePerformanceLogs();
   if (typeof settings !== 'undefined' && settings.salesLog && settings.salesLog[dateKey]) {
     return settings.salesLog[dateKey];
   }
   return null;
+}
+
+function smGetPerformanceEntry(y, m, d) {
+  let key = smSalesDateKey(y, m, d);
+  if (typeof pdGetSalesEntryRaw === 'function') {
+    let raw = pdGetSalesEntryRaw(key);
+    if (raw) return raw;
+  }
+  return getSalesEntry(key);
 }
 
 function getSalesAccountEntry(dateKey, accountId) {
@@ -158,9 +168,37 @@ function smEscapeAttr(text) {
     .replace(/'/g, '&#39;');
 }
 
-function smMoney(n) {
+function smIsMobileView() {
+  return typeof window !== 'undefined' &&
+    window.matchMedia &&
+    window.matchMedia('(max-width: 900px)').matches;
+}
+
+function smMoneyFull(n) {
   if (typeof money === 'function') return money(n || 0);
   return '$' + Math.round((Number(n) || 0) * 100) / 100;
+}
+
+function smFormatCompactSales(n) {
+  n = Math.round((Number(n) || 0) * 100) / 100;
+  if (n < 10000) {
+    if (Number.isInteger(n)) return n.toLocaleString();
+    return n.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+  }
+  if (n < 1000000) {
+    let k = n / 1000;
+    if (k >= 100) return Math.round(k) + 'K';
+    let rounded = Math.round(k * 10) / 10;
+    return (rounded % 1 === 0 ? String(Math.round(rounded)) : rounded.toFixed(1)) + 'K';
+  }
+  return (Math.round((n / 1000000) * 100) / 100).toFixed(2) + 'M';
+}
+
+function smMoney(n, opts) {
+  n = Number(n) || 0;
+  if (opts && opts.forceFull) return smMoneyFull(n);
+  if (smIsMobileView()) return smFormatCompactSales(n);
+  return smMoneyFull(n);
 }
 
 function smFormatMonthLabel(y, m) {
@@ -228,22 +266,30 @@ function smGetLiveCaryAccounts() {
   });
 }
 
+function smEmptyMark() {
+  return typeof pdEmptyMark === 'function' ? pdEmptyMark() : '−';
+}
+
+function smIsDemoMode() {
+  return typeof pdIsDemoMode === 'function' && pdIsDemoMode();
+}
+
+function smFormatStatAmount(amount, label) {
+  if (!amount && (!label || label === '—')) return smEmptyMark();
+  return smMoney(amount, { forceFull: !smIsMobileView() });
+}
+
 function smGetProjectAccounts(projectKey) {
   let live = [];
-  let isDemoSource = false;
   if (projectKey === 'ram') live = smGetLiveRamAccountTree();
   else if (projectKey === 'orca') live = smGetLiveOrcaAccounts();
   else if (projectKey === 'cary') live = smGetLiveCaryAccounts();
-  let accounts;
-  if (live.length) {
-    accounts = live;
-  } else if (SM_DEMO_SALES_ACCOUNTS[projectKey]) {
-    accounts = SM_DEMO_SALES_ACCOUNTS[projectKey].slice();
-    isDemoSource = true;
-  } else {
-    accounts = [];
+  let demo = SM_DEMO_SALES_ACCOUNTS[projectKey] ? SM_DEMO_SALES_ACCOUNTS[projectKey].slice() : [];
+  if (typeof pfResolveManageAccounts === 'function') {
+    return pfResolveManageAccounts(projectKey, live, demo);
   }
-  accounts = pfFilterManageAccounts(projectKey, accounts, { useDemoBypass: isDemoSource });
+  let accounts = live.length ? live : (smIsDemoMode() ? demo : []);
+  accounts = pfFilterManageAccounts(projectKey, accounts, { useDemoBypass: smIsDemoMode() && !live.length });
   accounts = pfApplyManageAccountLabels(projectKey, accounts);
   return pfAnnotateAccountSeries(accounts);
 }
@@ -313,8 +359,9 @@ function smGetDemoAccountDaySales(accountId, projectKey, d) {
 }
 
 function smGetAccountDaySalesFromLog(accountId, projectKey, y, m, d) {
-  let ae = getSalesAccountEntry(smSalesDateKey(y, m, d), accountId);
-  if (!ae) return null;
+  let entry = smGetPerformanceEntry(y, m, d);
+  if (!entry || !entry.accounts || !entry.accounts[accountId]) return null;
+  let ae = entry.accounts[accountId];
   if (ae.projectKey && ae.projectKey !== projectKey) return null;
   if (ae.todaySales != null) return Number(ae.todaySales) || 0;
   return null;
@@ -323,7 +370,33 @@ function smGetAccountDaySalesFromLog(accountId, projectKey, y, m, d) {
 function smGetAccountDaySales(accountId, projectKey, y, m, d) {
   let fromLog = smGetAccountDaySalesFromLog(accountId, projectKey, y, m, d);
   if (fromLog !== null) return fromLog;
-  return smGetDemoAccountDaySales(accountId, projectKey, d);
+  return smIsDemoMode() ? smGetDemoAccountDaySales(accountId, projectKey, d) : null;
+}
+
+function smGetProjectDayAmountDeduped(projectKey, y, m, d) {
+  let entry = smGetPerformanceEntry(y, m, d);
+  if (entry && entry[projectKey] != null) {
+    return Math.round(Number(entry[projectKey]) * 100) / 100;
+  }
+
+  let accounts = smGetProjectAccounts(projectKey);
+  if (!accounts.length) {
+    return smIsDemoMode()
+      ? smGetDemoProjectDayAmountFallback(projectKey, d, new Date(y, m + 1, 0).getDate())
+      : null;
+  }
+
+  let aggIds = smGetAggregationAccountIds(accounts);
+  let sum = 0;
+  let hasAny = false;
+  aggIds.forEach(function (id) {
+    let v = smGetAccountDaySales(id, projectKey, y, m, d);
+    if (v !== null && v !== undefined) {
+      hasAny = true;
+      sum += v;
+    }
+  });
+  return hasAny ? Math.round(sum * 100) / 100 : null;
 }
 
 function smGetDemoProjectDayAmountFallback(projectKey, d, daysInMonth) {
@@ -337,24 +410,6 @@ function smGetDemoProjectDayAmountFallback(projectKey, d, daysInMonth) {
   }
   let ratio = SM_DEMO_PROJECT_RATIOS[projectKey] || 0;
   return Math.round(total * ratio * 100) / 100;
-}
-
-function smGetProjectDayAmountDeduped(projectKey, y, m, d) {
-  let entry = getSalesEntry(smSalesDateKey(y, m, d));
-  if (entry && entry[projectKey] != null && Number(entry[projectKey]) > 0) {
-    return Math.round(Number(entry[projectKey]) * 100) / 100;
-  }
-
-  let accounts = smGetProjectAccounts(projectKey);
-  if (!accounts.length) {
-    return smGetDemoProjectDayAmountFallback(projectKey, d, new Date(y, m + 1, 0).getDate());
-  }
-
-  let aggIds = smGetAggregationAccountIds(accounts);
-  let sum = aggIds.reduce(function (s, id) {
-    return s + smGetAccountDaySales(id, projectKey, y, m, d);
-  }, 0);
-  return Math.round(sum * 100) / 100;
 }
 
 function smGetDemoDayTotal(d, daysInMonth) {
@@ -371,25 +426,54 @@ function smOpenSalesEntryModal(projectKey, accountId, accountName, dateKey, amou
   pfRegisterManageDisplayFromEntry(projectKey, accountId);
   let projLabel = pfGetProjectLabel(projectKey, SM_PROJECTS);
   let dateVal = dateKey || pfFormatIsoDate(smView.y, smView.m, 1);
-  let demoSales = Number(amount) || 10000;
-  if (!amount && accountId === 'demo_ram_2') demoSales = 3000;
+  let salesVal = '';
+  if (typeof pdGetSalesEntryRaw === 'function') {
+    let entry = pdGetSalesEntryRaw(dateVal);
+    if (entry && entry.accounts && entry.accounts[accountId] && entry.accounts[accountId].todaySales != null) {
+      salesVal = entry.accounts[accountId].todaySales;
+    }
+  }
+  if (salesVal === '' && amount) salesVal = amount;
+  if (salesVal === '' && smIsDemoMode()) {
+    salesVal = accountId === 'demo_ram_2' ? 3000 : 10000;
+  }
   let body =
     '<input type="hidden" id="smEntryProjectKey" value="' + pfEscapeAttr(projectKey) + '">' +
     '<input type="hidden" id="smEntryAccountId" value="' + pfEscapeAttr(accountId) + '">' +
     pfEntryDateField('日付', 'smEntryDate', dateVal) +
     pfEntryReadonlyField('プロジェクト', projLabel) +
     pfEntryReadonlyField('アカウント', accountName || accountId) +
-    pfEntryNumberField('売上（$）', 'smEntrySales', demoSales);
-  pfOpenEntryModal('売上入力', body, 'smSaveSalesEntryDummy');
+    pfEntryNumberField('売上（$）', 'smEntrySales', salesVal);
+  pfOpenEntryModal('売上入力', body, 'smSaveSalesEntry');
+}
+
+function smSaveSalesEntry() {
+  let dateEl = document.getElementById('smEntryDate');
+  let projectKeyEl = document.getElementById('smEntryProjectKey');
+  let accountIdEl = document.getElementById('smEntryAccountId');
+  let salesEl = document.getElementById('smEntrySales');
+  if (!projectKeyEl || !accountIdEl) return;
+
+  let projectKey = projectKeyEl.value;
+  let accountId = accountIdEl.value;
+  let dateKey = dateEl && dateEl.value
+    ? dateEl.value
+    : (typeof todayKey === 'function' ? todayKey() : '');
+
+  pfRegisterManageDisplayFromEntry(projectKey, accountId);
+
+  if (typeof pdSaveSalesAccountEntry === 'function') {
+    pdSaveSalesAccountEntry(dateKey, projectKey, accountId, Number(salesEl && salesEl.value) || 0);
+  }
+
+  pfCloseEntryModal();
+  if (typeof showToast === 'function') {
+    showToast('✅ 売上を保存しました');
+  }
 }
 
 function smSaveSalesEntryDummy() {
-  let accountId = document.getElementById('smEntryAccountId');
-  let projectKey = document.getElementById('smEntryProjectKey');
-  if (projectKey && accountId) {
-    pfRegisterManageDisplayFromEntry(projectKey.value, accountId.value);
-  }
-  pfEntrySaveDummy('保存は次回バージョンで実装予定です');
+  smSaveSalesEntry();
 }
 
 function smGetRowDayAmount(row, y, m, d) {
@@ -398,9 +482,16 @@ function smGetRowDayAmount(row, y, m, d) {
   }
   if (row.isTotal) {
     if (smFilter === 'all') {
-      return SM_PROJECTS.reduce(function (sum, p) {
-        return sum + smGetProjectDayAmountDeduped(p.key, y, m, d);
-      }, 0);
+      let sum = 0;
+      let hasAny = false;
+      SM_PROJECTS.forEach(function (p) {
+        let v = smGetProjectDayAmountDeduped(p.key, y, m, d);
+        if (v !== null && v !== undefined) {
+          hasAny = true;
+          sum += v;
+        }
+      });
+      return hasAny ? Math.round(sum * 100) / 100 : null;
     }
     return smGetProjectDayAmountDeduped(smFilter, y, m, d);
   }
@@ -435,41 +526,45 @@ function smGetTableRows() {
 function smSumRowMonth(row, y, m) {
   let days = new Date(y, m + 1, 0).getDate();
   let sum = 0;
+  let hasAny = false;
   for (let d = 1; d <= days; d++) {
-    sum += smGetRowDayAmount(row, y, m, d);
+    let v = smGetRowDayAmount(row, y, m, d);
+    if (v !== null && v !== undefined) {
+      hasAny = true;
+      sum += v;
+    }
   }
-  return Math.round(sum * 100) / 100;
+  return hasAny ? Math.round(sum * 100) / 100 : null;
 }
 
 function smSumAccountMonth(accountId, projectKey, y, m) {
   let days = new Date(y, m + 1, 0).getDate();
   let sum = 0;
+  let hasAny = false;
   for (let d = 1; d <= days; d++) {
-    sum += smGetAccountDaySales(accountId, projectKey, y, m, d);
+    let v = smGetAccountDaySales(accountId, projectKey, y, m, d);
+    if (v !== null && v !== undefined) {
+      hasAny = true;
+      sum += v;
+    }
   }
-  return Math.round(sum * 100) / 100;
+  return hasAny ? Math.round(sum * 100) / 100 : null;
 }
 
 function smGetFilteredDayTotal(y, m, d) {
   if (smFilter === 'all') {
-    return SM_PROJECTS.reduce(function (sum, p) {
-      return sum + smGetProjectDayAmountDeduped(p.key, y, m, d);
-    }, 0);
+    let sum = 0;
+    let hasAny = false;
+    SM_PROJECTS.forEach(function (p) {
+      let v = smGetProjectDayAmountDeduped(p.key, y, m, d);
+      if (v !== null && v !== undefined) {
+        hasAny = true;
+        sum += v;
+      }
+    });
+    return hasAny ? Math.round(sum * 100) / 100 : null;
   }
   return smGetProjectDayAmountDeduped(smFilter, y, m, d);
-}
-
-function smHasChartData(vals) {
-  return vals.some(function (v) { return v > 0; });
-}
-
-function smGetDemoDailySeries(y, m) {
-  let days = new Date(y, m + 1, 0).getDate();
-  let vals = [];
-  for (let d = 1; d <= days; d++) {
-    vals.push(smGetDemoDayTotal(d, days));
-  }
-  return vals;
 }
 
 function smCollectDailySeries(y, m) {
@@ -481,10 +576,29 @@ function smCollectDailySeries(y, m) {
   return vals;
 }
 
+function smGetDemoDailySeries(y, m) {
+  let days = new Date(y, m + 1, 0).getDate();
+  let vals = [];
+  for (let d = 1; d <= days; d++) {
+    vals.push(smGetDemoDayTotal(d, days));
+  }
+  return vals;
+}
+
+function smHasChartData(vals) {
+  return vals.some(function (v) { return v !== null && v !== undefined && v > 0; });
+}
+
 function smResolveDailySeries(y, m) {
   let vals = smCollectDailySeries(y, m);
-  if (smHasChartData(vals)) return vals;
-  return smGetDemoDailySeries(y, m);
+  if (smHasChartData(vals)) {
+    return vals.map(function (v) { return v == null ? 0 : v; });
+  }
+  if (smIsDemoMode()) return smGetDemoDailySeries(y, m);
+  let days = new Date(y, m + 1, 0).getDate();
+  let empty = [];
+  for (let i = 0; i < days; i++) empty.push(0);
+  return empty;
 }
 
 function smCalcPrevMonth(y, m) {
@@ -504,18 +618,26 @@ function smCanEditAmountCell(dr, row) {
 }
 
 function smRenderAmountCell(dr, row, y, m, d, amt, wdCls) {
-  if (!amt) return '<td class="' + wdCls + ' isEmpty">—</td>';
+  let empty = amt === null || amt === undefined;
+  let displayAmt = empty ? smEmptyMark() : smMoney(amt);
+  let fullAmt = empty ? smEmptyMark() : smMoneyFull(amt);
   if (!smCanEditAmountCell(dr, row)) {
-    return '<td class="' + wdCls + '">' + smMoney(amt) + '</td>';
+    if (empty) return '<td class="' + wdCls + ' isEmpty">' + smEmptyMark() + '</td>';
+    return '<td class="' + wdCls + ' smAmountCell"' +
+      (smIsMobileView() && !empty ? ' title="' + smEscapeAttr(fullAmt) + '"' : '') +
+      '>' + displayAmt + '</td>';
   }
   let dateKey = pfFormatIsoDate(y, m, d);
-  let cell = pfRenderEditableAmountCell(amt, smMoney(amt), {
+  let label = displayAmt;
+  let cell = pfRenderEditableAmountCell(empty ? null : amt, label, {
     projectKey: row.projectKey,
     accountId: row.key,
     accountName: row.name,
     dateKey: dateKey
   });
-  return '<td class="' + wdCls + ' pfEditableCell">' + cell + '</td>';
+  let titleAttr = smIsMobileView() && !empty ? ' title="' + smEscapeAttr(fullAmt) + '"' : '';
+  return '<td class="' + wdCls + ' pfEditableCell smAmountCell' + (empty ? ' isEmpty' : '') + '"' +
+    titleAttr + '>' + cell + '</td>';
 }
 
 function smBindDailyTableEvents() {
@@ -526,10 +648,6 @@ function smBindDailyTableEvents() {
   pfBindEditableAmountClicks(table, function (meta) {
     smOpenSalesEntryModal(meta.projectKey, meta.accountId, meta.accountName, meta.dateKey, meta.amount);
   });
-  pfBindManageAccountContextMenu(table, function () {
-    smRenderAllPanels();
-    smUpdateHeaderMeta();
-  });
 }
 
 function smRenderProjectIcon(iconKey, extraClass) {
@@ -539,12 +657,7 @@ function smRenderProjectIcon(iconKey, extraClass) {
 }
 
 function smRenderAccountRowLabel(row) {
-  return pfRenderManageAccountTrigger(
-    row.projectKey,
-    row.key,
-    row.name,
-    pfRenderAccountLabel(smEscape(row.name), row.seriesIndex || 0)
-  );
+  return pfRenderAccountLabel(smEscape(row.name), row.seriesIndex || 0);
 }
 
 function smBuildTableDisplayRows() {
@@ -599,8 +712,8 @@ function smRenderDailyTable() {
         let wd = new Date(y, m, d).getDay();
         let cls = wd === 0 ? ' isSun' : (wd === 6 ? ' isSat' : '');
 
-        if (!showAmounts) {
-          cells += '<td class="' + cls.trim() + ' isEmpty">—</td>';
+        if (row.isEmpty) {
+          cells += '<td class="' + cls.trim() + ' isEmpty">' + smEmptyMark() + '</td>';
           continue;
         }
 
@@ -608,11 +721,13 @@ function smRenderDailyTable() {
         cells += smRenderAmountCell(dr, row, y, m, d, amt, cls.trim());
       }
 
-      if (!showAmounts) {
-        cells += '<td class="rmMonthTotalCol isEmpty">—</td>';
+      if (row.isEmpty) {
+        cells += '<td class="rmMonthTotalCol isEmpty">' + smEmptyMark() + '</td>';
       } else {
         let monthSum = smSumRowMonth(row, y, m);
-        if (smCanEditAmountCell(dr, row) && monthSum) {
+        if (monthSum === null || monthSum === undefined) {
+          cells += '<td class="rmMonthTotalCol isEmpty">' + smEmptyMark() + '</td>';
+        } else if (smCanEditAmountCell(dr, row) && monthSum) {
           cells += '<td class="rmMonthTotalCol pfEditableCell">' +
             pfRenderEditableAmountCell(monthSum, smMoney(monthSum), {
               projectKey: row.projectKey,
@@ -758,6 +873,7 @@ function smComputeProjectStats(projectKey) {
     let mo = Number(parts[1]) - 1;
     let d = Number(parts[2]);
     let amt = smGetProjectDayAmountDeduped(projectKey, y, mo, d);
+    if (amt === null || amt === undefined) return;
     if (amt > bestDay.amount) {
       bestDay = { amount: amt, dateKey: key };
     }
@@ -793,7 +909,7 @@ function smComputeProjectStats(projectKey) {
 function smGetProjectStats(projectKey) {
   let stats = smComputeProjectStats(projectKey);
   if (stats.bestDayAmount || stats.bestMonthAmount) return stats;
-  return SM_DEMO_STATS[projectKey] || stats;
+  return smIsDemoMode() ? (SM_DEMO_STATS[projectKey] || stats) : stats;
 }
 
 function smGetDemoAccountStats(accountId) {
@@ -813,6 +929,7 @@ function smGetAccountStats(projectKey, accountId) {
   let daysInMonth = new Date(smView.y, smView.m + 1, 0).getDate();
   for (let d = 1; d <= daysInMonth; d++) {
     let amt = smGetAccountDaySales(accountId, projectKey, smView.y, smView.m, d);
+    if (amt === null || amt === undefined) continue;
     if (amt > bestDay.amount) {
       bestDay = { amount: amt, dateKey: smSalesDateKey(smView.y, smView.m, d) };
     }
@@ -826,7 +943,12 @@ function smGetAccountStats(projectKey, accountId) {
       bestMonthLabel: smFormatMonthLabel(smView.y, smView.m)
     };
   }
-  return smGetDemoAccountStats(accountId);
+  return smIsDemoMode() ? smGetDemoAccountStats(accountId) : {
+    bestDayAmount: 0,
+    bestDayLabel: '—',
+    bestMonthAmount: 0,
+    bestMonthLabel: '—'
+  };
 }
 
 function smRenderProjectStats() {
@@ -847,10 +969,10 @@ function smRenderProjectStats() {
         return '<div class="rmStatTableRow">' +
           '<div class="rmStatTableCol rmStatTableCol--project">' + smRenderProjectIcon(p.iconKey, 'rmRowIcon') + smEscape(p.name) + '</div>' +
           '<div class="rmStatTableCol rmStatTableCol--metric">' +
-          '<span class="rmStatAmt">' + smMoney(stats.bestDayAmount) + '</span>' +
+          '<span class="rmStatAmt">' + smFormatStatAmount(stats.bestDayAmount, stats.bestDayLabel) + '</span>' +
           '<span class="rmStatDate">' + smEscape(stats.bestDayLabel) + '</span></div>' +
           '<div class="rmStatTableCol rmStatTableCol--metric">' +
-          '<span class="rmStatAmt">' + smMoney(stats.bestMonthAmount) + '</span>' +
+          '<span class="rmStatAmt">' + smFormatStatAmount(stats.bestMonthAmount, stats.bestMonthLabel) + '</span>' +
           '<span class="rmStatDate">' + smEscape(stats.bestMonthLabel) + '</span></div>' +
           '</div>';
       }).join('') +
@@ -871,10 +993,10 @@ function smRenderProjectStats() {
       return '<div class="rmStatTableRow">' +
         '<div class="rmStatTableCol rmStatTableCol--project">' + pfRenderAccountLabel(smEscape(acc.name), acc.seriesIndex || 0) + '</div>' +
         '<div class="rmStatTableCol rmStatTableCol--metric">' +
-        '<span class="rmStatAmt">' + smMoney(stats.bestDayAmount) + '</span>' +
+        '<span class="rmStatAmt">' + smFormatStatAmount(stats.bestDayAmount, stats.bestDayLabel) + '</span>' +
         '<span class="rmStatDate">' + smEscape(stats.bestDayLabel) + '</span></div>' +
         '<div class="rmStatTableCol rmStatTableCol--metric">' +
-        '<span class="rmStatAmt">' + smMoney(stats.bestMonthAmount) + '</span>' +
+        '<span class="rmStatAmt">' + smFormatStatAmount(stats.bestMonthAmount, stats.bestMonthLabel) + '</span>' +
         '<span class="rmStatDate">' + smEscape(stats.bestMonthLabel) + '</span></div>' +
         '</div>';
     }).join('') +
@@ -883,8 +1005,11 @@ function smRenderProjectStats() {
 }
 
 function smUpdateHeaderMeta() {
-  let monthLabel = document.getElementById('smMonthLabel');
-  if (monthLabel) monthLabel.textContent = smFormatMonthLabel(smView.y, smView.m);
+  if (typeof hubUpdateMonthLabels === 'function') hubUpdateMonthLabels();
+  else {
+    let monthLabel = document.getElementById('smMonthLabel');
+    if (monthLabel) monthLabel.textContent = smFormatMonthLabel(smView.y, smView.m);
+  }
 
   let lastUpdate = document.getElementById('smLastUpdate');
   if (lastUpdate) {
@@ -912,15 +1037,11 @@ function smOnFilterChange() {
 }
 
 function smPrevMonth() {
-  smView.m--;
-  if (smView.m < 0) { smView.m = 11; smView.y--; }
-  renderSalesManage();
+  if (typeof hubPrevMonth === 'function') hubPrevMonth();
 }
 
 function smNextMonth() {
-  smView.m++;
-  if (smView.m > 11) { smView.m = 0; smView.y++; }
-  renderSalesManage();
+  if (typeof hubNextMonth === 'function') hubNextMonth();
 }
 
 function smExportPlaceholder() {
@@ -939,7 +1060,7 @@ function smRenderAllPanels() {
 }
 
 function renderSalesManage() {
-  smInitViewFromReference();
+  if (typeof hubEnsureViewMonth === 'function') hubEnsureViewMonth();
   if (typeof pfSyncMainTabs === 'function') pfSyncMainTabs('salesManage');
 
   let sel = document.getElementById('smProjectFilter');
@@ -957,6 +1078,7 @@ function smEnsureInit() {
 
 if (typeof window !== 'undefined') {
   window.smOpenSalesEntryPlaceholder = smOpenSalesEntryPlaceholder;
+  window.smSaveSalesEntry = smSaveSalesEntry;
   window.smSaveSalesEntryDummy = smSaveSalesEntryDummy;
 }
 

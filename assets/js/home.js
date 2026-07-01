@@ -1,4 +1,4 @@
-/* OUKEI HUB Home UI — Ver1.8.4 */
+/* OUKEI HUB Home UI — Ver1.9.5 */
 let homeCalView = { y: new Date().getFullYear(), m: new Date().getMonth() };
 let ramSavePending = null;
 let orcaSavePending = null;
@@ -78,7 +78,7 @@ function getRevenueInputProjects() {
 
 var REVENUE_PROJECT_META = {
   ram: { desc: '銅鉱山／本日の収益', ready: true },
-  orca: { desc: '昨日AI利益＋本日アフィリエイト利益', ready: true },
+  orca: { desc: '昨日AI利益＋本日AF収益', ready: true },
   cary: { desc: 'ブロックチェーン／報酬入力', ready: false }
 };
 
@@ -114,16 +114,27 @@ function countProjectInputAccounts(projectKey) {
 
 function getProjectInputSavedTotal(projectKey, entry) {
   if (!entry) return 0;
+  let dateKey = typeof todayKey === 'function' ? todayKey() : '';
   if (projectKey === 'ram') {
     return getRamInputAccounts().reduce(function (sum, acc) {
       let ae = getRamAccountEntry(entry, acc.id);
-      return sum + (ae ? ae.todayRevenue : 0);
+      if (!ae) return sum;
+      if (typeof pdRamAccountRevenueTotal === 'function' && dateKey) {
+        return sum + pdRamAccountRevenueTotal(ae, acc.id, dateKey);
+      }
+      let op = typeof pdCalcDailyOperation === 'function' && dateKey
+        ? pdCalcDailyOperation(acc.id, 'ram', dateKey) : 0;
+      return sum + op + ae.todayRevenue;
     }, 0);
   }
   if (projectKey === 'orca') {
     return getOrcaInputAccounts().reduce(function (sum, acc) {
       let ae = getOrcaAccountEntry(entry, acc.id);
-      return sum + (ae ? calcOrcaAccountTotal(ae) : 0);
+      if (!ae) return sum;
+      if (typeof pdOrcaAccountRevenueTotal === 'function') {
+        return sum + pdOrcaAccountRevenueTotal(ae);
+      }
+      return sum + (typeof calcOrcaAccountTotal === 'function' ? calcOrcaAccountTotal(ae) : 0);
     }, 0);
   }
   if (projectKey === 'cary') {
@@ -273,7 +284,9 @@ function ramInputDiffersFromSaved(collected, existing) {
     let nextRev = next && typeof next.todayRevenue === 'number' ? Number(next.todayRevenue) : NaN;
     let prevRev = prev && typeof prev.todayRevenue === 'number' ? Number(prev.todayRevenue) : NaN;
     let nextAdd = next ? Number(next.addInvestment) || 0 : 0;
-    let prevAdd = prev ? Number(prev.addInvestment) || 0 : 0;
+    let prevAdd = typeof pdGetAdditionalInvestmentForDate === 'function'
+      ? pdGetAdditionalInvestmentForDate(acc.id, 'ram', todayKey())
+      : (prev ? Number(prev.addInvestment) || 0 : 0);
     if (isNaN(nextRev) && isNaN(prevRev)) return false;
     if (isNaN(nextRev) !== isNaN(prevRev)) return true;
     if (nextRev !== prevRev) return true;
@@ -286,23 +299,39 @@ function collectRamInputFromForm() {
   let existingEntry = getTodayRamRevenueEntry() || { ramAccounts: {} };
   let ramAccounts = {};
   let totalRam = 0;
+  let dateKey = todayKey();
 
   accounts.forEach(function (acc) {
     let revEl = document.getElementById('ramTodayRev_' + acc.id);
     let addEl = document.getElementById('ramAddInv_' + acc.id);
     let prev = getRamAccountEntry(existingEntry, acc.id);
-    let addInvestment = addEl && addEl.value !== '' ? Number(addEl.value) || 0 : (prev ? prev.addInvestment : 0);
+    let prevAdd = typeof pdGetAdditionalInvestmentForDate === 'function'
+      ? pdGetAdditionalInvestmentForDate(acc.id, 'ram', dateKey)
+      : (prev ? prev.addInvestment : 0);
+    let addInvestment = addEl && addEl.value !== '' ? Number(addEl.value) || 0 : prevAdd;
     let hasInput = revEl && revEl.value !== '' && !isNaN(Number(revEl.value));
     if (hasInput) {
       let todayRevenue = Number(revEl.value) || 0;
       ramAccounts[acc.id] = { todayRevenue: todayRevenue, addInvestment: addInvestment };
-      totalRam += todayRevenue;
+      if (typeof pdPreviewRamAccountRevenueTotal === 'function') {
+        totalRam += pdPreviewRamAccountRevenueTotal(acc.id, todayRevenue, addInvestment, dateKey);
+      } else if (typeof pdRamAccountRevenueTotal === 'function') {
+        totalRam += pdRamAccountRevenueTotal(ramAccounts[acc.id], acc.id, dateKey);
+      } else {
+        totalRam += todayRevenue;
+      }
     } else if (prev) {
       ramAccounts[acc.id] = {
         todayRevenue: prev.todayRevenue,
         addInvestment: addInvestment
       };
-      totalRam += prev.todayRevenue;
+      if (typeof pdPreviewRamAccountRevenueTotal === 'function') {
+        totalRam += pdPreviewRamAccountRevenueTotal(acc.id, prev.todayRevenue, addInvestment, dateKey);
+      } else if (typeof pdRamAccountRevenueTotal === 'function') {
+        totalRam += pdRamAccountRevenueTotal(ramAccounts[acc.id], acc.id, dateKey);
+      } else {
+        totalRam += prev.todayRevenue;
+      }
     }
   });
 
@@ -310,9 +339,24 @@ function collectRamInputFromForm() {
 }
 
 function persistRamRevenueEntry(ramAccounts, totalRam) {
-  let existing = getRevenueEntry(todayKey()) || {};
+  let dateKey = todayKey();
+  if (typeof pdSyncRamSaveInvestments === 'function') {
+    pdSyncRamSaveInvestments(ramAccounts, dateKey);
+  }
+  let existing = getRevenueEntry(dateKey) || {};
   let normalizedAccounts = normalizeRamAccountsMap(ramAccounts);
-  saveRevenueEntry(todayKey(), {
+  if (typeof pdMergeRevenueEntry === 'function') {
+    pdMergeRevenueEntry(dateKey, {
+      ramAccounts: normalizedAccounts,
+      orcaAccounts: existing.orcaAccounts || {},
+      caryAccounts: existing.caryAccounts || {},
+      orca: existing.orca,
+      cary: existing.cary,
+      genesis: existing.genesis
+    });
+    return;
+  }
+  saveRevenueEntry(dateKey, {
     total: totalRam + (Number(existing.orca) || 0) + (Number(existing.genesis) || 0) + (Number(existing.cary) || 0),
     ram: totalRam,
     orca: Number(existing.orca) || 0,
@@ -350,7 +394,16 @@ function updateRamInputDerived(accountId) {
   let addEl = document.getElementById('ramAddInv_' + accountId);
   let addRaw = addEl ? String(addEl.value).trim() : '';
   let add = addRaw !== '' ? Number(addRaw) || 0 : 0;
-  let effectiveInv = calcRamEffectiveInvestment(acc.investment, add);
+  let dateKey = todayKey();
+  let previewOperating = typeof calcRamEffectiveInvestment === 'function'
+    ? calcRamEffectiveInvestment(
+      typeof pdGetOperatingUsdAsOf === 'function' ? pdGetOperatingUsdAsOf(acc.id, 'ram', dateKey) : acc.investment,
+      add
+    )
+    : acc.investment + add;
+  let effectiveInv = typeof pdGetOperatingUsdAsOf === 'function'
+    ? pdGetOperatingUsdAsOf(acc.id, 'ram', dateKey) + add
+    : previewOperating;
   let invEl = document.getElementById('ramInv_' + accountId);
   let rateEl = document.getElementById('ramRate_' + accountId);
   let profitEl = document.getElementById('ramProfit_' + accountId);
@@ -384,17 +437,23 @@ function renderRamInputProgress(existing) {
 
 function renderRamInputAccountCard(acc, existing) {
   let accEntry = getRamAccountEntry(existing, acc.id);
-  let addInv = accEntry && accEntry.addInvestment > 0 ? accEntry.addInvestment : '';
+  let dateKey = todayKey();
+  let addInv = typeof pdGetAdditionalInvestmentForDate === 'function'
+    ? pdGetAdditionalInvestmentForDate(acc.id, 'ram', dateKey)
+    : (accEntry && accEntry.addInvestment > 0 ? accEntry.addInvestment : '');
+  if (addInv === 0) addInv = '';
   let todayRev = accEntry ? accEntry.todayRevenue : '';
-  let effectiveInv = calcRamEffectiveInvestment(acc.investment, addInv);
+  let effectiveInv = typeof pdGetOperatingUsdAsOf === 'function'
+    ? pdGetOperatingUsdAsOf(acc.id, 'ram', dateKey)
+    : calcRamEffectiveInvestment(acc.investment, addInv);
   return '<section class="ramInputAccount" data-acc="' + acc.id + '">' +
     '<div class="ramInputAccountHead">' + renderRamAccountStatusBadge(existing, acc.id) + '</div>' +
     '<div class="ramInputRows">' +
     '<div class="ramInputRow ramInputRow--readonly"><span class="ramInputLabel">ユーザー名</span><span class="ramInputVal">' + escapeHtml(acc.username) + '</span></div>' +
-    '<div class="ramInputRow ramInputRow--readonly"><span class="ramInputLabel">投資額</span><span class="ramInputVal" id="ramInv_' + acc.id + '">' + num(effectiveInv) + 'ドル</span></div>' +
+    '<div class="ramInputRow ramInputRow--readonly"><span class="ramInputLabel">現在運用額</span><span class="ramInputVal" id="ramInv_' + acc.id + '">' + num(effectiveInv) + 'ドル</span></div>' +
     '<div class="ramInputRow ramInputRow--readonly"><span class="ramInputLabel">日利</span><span class="ramInputVal" id="ramRate_' + acc.id + '">' + formatDailyRateLabel(effectiveInv) + '</span></div>' +
     '<div class="ramInputRow"><span class="ramInputLabel">追加投資額</span><div class="ramInputField"><input type="number" step="1" min="0" id="ramAddInv_' + acc.id + '" class="ramInputOptional" placeholder="0" value="' + addInv + '"><span class="ramInputUnit">ドル</span><span class="ramInputHint">追加投資があった時のみ入力</span></div></div>' +
-    '<div class="ramInputRow ramInputRow--readonly"><span class="ramInputLabel">本日の配当</span><span class="ramInputVal ramInputVal--gold" id="ramProfit_' + acc.id + '">' + money(calcRamOperatingProfit(effectiveInv)) + '</span></div>' +
+    '<div class="ramInputRow ramInputRow--readonly"><span class="ramInputLabel">運用</span><span class="ramInputVal ramInputVal--gold" id="ramProfit_' + acc.id + '">' + money(calcRamOperatingProfit(effectiveInv)) + '</span></div>' +
     '<div class="ramInputRow ramInputRow--main"><span class="ramInputLabel ramInputLabel--hero">本日収益</span><div class="ramInputField ramInputField--hero"><input type="number" step="0.01" min="0" id="ramTodayRev_' + acc.id + '" class="ramInputMain" inputmode="decimal" placeholder="0" value="' + todayRev + '"><span class="ramInputUnit">ドル</span><span class="ramInputBadge">毎日入力</span></div></div>' +
     '</div></section>';
 }
@@ -445,7 +504,7 @@ function updateHomeActionCard() {
 
 function getHomeActionPendingText(projectKey, projectName) {
   if (projectKey === 'ram') return projectName + 'の本日収益を入力してください';
-  if (projectKey === 'orca') return projectName + 'の昨日AI利益・本日アフィリエイト利益を入力してください';
+  if (projectKey === 'orca') return projectName + 'の昨日AI利益・本日AF収益を入力してください';
   if (projectKey === 'cary') return projectName + 'の報酬を入力してください';
   return projectName + 'の収益を入力してください';
 }
@@ -500,6 +559,9 @@ function saveRevenueEntry(key, entry) {
   settings.lastUpdate = new Date().toLocaleString();
   markActivity();
   persistHubSettings();
+  if (typeof pdNotifyPerformanceChanged === 'function') {
+    pdNotifyPerformanceChanged({ type: 'revenue', dateKey: key });
+  }
 }
 
 function calcInputStreak() {
@@ -598,8 +660,15 @@ function fallbackProjectAmount(proj, sAll, mode) {
   return 0;
 }
 
+function formatPerformanceAmount(n) {
+  if (n === null || n === undefined) {
+    return typeof pdEmptyMark === 'function' ? pdEmptyMark() : '−';
+  }
+  return money(n);
+}
+
 function formatCalDayAmount(entry) {
-  if (!entry) return '–';
+  if (!entry) return typeof pdEmptyMark === 'function' ? pdEmptyMark() : '−';
   return money(entry.total || 0);
 }
 
@@ -650,19 +719,11 @@ function renderHomeCalendar() {
 }
 
 function homeCalPrevMonth() {
-  homeCalView.m--;
-  if (homeCalView.m < 0) { homeCalView.m = 11; homeCalView.y--; }
-  renderHomeCalendar();
-  renderHomeMonthlyLineChart();
-  updateHomeMonthlyProjects(typeof allOrgSummary === 'function' ? allOrgSummary() : null);
+  if (typeof hubPrevMonth === 'function') hubPrevMonth();
 }
 
 function homeCalNextMonth() {
-  homeCalView.m++;
-  if (homeCalView.m > 11) { homeCalView.m = 0; homeCalView.y++; }
-  renderHomeCalendar();
-  renderHomeMonthlyLineChart();
-  updateHomeMonthlyProjects(typeof allOrgSummary === 'function' ? allOrgSummary() : null);
+  if (typeof hubNextMonth === 'function') hubNextMonth();
 }
 
 function formatAxisDollar(n) {
@@ -734,7 +795,7 @@ function getHomeMonthlyRevenueContext(sAll) {
     if (demo) return demo;
   }
   let monthLog = sumMonthRevenueLog(y, m);
-  let total = monthLog.hasLog ? monthLog.total : sAll.monthly;
+  let total = monthLog.hasLog ? monthLog.total : null;
   return { sAll: sAll, monthLog: monthLog, total: total };
 }
 
@@ -757,10 +818,10 @@ function getHomeMonthlyProjectRows(ctx) {
 
   let entry = ctx.monthLog.hasLog ? ctx.monthLog : null;
   return registry.map(function (p) {
-    let amt = entry ? (entry[p.key] || 0) : fallbackProjectAmount(p, ctx.sAll, 'monthly');
-    let pct = ctx.total > 0 ? Math.round((amt / ctx.total) * 1000) / 10 : 0;
+    let amt = entry ? (entry[p.key] || 0) : null;
+    let pct = ctx.total > 0 && amt != null ? Math.round((amt / ctx.total) * 1000) / 10 : 0;
     return { proj: p, amt: amt, pct: pct };
-  }).filter(function (row) { return row.amt > 0; });
+  }).filter(function (row) { return row.amt != null && row.amt > 0; });
 }
 
 function updateHomeMonthlySummary(sAll) {
@@ -768,8 +829,8 @@ function updateHomeMonthlySummary(sAll) {
   if (!ctx) return;
   let monthlyEl = document.getElementById('homeMonthly');
   let yenEl = document.getElementById('homeMonthlyYen');
-  if (monthlyEl) monthlyEl.textContent = money(ctx.total);
-  if (yenEl) yenEl.textContent = yen(ctx.total);
+  if (monthlyEl) monthlyEl.textContent = formatPerformanceAmount(ctx.total);
+  if (yenEl) yenEl.textContent = ctx.total != null ? yen(ctx.total) : formatPerformanceAmount(null);
 }
 
 function bindMonthlyChartTooltip(container, points, monthNum) {
@@ -967,10 +1028,11 @@ function getHomeTodayProjectRows(ctx) {
   }
 
   return registry.map(function (p) {
-    let amt = entry ? (entry[p.key] || 0) : fallbackProjectAmount(p, ctx.sAll, 'daily');
-    let pct = ctx.todayTotal > 0 ? Math.round((amt / ctx.todayTotal) * 1000) / 10 : 0;
+    let amt = entry ? (entry[p.key] || 0) : null;
+    let pct = ctx.todayTotal != null && ctx.todayTotal > 0 && amt != null
+      ? Math.round((amt / ctx.todayTotal) * 1000) / 10 : 0;
     return { proj: p, amt: amt, pct: pct };
-  }).filter(function (row) { return row.amt > 0; });
+  }).filter(function (row) { return row.amt != null && row.amt > 0; });
 }
 
 function renderHomeTodayDonut(rows, total) {
@@ -1109,32 +1171,33 @@ function updateHomeTodaySection(sAll) {
 
   let todayEntry = getRevenueEntry(todayKey());
   let yesterdayEntry = getRevenueEntry(yesterdayKey());
-  let todayTotal = todayEntry ? (todayEntry.total || 0) : sAll.daily;
-  let yesterdayTotal = yesterdayEntry ? (yesterdayEntry.total || 0) : sAll.daily;
+  let todayTotal = todayEntry ? (todayEntry.total || 0) : null;
+  let yesterdayTotal = yesterdayEntry ? (yesterdayEntry.total || 0) : null;
 
   let dailyEl = document.getElementById('homeDaily');
   let yenEl = document.getElementById('homeDailyYen');
-  if (dailyEl) dailyEl.textContent = money(todayTotal);
-  if (yenEl) yenEl.textContent = yen(todayTotal);
+  if (dailyEl) dailyEl.textContent = formatPerformanceAmount(todayTotal);
+  if (yenEl) yenEl.textContent = todayTotal != null ? yen(todayTotal) : formatPerformanceAmount(null);
 
   let compareEl = document.getElementById('homeTodayCompare');
   if (compareEl) {
     compareEl.innerHTML =
       '<div class="homeTodayCompareItem">' +
       '<span class="homeTodayCompareLabel">昨日の収益</span>' +
-      '<span class="homeTodayCompareVal">' + money(yesterdayTotal) + '</span></div>' +
+      '<span class="homeTodayCompareVal">' + formatPerformanceAmount(yesterdayTotal) + '</span></div>' +
       '<div class="homeTodayCompareItem homeTodayCompareItem--today">' +
       '<span class="homeTodayCompareLabel">本日の収益</span>' +
-      '<span class="homeTodayCompareVal">' + money(todayTotal) + '</span></div>';
+      '<span class="homeTodayCompareVal">' + formatPerformanceAmount(todayTotal) + '</span></div>';
   }
 
   let ctx = { sAll: sAll, todayEntry: todayEntry, todayTotal: todayTotal, yesterdayTotal: yesterdayTotal };
   let rows = getHomeTodayProjectRows(ctx);
-  renderHomeTodayDonut(rows, todayTotal);
+  renderHomeTodayDonut(rows, todayTotal || 0);
   renderHomeTodayProjGrid(rows);
 }
 
 function updateHomeDashboard(sAll) {
+  if (typeof hubEnsureViewMonth === 'function') hubEnsureViewMonth();
   updateHomeInputStats();
   updateHomeActionCard();
   renderHomeCalendar();
@@ -1164,7 +1227,10 @@ function showRevenueDayDetail(key) {
       let rows = getRamInputAccounts().map(function (acc) {
         let ae = entry.ramAccounts[acc.id];
         if (!ae) return '';
-        return '<div class="homeSummaryRow"><span>' + escapeHtml(acc.username) + '</span><b>' + money(ae.todayRevenue || 0) + '</b></div>';
+        let total = typeof pdRamAccountRevenueTotal === 'function'
+          ? pdRamAccountRevenueTotal(ae, acc.id, key)
+          : (ae.todayRevenue || 0);
+        return '<div class="homeSummaryRow"><span>' + escapeHtml(acc.username) + '</span><b>' + money(total) + '</b></div>';
       }).join('');
       if (rows) ramDetail = '<div class="lineBox" style="margin-top:10px"><b>RAM アカウント別</b><div class="homeSummaryList">' + rows + '</div></div>';
     }
@@ -1385,6 +1451,9 @@ function registerRamAccount() {
   if (typeof focusId !== 'undefined') focusId = id;
 
   let todayRevenue = Number(todayRevRaw) || 0;
+  if (typeof pdAddInvestmentRecord === 'function') {
+    pdAddInvestmentRecord(id, 'ram', todayKey(), investment, 'initial');
+  }
   let existing = getRevenueEntry(todayKey()) || {};
   let ramAccounts = existing.ramAccounts || {};
   ramAccounts[id] = { todayRevenue: todayRevenue, addInvestment: 0 };
@@ -1426,10 +1495,15 @@ function normalizeOrcaAccountsMap(orcaAccounts) {
     if (!a) return;
     let yesterdayAiProfit = normalizeRamRevenueNumber(a.yesterdayAiProfit);
     let todayAffiliateProfit = normalizeRamRevenueNumber(a.todayAffiliateProfit);
-    if (yesterdayAiProfit === null || todayAffiliateProfit === null) return;
+    if (yesterdayAiProfit === null && todayAffiliateProfit === null) {
+      if (a.todayRevenue != null) {
+        out[id] = { todayRevenue: Number(a.todayRevenue) };
+      }
+      return;
+    }
     out[id] = {
-      yesterdayAiProfit: yesterdayAiProfit,
-      todayAffiliateProfit: todayAffiliateProfit
+      yesterdayAiProfit: yesterdayAiProfit || 0,
+      todayAffiliateProfit: todayAffiliateProfit || 0
     };
   });
   return out;
@@ -1447,18 +1521,22 @@ function getOrcaAccountEntry(entry, accountId) {
   if (!entry || !entry.orcaAccounts) return null;
   let acc = entry.orcaAccounts[accountId];
   if (!acc) return null;
-  let yesterdayAiProfit = normalizeRamRevenueNumber(acc.yesterdayAiProfit);
-  let todayAffiliateProfit = normalizeRamRevenueNumber(acc.todayAffiliateProfit);
-  if (yesterdayAiProfit === null || todayAffiliateProfit === null) return null;
-  return {
-    yesterdayAiProfit: yesterdayAiProfit,
-    todayAffiliateProfit: todayAffiliateProfit
-  };
+  if (acc.yesterdayAiProfit != null || acc.todayAffiliateProfit != null) {
+    return {
+      yesterdayAiProfit: Number(acc.yesterdayAiProfit) || 0,
+      todayAffiliateProfit: Number(acc.todayAffiliateProfit) || 0
+    };
+  }
+  if (acc.todayRevenue != null) {
+    return { todayRevenue: Number(acc.todayRevenue) || 0 };
+  }
+  return null;
 }
 
 function calcOrcaAccountTotal(accEntry) {
   if (!accEntry) return 0;
-  return Math.round((accEntry.yesterdayAiProfit + accEntry.todayAffiliateProfit) * 100) / 100;
+  if (accEntry.todayRevenue != null) return Number(accEntry.todayRevenue) || 0;
+  return Math.round(((accEntry.yesterdayAiProfit || 0) + (accEntry.todayAffiliateProfit || 0)) * 100) / 100;
 }
 
 function isOrcaAccountEntered(entry, accountId) {
@@ -1570,9 +1648,21 @@ function collectOrcaInputFromForm() {
 }
 
 function persistOrcaRevenueEntry(orcaAccounts, totalOrca) {
-  let existing = getRevenueEntry(todayKey()) || {};
+  let dateKey = todayKey();
+  let existing = getRevenueEntry(dateKey) || {};
   let normalizedAccounts = normalizeOrcaAccountsMap(orcaAccounts);
-  saveRevenueEntry(todayKey(), {
+  if (typeof pdMergeRevenueEntry === 'function') {
+    pdMergeRevenueEntry(dateKey, {
+      orcaAccounts: normalizedAccounts,
+      ramAccounts: existing.ramAccounts || {},
+      caryAccounts: existing.caryAccounts || {},
+      ram: existing.ram,
+      genesis: existing.genesis,
+      cary: existing.cary
+    });
+    return;
+  }
+  saveRevenueEntry(dateKey, {
     total: (Number(existing.ram) || 0) + totalOrca + (Number(existing.genesis) || 0) + (Number(existing.cary) || 0),
     ram: Number(existing.ram) || 0,
     orca: totalOrca,
@@ -1638,7 +1728,7 @@ function renderOrcaInputAccountCard(acc, existing) {
     '<div class="ramInputRow ramInputRow--readonly"><span class="ramInputLabel">ユーザー名</span><span class="ramInputVal">' + escapeHtml(acc.username) + '</span></div>' +
     '<div class="ramInputRow ramInputRow--readonly"><span class="ramInputLabel">投資額</span><span class="ramInputVal">' + num(acc.investment) + 'ドル</span></div>' +
     '<div class="ramInputRow ramInputRow--main"><span class="ramInputLabel ramInputLabel--hero">昨日AI利益</span><div class="ramInputField ramInputField--hero"><input type="number" step="0.01" min="0" id="orcaYesterdayAi_' + acc.id + '" class="ramInputMain" inputmode="decimal" placeholder="0" value="' + yesterdayAi + '"><span class="ramInputUnit">ドル</span><span class="ramInputBadge">毎日入力</span></div></div>' +
-    '<div class="ramInputRow ramInputRow--main"><span class="ramInputLabel ramInputLabel--hero">本日アフィリエイト利益</span><div class="ramInputField ramInputField--hero"><input type="number" step="0.01" min="0" id="orcaTodayAff_' + acc.id + '" class="ramInputMain" inputmode="decimal" placeholder="0" value="' + todayAff + '"><span class="ramInputUnit">ドル</span><span class="ramInputBadge">毎日入力</span></div></div>' +
+    '<div class="ramInputRow ramInputRow--main"><span class="ramInputLabel ramInputLabel--hero">本日AF収益</span><div class="ramInputField ramInputField--hero"><input type="number" step="0.01" min="0" id="orcaTodayAff_' + acc.id + '" class="ramInputMain" inputmode="decimal" placeholder="0" value="' + todayAff + '"><span class="ramInputUnit">ドル</span><span class="ramInputBadge">毎日入力</span></div></div>' +
     '<div class="ramInputRow ramInputRow--readonly"><span class="ramInputLabel">本日のORCA合計</span><span class="ramInputVal ramInputVal--gold" id="orcaTotal_' + acc.id + '">' + money(total) + '</span></div>' +
     '</div></section>';
 }
@@ -1663,7 +1753,7 @@ function openOrcaRevenueInput() {
 
   modalContent.innerHTML =
     renderOrcaInputProgress(existing) +
-    '<p class="help ramInputLead">毎日入力するのは「昨日AI利益」と「本日アフィリエイト利益」です。合計は自動で「本日のORCA収益」として反映されます。</p>' +
+    '<p class="help ramInputLead">毎日入力するのは「昨日AI利益」と「本日AF収益」です。合計は自動で「本日のORCA合計」として全画面に反映されます。</p>' +
     '<div class="ramInputList">' + cards + '</div>' +
     renderOrcaInputFooter();
 
@@ -1723,7 +1813,7 @@ function confirmOrcaOverwriteSave() {
 function saveTodayOrcaRevenue() {
   let collected = collectOrcaInputFromForm();
   if (!Object.keys(collected.orcaAccounts).length) {
-    alert('保存する内容がありません。「昨日AI利益」と「本日アフィリエイト利益」を入力してください。');
+    alert('保存する内容がありません。「昨日AI利益」と「本日AF収益」を入力してください。');
     return;
   }
   let existing = getTodayOrcaRevenueEntry();
@@ -1737,11 +1827,11 @@ function saveTodayOrcaRevenue() {
 function openOrcaAddAccountForm() {
   modalTitle.textContent = 'ORCA アカウント追加';
   modalContent.innerHTML =
-    '<p class="help">ユーザー名・投資額・昨日AI利益・本日アフィリエイト利益を入力して登録します。</p>' +
+    '<p class="help">ユーザー名・投資額・昨日AI利益・本日AF収益を入力して登録します。</p>' +
     '<label>ユーザー名</label><input id="orcaNewUsername" type="text" placeholder="例：kai1">' +
     '<label>投資額（USD）</label><input id="orcaNewInvestment" type="number" step="1" min="0" placeholder="例：5000">' +
     '<label>昨日AI利益（USD）</label><input id="orcaNewYesterdayAi" type="number" step="0.01" min="0" placeholder="例：8">' +
-    '<label>本日アフィリエイト利益（USD）</label><input id="orcaNewTodayAff" type="number" step="0.01" min="0" placeholder="例：2">' +
+    '<label>本日AF収益（USD）</label><input id="orcaNewTodayAff" type="number" step="0.01" min="0" placeholder="例：2">' +
     '<div class="ramInputFooterStack">' +
     '<button type="button" class="ramInputBtnSave" onclick="registerOrcaAccount()">このアカウントを登録</button>' +
     '<button type="button" class="btn2 ramInputBtnAdd" onclick="openOrcaRevenueInput()">入力画面に戻る</button>' +
@@ -1771,7 +1861,7 @@ function registerOrcaAccount() {
     return;
   }
   if (affRaw === '' || isNaN(Number(affRaw))) {
-    alert('本日アフィリエイト利益を入力してください。');
+    alert('本日AF収益を入力してください。');
     return;
   }
   if (!confirm('このアカウントを登録しますか？')) return;

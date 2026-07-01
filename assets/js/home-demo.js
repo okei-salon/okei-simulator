@@ -225,6 +225,10 @@ function syncHomeDemoToolbar() {
 }
 
 function resetHomeCalViewForMode() {
+  if (typeof hubResetViewMonth === 'function') {
+    hubResetViewMonth();
+    return;
+  }
   if (isHomeDemoActive()) {
     homeCalView.y = HOME_DEMO_YEAR;
     homeCalView.m = HOME_DEMO_MONTH;
