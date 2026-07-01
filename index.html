@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>OUKEI HUB Ver1.8.2</title>
+<title>OUKEI HUB Ver1.8.5</title>
 <link rel="manifest" href="site.webmanifest?v=20260628-pwa1">
 <link rel="icon" type="image/png" sizes="32x32" href="assets/brand/favicon-32.png?v=20260628-pwa1">
 <link rel="apple-touch-icon" sizes="180x180" href="assets/brand/apple-touch-icon.png?v=20260628-pwa1">
@@ -187,15 +187,17 @@ body.simulationMode .simBanner{display:block}
 
 </style>
 <link rel="stylesheet" href="assets/css/home.css?v=20260626-pf181">
-<link rel="stylesheet" href="assets/css/portfolio-ui.css?v=20260626-pf181b">
+<link rel="stylesheet" href="assets/css/portfolio-ui.css?v=20260626-pf186">
 <link rel="stylesheet" href="assets/css/settings-ui.css?v=20260626-pf181">
-<link rel="stylesheet" href="assets/css/revenue-manage.css?v=20260626-pf185">
+<link rel="stylesheet" href="assets/css/revenue-manage.css?v=20260626-pf189">
 <script src="assets/js/home.js?v=20260626-pf181"></script>
 <script src="assets/js/home-demo.js?v=20260626-pf181"></script>
 <script src="assets/js/portfolio.js?v=20260626-pf181"></script>
 <script src="assets/js/project-master.js?v=20260626-pf181"></script>
 <script src="assets/js/settings-ui.js?v=20260626-pf181"></script>
-<script src="assets/js/revenue-manage.js?v=20260626-pf185"></script>
+<script src="assets/js/manage-entry-ui.js?v=20260626-pf189"></script>
+<script src="assets/js/revenue-manage.js?v=20260626-pf189"></script>
+<script src="assets/js/sales-manage.js?v=20260626-pf189"></script>
 <script src="assets/js/ochan-lines.js?v=20260628-dict-v3"></script>
 <script src="assets/js/ochan-engine.js?v=20260628-dict-v3"></script>
 </head>
@@ -302,6 +304,7 @@ body.simulationMode .simBanner{display:block}
 <div class="pfMainTabs" role="tablist" aria-label="画面切替">
 <button type="button" class="pfMainTab isActive" data-pf-main-tab="portfolio" role="tab" aria-selected="true" onclick="showPage('portfolio')">ポートフォリオ</button>
 <button type="button" class="pfMainTab" data-pf-main-tab="revenueManage" role="tab" aria-selected="false" onclick="showPage('revenueManage')">収益管理</button>
+<button type="button" class="pfMainTab" data-pf-main-tab="salesManage" role="tab" aria-selected="false" onclick="showPage('salesManage')">売上管理</button>
 </div>
 <p class="pfSubtitle">あなたの資産全体を一元管理</p>
 </div>
@@ -332,6 +335,7 @@ body.simulationMode .simBanner{display:block}
 <div class="pfMainTabs" role="tablist" aria-label="画面切替">
 <button type="button" class="pfMainTab" data-pf-main-tab="portfolio" role="tab" aria-selected="false" onclick="showPage('portfolio')">ポートフォリオ</button>
 <button type="button" class="pfMainTab isActive" data-pf-main-tab="revenueManage" role="tab" aria-selected="true" onclick="showPage('revenueManage')">収益管理</button>
+<button type="button" class="pfMainTab" data-pf-main-tab="salesManage" role="tab" aria-selected="false" onclick="showPage('salesManage')">売上管理</button>
 </div>
 </div>
 <div class="rmTopBarRight">
@@ -375,6 +379,60 @@ body.simulationMode .simBanner{display:block}
 </div>
 </div>
 <p class="rmDisclaimer">※ 表示されている金額は、実績入力されたデータに基づく概算値です。</p>
+</div>
+</section>
+
+<section id="salesManagePage" class="hidden portfolioPage revenueManagePage salesManagePage">
+<div class="pfShell rmShell">
+<div class="rmTopBar">
+<div class="rmTopBarLeft">
+<div class="pfMainTabs" role="tablist" aria-label="画面切替">
+<button type="button" class="pfMainTab" data-pf-main-tab="portfolio" role="tab" aria-selected="false" onclick="showPage('portfolio')">ポートフォリオ</button>
+<button type="button" class="pfMainTab" data-pf-main-tab="revenueManage" role="tab" aria-selected="false" onclick="showPage('revenueManage')">収益管理</button>
+<button type="button" class="pfMainTab isActive" data-pf-main-tab="salesManage" role="tab" aria-selected="true" onclick="showPage('salesManage')">売上管理</button>
+</div>
+</div>
+<div class="rmTopBarRight">
+<div class="rmMonthNav">
+<button type="button" class="rmMonthNavBtn" onclick="smPrevMonth()" aria-label="前の月">◀</button>
+<span class="rmMonthLabel" id="smMonthLabel">2026年6月</span>
+<button type="button" class="rmMonthNavBtn" onclick="smNextMonth()" aria-label="次の月">▶</button>
+</div>
+<button type="button" class="rmIconBtn" aria-label="カレンダー"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M8 2v4M16 2v4M3 10h18"/></svg></button>
+<span class="rmUpdated" id="smLastUpdate">最終更新：—</span>
+<button type="button" class="rmExportBtn" onclick="smExportPlaceholder()">エクスポート</button>
+</div>
+</div>
+<div class="rmFilterBar">
+<label for="smProjectFilter">表示対象：</label>
+<select id="smProjectFilter" class="rmFilterSelect" onchange="smOnFilterChange()">
+<option value="all">すべてのプロジェクト</option>
+<option value="ram">RAM</option>
+<option value="orca">ORCA</option>
+<option value="cary">Cary Pact</option>
+<option value="genesis">GENESIS</option>
+<option value="other">その他</option>
+</select>
+<span class="rmCurrency">通貨：USD</span>
+</div>
+<div class="rmDailyPanel panel">
+<h3 class="rmPanelTitle" id="smDailyTitle">日別売上一覧（すべてのプロジェクト合計）</h3>
+<div class="rmTableScroll">
+<table class="rmDailyTable" id="smDailyTable"></table>
+</div>
+</div>
+<div class="rmBottomGrid">
+<div class="rmChartPanel panel">
+<h3 class="rmBottomPanelTitle" id="smLineChartTitle">月間売上グラフ（すべてのプロジェクト合計）</h3>
+<div class="rmCompareChart" id="smCompareChart"></div>
+<div class="rmChartSummary" id="smChartSummary"></div>
+</div>
+<div class="rmStatsPanel panel">
+<h3 class="rmBottomPanelTitle" id="smStatsTitle">過去最高売上（すべてのプロジェクト合計）</h3>
+<div class="rmProjectStats" id="smProjectStats"></div>
+</div>
+</div>
+<p class="rmDisclaimer">※ 表示されている数値は、実績入力またはExcelインポートの売上/BVデータに基づく概算値です。</p>
 </div>
 </section>
 
@@ -846,7 +904,7 @@ function adjustAncestorManualVolumes(parentId,delta){delta=Number(delta)||0;if(!
 function saveMember(){let id=editId.value||'m'+Date.now(),isEdit=!!editId.value,old=isEdit?members.find(x=>x.id===id):null,oldParent=old?old.parent:null,oldLine=old?lineAmountOf(id):0,obj={id,parent:parentInput.value||null,name:(nameInput.value||usernameInput.value||'未入力'),username:usernameInput.value||'',rank:Number(rankInput.value),investment:Number(investmentInput.value)||0,manualVolume:Number(volumeInput.value)||0,open:true,bvMode:'MANUAL',bvPrompted:false};let newLine=(Number(obj.investment)||0)+(Number(obj.manualVolume)||0);if(isEdit&&old){obj.bvMode=old.bvMode||'MANUAL';obj.bvPrompted=old.bvPrompted||false;obj.open=old.open;obj.isGroup=old.isGroup;obj.groupCount=old.groupCount;members[members.findIndex(m=>m.id===id)]=obj;if(oldParent===obj.parent){adjustAncestorManualVolumes(obj.parent,newLine-oldLine)}else{adjustAncestorManualVolumes(oldParent,-oldLine);adjustAncestorManualVolumes(obj.parent,newLine)}}else{members.push(obj);adjustAncestorManualVolumes(obj.parent,newLine);let p=members.find(x=>x.id===obj.parent);if(p)p.open=true}if(!obj.parent&&!rootAccountIds.includes(obj.id)){rootAccountIds.push(obj.id)}if(!obj.parent)rootId=obj.id;focusId=obj.id;settings.lastUpdate=new Date().toLocaleString();markActivity();closeModal();render()}
 function deleteMember(id){let target=members.find(x=>x.id===id);if(!target)return;if(!confirm('削除しますか？配下も削除されます。'))return;let parent=target.parent,line=lineAmountOf(id),rm=new Set([id]),ch=true;while(ch){ch=false;members.forEach(x=>{if(x.parent&&rm.has(x.parent)&&!rm.has(x.id)){rm.add(x.id);ch=true}})}members=members.filter(x=>!rm.has(x.id));rootAccountIds=(rootAccountIds||[]).filter(x=>!rm.has(x));adjustAncestorManualVolumes(parent,-line);markActivity();focusId=rootId;closeModal();render()}
 function closeModal(){modalBg.style.display='none'}function startSimulation(){if(!simMode){members=clone(currentData);simMode=true}render()}function restoreCurrent(){members=clone(currentData);simMode=false;focusId=rootId;render()}function saveScenario(){let name=prompt('シミュレーション名','配置シミュレーション');if(!name)return;scenarios.push({name,data:clone(members),created:new Date().toLocaleString()});render();alert('保存しました')}function openScenarioList(){modalTitle.textContent='保存済みシミュレーション';modalContent.innerHTML=scenarios.length?scenarios.map((s,i)=>`<div class="lineBox"><b>${s.name}</b><br>${s.created}<br><button onclick="loadScenario(${i})">開く</button></div>`).join(''):'保存済みシミュレーションはありません。';modalBg.style.display='flex'}function loadScenario(i){members=clone(scenarios[i].data);simMode=true;focusId=rootId;closeModal();render()}
-function zoomIn(){zoom=Math.min(2,zoom+.1);render();setTimeout(centerRootNode,120)}function zoomOut(){zoom=Math.max(.35,zoom-.1);render();setTimeout(centerRootNode,120)}function fitView(){zoom=.72;render();setTimeout(centerRootNode,120)}function toggleMenu(){menu.classList.toggle('open')}function setPageLocation(txt){if(typeof pageLocation!=='undefined')pageLocation.textContent=txt}function showPage(p){menu.classList.remove('open');let wasRam=!ramPage.classList.contains('hidden');homePage.classList.add('hidden');ramPage.classList.add('hidden');settingsPage.classList.add('hidden');if(typeof accountManagePage!=='undefined')accountManagePage.classList.add('hidden');if(typeof ochanRoomPage!=='undefined')ochanRoomPage.classList.add('hidden');if(typeof portfolioPage!=='undefined')portfolioPage.classList.add('hidden');if(typeof pfGoalSettingsPage!=='undefined')pfGoalSettingsPage.classList.add('hidden');if(typeof projectSettingsPage!=='undefined')projectSettingsPage.classList.add('hidden');if(typeof fxSettingsPage!=='undefined')fxSettingsPage.classList.add('hidden');if(typeof revenueManagePage!=='undefined')revenueManagePage.classList.add('hidden');if(p==='home'){homePage.classList.remove('hidden');setPageLocation('ホーム')}if(p==='ochanRoom'&&typeof ochanRoomPage!=='undefined'){ochanRoomPage.classList.remove('hidden');setPageLocation('おーちゃん部屋')}if(p==='ram'){ramPage.classList.remove('hidden');setPageLocation('RAM ｜ 組織図')}if(p==='portfolio'&&typeof portfolioPage!=='undefined'){portfolioPage.classList.remove('hidden');setPageLocation('ポートフォリオ');if(typeof pfSyncMainTabs==='function')pfSyncMainTabs('portfolio');if(typeof renderPortfolio==='function')renderPortfolio()}if(p==='projectSettings'&&typeof projectSettingsPage!=='undefined'){projectSettingsPage.classList.remove('hidden');setPageLocation('プロジェクト設定');if(typeof pmRenderProjectSettingsPage==='function')pmRenderProjectSettingsPage()}if(p==='fxSettings'&&typeof fxSettingsPage!=='undefined'){fxSettingsPage.classList.remove('hidden');setPageLocation('為替設定');if(typeof pmRenderFxSettingsPage==='function')pmRenderFxSettingsPage()}if(p==='revenueManage'&&typeof revenueManagePage!=='undefined'){revenueManagePage.classList.remove('hidden');setPageLocation('収益管理');if(typeof renderRevenueManage==='function')renderRevenueManage()}if(p==='settings'){settingsPage.classList.remove('hidden');setPageLocation('設定');if(typeof renderSettingsHub==='function')renderSettingsHub();if(typeof renderSettings==='function')renderSettings()}if(p==='accountManage'&&typeof accountManagePage!=='undefined'){accountManagePage.classList.remove('hidden');setPageLocation('RAM ｜ 集計')}if(typeof syncMobileNav==='function')syncMobileNav(p);render();if(p==='ram'&&!wasRam)setTimeout(centerRootNode,120)}
+function zoomIn(){zoom=Math.min(2,zoom+.1);render();setTimeout(centerRootNode,120)}function zoomOut(){zoom=Math.max(.35,zoom-.1);render();setTimeout(centerRootNode,120)}function fitView(){zoom=.72;render();setTimeout(centerRootNode,120)}function toggleMenu(){menu.classList.toggle('open')}function setPageLocation(txt){if(typeof pageLocation!=='undefined')pageLocation.textContent=txt}function showPage(p){menu.classList.remove('open');let wasRam=!ramPage.classList.contains('hidden');homePage.classList.add('hidden');ramPage.classList.add('hidden');settingsPage.classList.add('hidden');if(typeof accountManagePage!=='undefined')accountManagePage.classList.add('hidden');if(typeof ochanRoomPage!=='undefined')ochanRoomPage.classList.add('hidden');if(typeof portfolioPage!=='undefined')portfolioPage.classList.add('hidden');if(typeof pfGoalSettingsPage!=='undefined')pfGoalSettingsPage.classList.add('hidden');if(typeof projectSettingsPage!=='undefined')projectSettingsPage.classList.add('hidden');if(typeof fxSettingsPage!=='undefined')fxSettingsPage.classList.add('hidden');if(typeof revenueManagePage!=='undefined')revenueManagePage.classList.add('hidden');if(typeof salesManagePage!=='undefined')salesManagePage.classList.add('hidden');if(p==='home'){homePage.classList.remove('hidden');setPageLocation('ホーム')}if(p==='ochanRoom'&&typeof ochanRoomPage!=='undefined'){ochanRoomPage.classList.remove('hidden');setPageLocation('おーちゃん部屋')}if(p==='ram'){ramPage.classList.remove('hidden');setPageLocation('RAM ｜ 組織図')}if(p==='portfolio'&&typeof portfolioPage!=='undefined'){portfolioPage.classList.remove('hidden');setPageLocation('ポートフォリオ');if(typeof pfSyncMainTabs==='function')pfSyncMainTabs('portfolio');if(typeof renderPortfolio==='function')renderPortfolio()}if(p==='projectSettings'&&typeof projectSettingsPage!=='undefined'){projectSettingsPage.classList.remove('hidden');setPageLocation('プロジェクト設定');if(typeof pmRenderProjectSettingsPage==='function')pmRenderProjectSettingsPage()}if(p==='fxSettings'&&typeof fxSettingsPage!=='undefined'){fxSettingsPage.classList.remove('hidden');setPageLocation('為替設定');if(typeof pmRenderFxSettingsPage==='function')pmRenderFxSettingsPage()}if(p==='revenueManage'&&typeof revenueManagePage!=='undefined'){revenueManagePage.classList.remove('hidden');setPageLocation('収益管理');if(typeof renderRevenueManage==='function')renderRevenueManage()}if(p==='salesManage'&&typeof salesManagePage!=='undefined'){salesManagePage.classList.remove('hidden');setPageLocation('売上管理');if(typeof renderSalesManage==='function')renderSalesManage()}if(p==='settings'){settingsPage.classList.remove('hidden');setPageLocation('設定');if(typeof renderSettingsHub==='function')renderSettingsHub();if(typeof renderSettings==='function')renderSettings()}if(p==='accountManage'&&typeof accountManagePage!=='undefined'){accountManagePage.classList.remove('hidden');setPageLocation('RAM ｜ 集計')}if(typeof syncMobileNav==='function')syncMobileNav(p);render();if(p==='ram'&&!wasRam)setTimeout(centerRootNode,120)}
 function downloadBackup(){settings.lastBackup=new Date().toLocaleString();settings.lastUpdate=settings.lastBackup;localStorage.setItem('oukei_hub_v15_data',JSON.stringify({members,currentData,settings,scenarios,rootId,rootAccountIds}));let date=new Date().toISOString().slice(0,10).replaceAll('-','');let blob=new Blob([JSON.stringify({version:'1.5.8.8',app:'OUKEI HUB',members,currentData,settings,scenarios,rootId,rootAccountIds},null,2)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`OUKEI_HUB_${date}.hub`;a.click()}
 function restoreBackup(e){let f=e.target.files[0];if(!f)return;let r=new FileReader();r.onload=()=>{let d=JSON.parse(r.result);members=d.members||members;currentData=d.currentData||currentData;settings={...settings,...(d.settings||{})};scenarios=d.scenarios||[];rootId=d.rootId||rootId;rootAccountIds=d.rootAccountIds||rootAccountIds||[];focusId=rootId;if(typeof pmEnsureProjectMaster==='function')pmEnsureProjectMaster();if(typeof pmEnsureFxSettings==='function')pmEnsureFxSettings();alert('復元しました');render()};r.readAsText(f)}
 

@@ -1,4 +1,4 @@
-/* OUKEI HUB Portfolio UI — Ver1.8.2 */
+/* OUKEI HUB Portfolio UI — Ver1.8.4 */
 
 .portfolioPage {
   padding: 0;
@@ -42,9 +42,11 @@
 }
 
 .pfMainTabs {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
-  flex-wrap: wrap;
+  width: 100%;
+  max-width: 540px;
   margin: 0 0 4px;
 }
 
@@ -53,11 +55,15 @@
   border: 1px solid #355777;
   color: #eef7ff;
   border-radius: 999px;
-  padding: 11px 18px;
+  padding: 11px 8px;
   font-weight: 900;
-  font-size: 15px;
+  font-size: 14px;
   line-height: 1.2;
   cursor: pointer;
+  width: 100%;
+  min-width: 0;
+  text-align: center;
+  white-space: nowrap;
   transition: background .15s, border-color .15s, color .15s;
 }
 
@@ -911,6 +917,15 @@
 }
 
 @media (max-width: 520px) {
+  .pfMainTabs {
+    max-width: none;
+  }
+
+  .pfMainTab {
+    font-size: 12px;
+    padding: 10px 4px;
+  }
+
   .pfSummaryGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 10px;

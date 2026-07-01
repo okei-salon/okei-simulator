@@ -1,4 +1,4 @@
-/* OUKEI HUB Home UI — Ver1.8.2 */
+/* OUKEI HUB Home UI — Ver1.8.4 */
 let homeCalView = { y: new Date().getFullYear(), m: new Date().getMonth() };
 let ramSavePending = null;
 let orcaSavePending = null;
@@ -1144,6 +1144,9 @@ function updateHomeDashboard(sAll) {
   if (typeof revenueManagePage !== 'undefined' && !revenueManagePage.classList.contains('hidden') && typeof renderRevenueManage === 'function') {
     renderRevenueManage();
   }
+  if (typeof salesManagePage !== 'undefined' && !salesManagePage.classList.contains('hidden') && typeof renderSalesManage === 'function') {
+    renderSalesManage();
+  }
   if (typeof updateOchanMessage === 'function') updateOchanMessage();
   if (typeof renderPortfolio === 'function') renderPortfolio();
 }
@@ -1811,7 +1814,7 @@ function openPortfolioNav() {
 function syncMobileNav(page) {
   let nav = document.getElementById('mobileBottomNav');
   if (!nav) return;
-  let map = { home: 'home', ram: 'ram', portfolio: 'portfolio', revenueManage: 'portfolio', settings: 'settings', accountManage: 'ram' };
+  let map = { home: 'home', ram: 'ram', portfolio: 'portfolio', revenueManage: 'portfolio', salesManage: 'portfolio', settings: 'settings', accountManage: 'ram' };
   let active = map[page] || '';
   nav.querySelectorAll('[data-nav]').forEach(function (btn) {
     btn.classList.toggle('isActive', btn.getAttribute('data-nav') === active);

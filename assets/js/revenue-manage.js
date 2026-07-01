@@ -1,4 +1,4 @@
-/* OUKEI HUB Revenue Management — Ver1.8.2 */
+/* OUKEI HUB Revenue Management — Ver1.8.5 */
 
 var rmView = { y: new Date().getFullYear(), m: new Date().getMonth() };
 var rmFilter = 'all';
@@ -64,6 +64,101 @@ var RM_DEMO_ACCOUNTS = {
     { id: 'demo_cary_2', username: '甲斐B' }
   ]
 };
+
+var RM_DEMO_ACCOUNT_TREE = {
+  ram: [
+    { id: 'demo_ram_1', name: '甲斐1', parentId: null, depth: 0 },
+    { id: 'demo_ram_2', name: '甲斐2', parentId: 'demo_ram_1', depth: 1 },
+    { id: 'demo_ram_3', name: '山森1', parentId: null, depth: 0 },
+    { id: 'demo_ram_4', name: '山森2', parentId: 'demo_ram_3', depth: 1 },
+    { id: 'demo_ram_5', name: '旺慶', parentId: null, depth: 0 },
+    { id: 'demo_ram_6', name: '旺慶2', parentId: 'demo_ram_5', depth: 1 }
+  ],
+  orca: [
+    { id: 'demo_orca_1', name: '甲斐①', parentId: null, depth: 0 },
+    { id: 'demo_orca_2', name: '甲斐②', parentId: 'demo_orca_1', depth: 1 },
+    { id: 'demo_orca_3', name: '山森1', parentId: null, depth: 0 },
+    { id: 'demo_orca_4', name: '山森2', parentId: 'demo_orca_3', depth: 1 }
+  ],
+  cary: [
+    { id: 'demo_cary_1', name: '甲斐A', parentId: null, depth: 0 },
+    { id: 'demo_cary_2', name: '甲斐B', parentId: 'demo_cary_1', depth: 1 }
+  ]
+};
+
+function rmGetLiveRamAccountTree() {
+  if (typeof getRamInputAccounts !== 'function' || typeof members === 'undefined') return [];
+  let roots = getRamInputAccounts();
+  if (!roots.length) return [];
+  let out = [];
+  let seen = {};
+  function addMember(id, depth) {
+    if (seen[id]) return;
+    seen[id] = true;
+    let m = members.find(function (x) { return x.id === id; });
+    if (!m) return;
+    let name = typeof displayName === 'function' ? displayName(m) : (m.name || m.username || '未入力');
+    out.push({ id: id, name: name, parentId: m.parent || null, depth: depth });
+    members.filter(function (x) { return x.parent === id; }).forEach(function (child) {
+      addMember(child.id, depth + 1);
+    });
+  }
+  roots.forEach(function (r) { addMember(r.id, 0); });
+  return out;
+}
+
+function rmGetProjectAccountRows(projectKey) {
+  let accounts = [];
+  if (projectKey === 'ram') {
+    let live = rmGetLiveRamAccountTree();
+    accounts = live.length ? live : (RM_DEMO_ACCOUNT_TREE.ram ? RM_DEMO_ACCOUNT_TREE.ram.slice() : []);
+  } else if (projectKey === 'orca') {
+    if (typeof getOrcaInputAccounts === 'function') {
+      let live = getOrcaInputAccounts();
+      if (live.length) {
+        accounts = live.map(function (acc) {
+          return { id: acc.id, name: acc.username, parentId: null, depth: 0 };
+        });
+      }
+    }
+    if (!accounts.length && RM_DEMO_ACCOUNT_TREE.orca) {
+      accounts = RM_DEMO_ACCOUNT_TREE.orca.slice();
+    }
+  } else if (projectKey === 'cary') {
+    if (typeof getCaryInputAccounts === 'function') {
+      let live = getCaryInputAccounts();
+      if (live.length) {
+        accounts = live.map(function (acc) {
+          return { id: acc.id, name: acc.username, parentId: null, depth: 0 };
+        });
+      }
+    }
+    if (!accounts.length && RM_DEMO_ACCOUNT_TREE.cary) {
+      accounts = RM_DEMO_ACCOUNT_TREE.cary.slice();
+    }
+  }
+  return pfAnnotateAccountSeries(accounts);
+}
+
+function rmOpenRevenueEntryModal(projectKey, accountId, accountName, dateKey, amount) {
+  let projLabel = pfGetProjectLabel(projectKey, RM_PROJECTS);
+  let dateVal = dateKey || pfFormatIsoDate(rmView.y, rmView.m, 1);
+  let total = Number(amount) || 0;
+  let demoOp = total ? Math.round(total * 0.94 * 100) / 100 : (projectKey === 'orca' ? 95 : 120);
+  let demoRev = total || (projectKey === 'orca' ? 103 : 128);
+  let body =
+    pfEntryDateField('日付', 'rmEntryDate', dateVal) +
+    pfEntryReadonlyField('プロジェクト', projLabel) +
+    pfEntryReadonlyField('アカウント', accountName || accountId) +
+    pfEntryNumberField('運用（$）', 'rmEntryOperation', demoOp) +
+    pfEntryNumberField('本日収益（$）', 'rmEntryRevenue', demoRev,
+      '紹介報酬（1段・2段）およびタイトル報酬を含みます。');
+  pfOpenEntryModal('実績入力', body, 'rmSaveRevenueEntryDummy');
+}
+
+function rmSaveRevenueEntryDummy() {
+  pfEntrySaveDummy('保存は次回バージョンで実装予定です');
+}
 
 function rmExpandAnchorSeries(anchors, daysInMonth) {
   let pts = Object.keys(anchors).map(function (k) {
@@ -340,26 +435,30 @@ function rmGetTableRows() {
     }).concat([{ key: 'total', name: '合計', iconKey: '', isTotal: true }]);
   }
 
-  let accounts = rmGetDemoAccountsForProject(rmFilter);
+  if (rmFilter === 'genesis' || rmFilter === 'other') {
+    let p = RM_PROJECTS.find(function (x) { return x.key === rmFilter; });
+    return [{
+      key: rmFilter,
+      name: p ? p.name : rmFilter,
+      iconKey: rmFilter,
+      isProject: true
+    }, { key: 'total', name: '合計', iconKey: '', isTotal: true }];
+  }
+
+  let accounts = rmGetProjectAccountRows(rmFilter);
   if (!accounts.length) {
-    if (rmFilter === 'genesis' || rmFilter === 'other') {
-      let p = RM_PROJECTS.find(function (x) { return x.key === rmFilter; });
-      return [{
-        key: rmFilter,
-        name: p ? p.name : rmFilter,
-        iconKey: rmFilter,
-        isProject: true
-      }];
-    }
     return [{ key: 'empty', name: '（登録アカウントなし）', iconKey: rmFilter, isEmpty: true }];
   }
   return accounts.map(function (acc) {
     return {
       key: acc.id,
-      name: acc.username,
+      name: acc.name,
       iconKey: rmFilter,
       projectKey: rmFilter,
-      isAccount: true
+      isAccount: true,
+      depth: acc.depth || 0,
+      parentId: acc.parentId,
+      seriesIndex: acc.seriesIndex || 0
     };
   }).concat([{ key: 'total', name: '合計', iconKey: '', isTotal: true }]);
 }
@@ -388,15 +487,41 @@ function rmBindDailyTableEvents() {
   if (!table) return;
   rmDailyTableBound = true;
   table.addEventListener('click', function (e) {
-    let btn = e.target.closest('.rmExpandBtn');
-    if (!btn) return;
-    e.preventDefault();
-    e.stopPropagation();
-    let projectKey = btn.getAttribute('data-project');
-    let accountId = btn.getAttribute('data-account');
-    if (!projectKey || !accountId) return;
-    rmToggleAccountDetail(projectKey, accountId);
+    let expandBtn = e.target.closest('.rmExpandBtn');
+    if (expandBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      let projectKey = expandBtn.getAttribute('data-project');
+      let accountId = expandBtn.getAttribute('data-account');
+      if (projectKey && accountId) rmToggleAccountDetail(projectKey, accountId);
+      return;
+    }
   });
+  pfBindEditableAmountClicks(table, function (meta) {
+    rmOpenRevenueEntryModal(meta.projectKey, meta.accountId, meta.accountName, meta.dateKey, meta.amount);
+  });
+}
+
+function rmCanEditAmountCell(dr, row) {
+  if (rmFilter === 'all' || row.isEmpty || row.isTotal) return false;
+  if (dr.type === 'accountHead' || dr.type === 'accountFlat') return true;
+  if (dr.type === 'accountDetail' && dr.isSubTotal) return true;
+  return false;
+}
+
+function rmRenderAmountCell(dr, row, y, m, d, amt, wdCls) {
+  if (!amt) return '<td class="' + wdCls + ' isEmpty">—</td>';
+  if (!rmCanEditAmountCell(dr, row)) {
+    return '<td class="' + wdCls + '">' + rmMoney(amt) + '</td>';
+  }
+  let dateKey = pfFormatIsoDate(y, m, d);
+  let cell = pfRenderEditableAmountCell(amt, rmMoney(amt), {
+    projectKey: row.projectKey,
+    accountId: row.key,
+    accountName: row.name,
+    dateKey: dateKey
+  });
+  return '<td class="' + wdCls + ' pfEditableCell">' + cell + '</td>';
 }
 
 function rmSplitRamTotal(total, accountId, d) {
@@ -473,7 +598,7 @@ function rmBuildTableDisplayRows() {
   let rows = rmGetTableRows();
   let out = [];
   rows.forEach(function (row) {
-    if (row.isAccount && rmSupportsAccountDetail(row.projectKey)) {
+    if (row.isAccount && rmFilter !== 'all' && rmSupportsAccountDetail(row.projectKey)) {
       let expanded = rmIsAccountExpanded(row.projectKey, row.key);
       out.push({ type: 'accountHead', row: row, expanded: expanded });
       if (expanded) {
@@ -487,6 +612,8 @@ function rmBuildTableDisplayRows() {
           });
         });
       }
+    } else if (row.isAccount && rmFilter !== 'all') {
+      out.push({ type: 'accountFlat', row: row });
     } else {
       out.push({ type: 'normal', row: row });
     }
@@ -573,7 +700,13 @@ function rmRenderProjectIcon(iconKey, extraClass) {
 function rmRenderAccountHeadLabel(row, expanded) {
   let toggle = expanded ? '▼' : '▶';
   let btn = '<button type="button" class="rmExpandBtn" data-project="' + rmEscapeAttr(row.projectKey) + '" data-account="' + rmEscapeAttr(row.key) + '" aria-expanded="' + expanded + '" aria-label="' + (expanded ? '詳細を閉じる' : '詳細を表示') + '">' + toggle + '</button>';
-  return '<span class="rmRowLabel rmRowLabel--account">' + btn + rmRenderProjectIcon(row.iconKey, 'rmRowIcon') + rmEscape(row.name) + '</span>';
+  return '<span class="pfAccountLabel pfAccountLabel--expand">' + btn +
+    pfRenderSeriesMarker(row.seriesIndex || 0) +
+    '<span class="pfAccountLabelText">' + rmEscape(row.name) + '</span></span>';
+}
+
+function rmRenderAccountFlatLabel(row) {
+  return pfRenderAccountLabel(rmEscape(row.name), row.seriesIndex || 0);
 }
 
 function rmRenderDetailLabel(label, isSubTotal) {
@@ -611,6 +744,9 @@ function rmRenderDailyTable() {
       trCls = ' class="rmAccountHeadRow' + (dr.expanded ? ' isExpanded' : '') + '"';
       label = rmRenderAccountHeadLabel(row, dr.expanded);
       showAmounts = !dr.expanded;
+    } else if (dr.type === 'accountFlat') {
+      trCls = ' class="rmDetailRow smSalesAccountRow"';
+      label = rmRenderAccountFlatLabel(row);
     } else if (dr.type === 'accountDetail') {
       trCls = ' class="rmDetailRow' + (dr.isSubTotal ? ' rmDetailSubTotalRow' : '') + '"';
       label = rmRenderDetailLabel(dr.label, dr.isSubTotal);
@@ -636,17 +772,37 @@ function rmRenderDailyTable() {
       } else {
         amt = rmGetRowDayAmount(row, y, m, d);
       }
-      cells += '<td class="' + cls.trim() + (amt ? '' : ' isEmpty') + '">' + (amt ? rmMoney(amt) : '—') + '</td>';
+      cells += rmRenderAmountCell(dr, row, y, m, d, amt, cls.trim());
     }
 
     if (row.isEmpty || !showAmounts) {
       cells += '<td class="rmMonthTotalCol isEmpty">—</td>';
     } else if (dr.type === 'accountDetail') {
       monthSum = rmSumAccountDetailMonth(row.projectKey, row.key, dr.detailKey, y, m);
-      cells += '<td class="rmMonthTotalCol' + (dr.isSubTotal ? ' rmDetailSubTotalCol' : '') + '">' + rmMoney(monthSum) + '</td>';
+      if (dr.isSubTotal && rmCanEditAmountCell(dr, row) && monthSum) {
+        cells += '<td class="rmMonthTotalCol rmDetailSubTotalCol pfEditableCell">' +
+          pfRenderEditableAmountCell(monthSum, rmMoney(monthSum), {
+            projectKey: row.projectKey,
+            accountId: row.key,
+            accountName: row.name,
+            dateKey: pfFormatIsoDate(y, m, 1)
+          }) + '</td>';
+      } else {
+        cells += '<td class="rmMonthTotalCol' + (dr.isSubTotal ? ' rmDetailSubTotalCol' : '') + '">' + rmMoney(monthSum) + '</td>';
+      }
     } else {
       monthSum = rmSumRowMonth(row, y, m);
-      cells += '<td class="rmMonthTotalCol">' + rmMoney(monthSum) + '</td>';
+      if (rmCanEditAmountCell(dr, row) && monthSum) {
+        cells += '<td class="rmMonthTotalCol pfEditableCell">' +
+          pfRenderEditableAmountCell(monthSum, rmMoney(monthSum), {
+            projectKey: row.projectKey,
+            accountId: row.key,
+            accountName: row.name,
+            dateKey: pfFormatIsoDate(y, m, 1)
+          }) + '</td>';
+      } else {
+        cells += '<td class="rmMonthTotalCol">' + rmMoney(monthSum) + '</td>';
+      }
     }
 
     return '<tr' + trCls + '><td class="rmStickyCol">' + label + '</td>' + cells + '</tr>';
@@ -668,8 +824,8 @@ function rmRenderCompareChart() {
   let m = rmView.m;
   let prev = rmCalcPrevMonth(y, m);
   let days = new Date(y, m + 1, 0).getDate();
-  let curVals = rmGetDemoChartCurrentSeries(days);
-  let prevVals = rmGetDemoChartPrevSeries(days);
+  let curVals = rmResolveDailySeries(y, m);
+  let prevVals = rmResolveDailySeries(prev.y, prev.m);
   let dataMax = Math.max.apply(null, curVals.concat(prevVals).concat([1]));
   let axisMax = typeof niceChartAxisMax === 'function' ? niceChartAxisMax(dataMax) : Math.max(dataMax, 450);
 
@@ -737,10 +893,14 @@ function rmRenderChartSummary() {
   if (!el) return;
 
   try {
-  let summary = rmGetDemoChartSummary();
-  let curTotal = summary.currentTotal;
-  let prevTotal = summary.prevTotal;
-  let pct = summary.pctChange;
+  let y = rmView.y;
+  let m = rmView.m;
+  let prev = rmCalcPrevMonth(y, m);
+  let curVals = rmResolveDailySeries(y, m);
+  let prevVals = rmResolveDailySeries(prev.y, prev.m);
+  let curTotal = rmMonthTotalFromSeries(curVals);
+  let prevTotal = rmMonthTotalFromSeries(prevVals);
+  let pct = rmPctChange(curTotal, prevTotal);
   let pctCls = pct >= 0 ? 'isUp' : 'isDown';
   let arrow = pct >= 0 ? '↗' : '↘';
 
@@ -814,11 +974,88 @@ function rmGetProjectStats(projectKey) {
   return RM_DEMO_STATS[projectKey] || stats;
 }
 
+function rmGetDemoAccountStats(projectKey, accountId) {
+  let seed = rmAccountDemoSeed(accountId);
+  let day = 10 + (seed % 18);
+  return {
+    bestDayAmount: 95 + (seed % 7) * 12 + (projectKey === 'orca' ? 0 : 20),
+    bestDayLabel: '2026/06/' + String(day).padStart(2, '0'),
+    bestMonthAmount: 2800 + (seed % 9) * 420,
+    bestMonthLabel: '2026年6月'
+  };
+}
+
+function rmComputeAccountStats(projectKey, accountId) {
+  let bestDay = { amount: 0, dateKey: '' };
+  let monthTotals = {};
+  rmScanAllDateKeys().forEach(function (key) {
+    let parts = key.split('-');
+    if (parts.length !== 3) return;
+    let y = Number(parts[0]);
+    let mo = Number(parts[1]) - 1;
+    let d = Number(parts[2]);
+    let row = { key: accountId, projectKey: projectKey, isAccount: true, name: '' };
+    let amt = rmGetRowDayAmount(row, y, mo, d);
+    if (amt > bestDay.amount) bestDay = { amount: amt, dateKey: key };
+    let monthKey = parts[0] + '-' + parts[1];
+    monthTotals[monthKey] = (monthTotals[monthKey] || 0) + amt;
+  });
+  let bestMonth = { amount: 0, label: '—' };
+  Object.keys(monthTotals).forEach(function (mk) {
+    if (monthTotals[mk] > bestMonth.amount) {
+      let p = mk.split('-');
+      bestMonth = { amount: Math.round(monthTotals[mk] * 100) / 100, label: p[0] + '年' + Number(p[1]) + '月' };
+    }
+  });
+  let dayLabel = '—';
+  if (bestDay.dateKey) {
+    let p = bestDay.dateKey.split('-');
+    dayLabel = p[0] + '/' + p[1] + '/' + p[2];
+  }
+  return {
+    bestDayAmount: bestDay.amount,
+    bestDayLabel: dayLabel,
+    bestMonthAmount: bestMonth.amount,
+    bestMonthLabel: bestMonth.label
+  };
+}
+
+function rmGetAccountStats(projectKey, accountId) {
+  let stats = rmComputeAccountStats(projectKey, accountId);
+  if (stats.bestDayAmount || stats.bestMonthAmount) return stats;
+  return rmGetDemoAccountStats(projectKey, accountId);
+}
+
 function rmRenderProjectStats() {
   let el = document.getElementById('rmProjectStats');
   if (!el) return;
 
   try {
+  if (rmFilter === 'all') {
+    el.innerHTML =
+      '<div class="rmStatTable">' +
+      '<div class="rmStatTableHead">' +
+      '<div class="rmStatTableCol rmStatTableCol--project"></div>' +
+      '<div class="rmStatTableCol rmStatTableCol--metric">最高日収</div>' +
+      '<div class="rmStatTableCol rmStatTableCol--metric">最高月収</div>' +
+      '</div>' +
+      RM_PROJECTS.map(function (p) {
+        let stats = rmGetProjectStats(p.key);
+        return '<div class="rmStatTableRow">' +
+          '<div class="rmStatTableCol rmStatTableCol--project">' + rmRenderProjectIcon(p.iconKey, 'rmRowIcon') + rmEscape(p.name) + '</div>' +
+          '<div class="rmStatTableCol rmStatTableCol--metric">' +
+          '<span class="rmStatAmt">' + rmMoney(stats.bestDayAmount) + '</span>' +
+          '<span class="rmStatDate">' + rmEscape(stats.bestDayLabel) + '</span></div>' +
+          '<div class="rmStatTableCol rmStatTableCol--metric">' +
+          '<span class="rmStatAmt">' + rmMoney(stats.bestMonthAmount) + '</span>' +
+          '<span class="rmStatDate">' + rmEscape(stats.bestMonthLabel) + '</span></div>' +
+          '</div>';
+      }).join('') +
+      '</div>';
+    return;
+  }
+
+  let accounts = rmGetProjectAccountRows(rmFilter);
   el.innerHTML =
     '<div class="rmStatTable">' +
     '<div class="rmStatTableHead">' +
@@ -826,10 +1063,10 @@ function rmRenderProjectStats() {
     '<div class="rmStatTableCol rmStatTableCol--metric">最高日収</div>' +
     '<div class="rmStatTableCol rmStatTableCol--metric">最高月収</div>' +
     '</div>' +
-    RM_PROJECTS.map(function (p) {
-      let stats = RM_DEMO_STATS[p.key] || { bestDayAmount: 0, bestDayLabel: '—', bestMonthAmount: 0, bestMonthLabel: '—' };
+    accounts.map(function (acc) {
+      let stats = rmGetAccountStats(rmFilter, acc.id);
       return '<div class="rmStatTableRow">' +
-        '<div class="rmStatTableCol rmStatTableCol--project">' + rmRenderProjectIcon(p.iconKey, 'rmRowIcon') + rmEscape(p.name) + '</div>' +
+        '<div class="rmStatTableCol rmStatTableCol--project">' + pfRenderAccountLabel(rmEscape(acc.name), acc.seriesIndex || 0) + '</div>' +
         '<div class="rmStatTableCol rmStatTableCol--metric">' +
         '<span class="rmStatAmt">' + rmMoney(stats.bestDayAmount) + '</span>' +
         '<span class="rmStatDate">' + rmEscape(stats.bestDayLabel) + '</span></div>' +
@@ -918,6 +1155,7 @@ function rmEnsureInit() {
 
 if (typeof window !== 'undefined') {
   window.rmToggleAccountDetail = rmToggleAccountDetail;
+  window.rmSaveRevenueEntryDummy = rmSaveRevenueEntryDummy;
 }
 
 if (typeof document !== 'undefined') {
