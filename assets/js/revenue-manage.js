@@ -1388,6 +1388,7 @@ function rmUpdateHeaderMeta() {
 function rmOnFilterChange() {
   let sel = document.getElementById('rmProjectFilter');
   rmFilter = sel ? sel.value : 'all';
+  if (typeof pjUpdateFilterIcon === 'function') pjUpdateFilterIcon('rmFilterIcon', rmFilter);
   rmExpandedAccounts = {};
   rmRenderAllPanels();
   rmUpdateHeaderMeta();
@@ -1422,6 +1423,7 @@ function renderRevenueManage() {
 
   let sel = document.getElementById('rmProjectFilter');
   if (sel) sel.value = rmFilter;
+  if (typeof pjUpdateFilterIcon === 'function') pjUpdateFilterIcon('rmFilterIcon', rmFilter);
 
   rmUpdateHeaderMeta();
   rmRenderAllPanels();

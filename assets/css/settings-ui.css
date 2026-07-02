@@ -180,14 +180,6 @@
   margin-bottom: 12px;
 }
 
-.pmProjectCardIcon {
-  width: 44px !important;
-  height: 44px !important;
-  border-radius: 12px !important;
-  background-size: 24px 24px !important;
-  flex-shrink: 0;
-}
-
 .pmProjectCardHead {
   min-width: 0;
   flex: 1;
@@ -291,11 +283,8 @@
   gap: 4px;
 }
 
-.pmEditIcon {
-  width: 52px !important;
-  height: 52px !important;
-  border-radius: 14px !important;
-  background-size: 28px 28px !important;
+.pmEditForm .pjIconWrap {
+  display: flex;
   margin: 0 auto 8px;
 }
 

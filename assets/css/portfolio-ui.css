@@ -334,15 +334,6 @@
   min-width: 0;
 }
 
-.pfProjectCardIcon {
-  width: 40px !important;
-  height: 40px !important;
-  border-radius: 11px !important;
-  background-size: 20px 20px !important;
-  flex-shrink: 0;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, .25);
-}
-
 .pfProjectCardName {
   margin: 0;
   font-size: 17px;

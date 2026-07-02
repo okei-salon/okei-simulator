@@ -1032,6 +1032,7 @@ function smUpdateHeaderMeta() {
 function smOnFilterChange() {
   let sel = document.getElementById('smProjectFilter');
   smFilter = sel ? sel.value : 'all';
+  if (typeof pjUpdateFilterIcon === 'function') pjUpdateFilterIcon('smFilterIcon', smFilter);
   smRenderAllPanels();
   smUpdateHeaderMeta();
 }
@@ -1065,6 +1066,7 @@ function renderSalesManage() {
 
   let sel = document.getElementById('smProjectFilter');
   if (sel) sel.value = smFilter;
+  if (typeof pjUpdateFilterIcon === 'function') pjUpdateFilterIcon('smFilterIcon', smFilter);
 
   smUpdateHeaderMeta();
   smRenderAllPanels();

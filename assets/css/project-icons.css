@@ -1,0 +1,196 @@
+/* OUKEI HUB Project Icons — Ver2.0.3 (shared across all screens) */
+
+:root {
+  --pj-icon-size-sm: 22px;
+  --pj-icon-size-md: 28px;
+  --pj-icon-size-lg: 39px;
+  --pj-icon-size-xl: 56px;
+  --pj-icon-radius-sm: 5px;
+  --pj-icon-radius-md: 7px;
+  --pj-icon-radius-lg: 10px;
+  --pj-icon-radius-xl: 12px;
+}
+
+/* PNG image icons (RAM / ORCA / registered projects) */
+img.homeProjIcon,
+img.homeProjIcon--img {
+  display: block;
+  flex-shrink: 0;
+  width: var(--pj-icon-size-md);
+  height: var(--pj-icon-size-md);
+  object-fit: contain;
+  object-position: center;
+  padding: 0;
+  margin: 0;
+  border: none !important;
+  background: none !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  border-radius: var(--pj-icon-radius-md);
+  vertical-align: middle;
+}
+
+img.homeProjIcon--size-sm {
+  width: var(--pj-icon-size-sm);
+  height: var(--pj-icon-size-sm);
+  border-radius: var(--pj-icon-radius-sm);
+}
+
+img.homeProjIcon--size-md {
+  width: var(--pj-icon-size-md);
+  height: var(--pj-icon-size-md);
+  border-radius: var(--pj-icon-radius-md);
+}
+
+img.homeProjIcon--size-lg {
+  width: var(--pj-icon-size-lg);
+  height: var(--pj-icon-size-lg);
+  border-radius: var(--pj-icon-radius-lg);
+}
+
+img.homeProjIcon--size-xl {
+  width: var(--pj-icon-size-xl);
+  height: var(--pj-icon-size-xl);
+  border-radius: var(--pj-icon-radius-xl);
+}
+
+/* Wrapper for inline / flex alignment (optional outer shell) */
+.pjIconWrap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: transparent !important;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+  line-height: 0;
+}
+
+.pjIconWrap--size-sm {
+  width: var(--pj-icon-size-sm);
+  height: var(--pj-icon-size-sm);
+}
+
+.pjIconWrap--size-md {
+  width: var(--pj-icon-size-md);
+  height: var(--pj-icon-size-md);
+}
+
+.pjIconWrap--size-lg {
+  width: var(--pj-icon-size-lg);
+  height: var(--pj-icon-size-lg);
+}
+
+.pjIconWrap--size-xl {
+  width: var(--pj-icon-size-xl);
+  height: var(--pj-icon-size-xl);
+}
+
+.pjIconWrap img.homeProjIcon {
+  width: 100%;
+  height: 100%;
+}
+
+/* CSS fallback icons (projects without PNG yet) */
+span.homeProjIcon:not(.homeProjIcon--img) {
+  display: inline-block;
+  width: var(--pj-icon-size-md);
+  height: var(--pj-icon-size-md);
+  border-radius: var(--pj-icon-radius-md);
+  flex-shrink: 0;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+  vertical-align: middle;
+}
+
+span.homeProjIcon--size-sm:not(.homeProjIcon--img) {
+  width: var(--pj-icon-size-sm);
+  height: var(--pj-icon-size-sm);
+  border-radius: var(--pj-icon-radius-sm);
+}
+
+span.homeProjIcon--size-lg:not(.homeProjIcon--img) {
+  width: var(--pj-icon-size-lg);
+  height: var(--pj-icon-size-lg);
+  border-radius: var(--pj-icon-radius-lg);
+}
+
+span.homeProjIcon--size-xl:not(.homeProjIcon--img) {
+  width: var(--pj-icon-size-xl);
+  height: var(--pj-icon-size-xl);
+  border-radius: var(--pj-icon-radius-xl);
+}
+
+span.homeProjIcon--ram:not(.homeProjIcon--img) {
+  background-color: rgba(59, 130, 246, .22);
+  border: 1px solid rgba(59, 130, 246, .45);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2393c5fd' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M14 4l6 6M8 20l-1 1M5 17l3 3M11 11l-5 5'/%3E%3Cpath d='M15 5l4 4'/%3E%3C/svg%3E");
+}
+
+span.homeProjIcon--orca:not(.homeProjIcon--img) {
+  background-color: rgba(20, 184, 166, .18);
+  border: 1px solid rgba(20, 184, 166, .4);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%235eead4' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 14c2-4 6-6 10-5 3 1 6 0 8-3 0 4-2 8-6 10s-8 1-12-2z'/%3E%3Ccircle cx='17' cy='9' r='1' fill='%235eead4'/%3E%3C/svg%3E");
+}
+
+span.homeProjIcon--cary:not(.homeProjIcon--img),
+span.homeProjIcon--genesis:not(.homeProjIcon--img),
+span.homeProjIcon--demo2026:not(.homeProjIcon--img) {
+  background-color: rgba(168, 85, 247, .18);
+  border: 1px solid rgba(168, 85, 247, .4);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23c084fc' stroke-width='2' stroke-linejoin='round'%3E%3Cpath d='M12 3l8 7-8 11L4 10z'/%3E%3C/svg%3E");
+}
+
+span.homeProjIcon--custom:not(.homeProjIcon--img) {
+  background-color: rgba(100, 116, 139, .2);
+  border: 1px solid rgba(148, 163, 184, .45);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23cbd5e1' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 7h16M4 12h16M4 17h10'/%3E%3C/svg%3E");
+}
+
+/* Layout helpers used across screens */
+.rmRowLabel .pjIconWrap,
+.rmStatTableCol--project .pjIconWrap {
+  margin-right: 2px;
+}
+
+.rmFilterIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--pj-icon-size-md);
+  height: var(--pj-icon-size-md);
+  flex-shrink: 0;
+  background: transparent !important;
+}
+
+.rmFilterIcon.isEmpty {
+  display: none;
+}
+
+.homeMonthlyProjDot,
+.homeTodayProjMark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--pj-icon-size-sm);
+  height: var(--pj-icon-size-sm);
+  flex-shrink: 0;
+  background: transparent !important;
+}
+
+.portfolioSectionTitle .pjIconWrap,
+.portfolioSectionTitle img.homeProjIcon {
+  margin-right: 2px;
+}
+
+@media (max-width: 900px) {
+  :root {
+    --pj-icon-size-sm: 20px;
+    --pj-icon-size-md: 25px;
+    --pj-icon-size-lg: 35px;
+    --pj-icon-size-xl: 50px;
+  }
+}

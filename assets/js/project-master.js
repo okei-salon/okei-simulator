@@ -355,6 +355,13 @@ function pmCommitFxSettings(rate) {
 }
 
 function pmRenderProjectIcon(key, extraClass, project) {
+  if (typeof renderProjectIcon === 'function') {
+    return renderProjectIcon(key, extraClass, {
+      project: project,
+      iconKey: project && project.iconKey ? project.iconKey : key,
+      name: project && project.name ? project.name : ''
+    });
+  }
   let p = project;
   if (!p && typeof pmGetProject === 'function') p = pmGetProject(key);
   let iconKey = (p && p.iconKey) ? p.iconKey : key;

@@ -87,6 +87,9 @@ function getRevenueProjectMeta(projectKey) {
 }
 
 function renderHomeProjIcon(projectKey, extraClass) {
+  if (typeof renderProjectIcon === 'function') {
+    return renderProjectIcon(projectKey, extraClass);
+  }
   let cls = 'homeProjIcon homeProjIcon--' + projectKey;
   if (extraClass) cls += ' ' + extraClass;
   return '<span class="' + cls + '" aria-hidden="true"></span>';
@@ -614,7 +617,8 @@ function renderProjectGrid(containerId, projects, getAmount, totalHint) {
     let amt = amounts[i];
     let pct = total > 0 ? Math.round((amt / total) * 1000) / 10 : 0;
     return '<div class="homeProjCard homeProjCard--' + p.dot + '">' +
-      '<div class="homeProjCardTop"><span class="homeProjCardDot"></span><span class="homeProjCardName">' + p.name + '</span></div>' +
+      '<div class="homeProjCardTop">' + renderHomeProjIcon(p.dot || p.key, 'homeProjCardIcon') +
+      '<span class="homeProjCardName">' + p.name + '</span></div>' +
       '<span class="homeProjCardAmt">' + money(amt) + '</span>' +
       '<span class="homeProjCardPct">' + pct + '%</span>' +
       '<div class="homeProjCardBar"><div class="homeProjCardBarFill" style="width:' + pct + '%"></div></div>' +
@@ -1001,7 +1005,8 @@ function renderHomeMonthlyProjGrid(sAll) {
     let p = row.proj;
     return '<div class="homeMonthlyProjCard homeMonthlyProjCard--' + p.cls + '">' +
       '<div class="homeMonthlyProjCardHead">' +
-      '<span class="homeMonthlyProjCardName"><span class="homeMonthlyProjDot homeProjIcon homeProjIcon--' + p.cls + '"></span>' + p.name + '</span>' +
+      '<span class="homeMonthlyProjCardName"><span class="homeMonthlyProjDot">' +
+      renderHomeProjIcon(p.cls || p.key, 'homeMonthlyProjIcon') + '</span>' + p.name + '</span>' +
       '<span class="homeMonthlyProjCardPct">' + row.pct + '%</span></div>' +
       '<span class="homeMonthlyProjCardAmt">' + money(row.amt) + '</span>' +
       '<div class="homeMonthlyProjCardBar"><div class="homeMonthlyProjCardBarFill" style="width:' + row.pct + '%"></div></div>' +
@@ -1162,7 +1167,8 @@ function renderHomeTodayProjGrid(rows) {
     let p = row.proj;
     return '<div class="homeTodayProjCard homeTodayProjCard--' + p.cls + '">' +
       '<div class="homeTodayProjCardHead">' +
-      '<span class="homeTodayProjCardName"><span class="homeTodayProjMark homeProjIcon homeProjIcon--' + p.cls + '"></span>' + p.name + '</span>' +
+      '<span class="homeTodayProjCardName"><span class="homeTodayProjMark">' +
+      renderHomeProjIcon(p.cls || p.key, 'homeTodayProjIcon') + '</span>' + p.name + '</span>' +
       '<span class="homeTodayProjCardPct">' + row.pct + '%</span></div>' +
       '<span class="homeTodayProjCardAmt">' + money(row.amt) + '</span>' +
       '<div class="homeTodayProjCardBar"><div class="homeTodayProjCardBarFill" style="width:' + row.pct + '%"></div></div>' +
