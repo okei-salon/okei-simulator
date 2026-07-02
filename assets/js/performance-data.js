@@ -417,7 +417,7 @@ function pdPreviewRamAccountRevenueTotal(accountId, todayRevenue, addInvestment,
 function pdOrcaAccountRevenueTotal(a) {
   if (!a) return 0;
   if (a.yesterdayAiProfit != null || a.todayAffiliateProfit != null) {
-    return pdRound((Number(a.yesterdayAiProfit) || 0) + (Number(a.todayAffiliateProfit) || 0));
+    return pdRoundOrca((Number(a.yesterdayAiProfit) || 0) + (Number(a.todayAffiliateProfit) || 0));
   }
   if (a.todayRevenue != null) return pdRound(Number(a.todayRevenue) || 0);
   if (typeof calcOrcaAccountTotal === 'function') return pdRound(calcOrcaAccountTotal(a));
@@ -723,6 +723,47 @@ function pdImportRamRevenueRecordsWithMeta(records, meta) {
   return result;
 }
 
+function pdImportOrcaRevenueRecords(records) {
+  if (!records || !records.length) return { imported: 0, dates: 0 };
+  ensurePerformanceLogs();
+  let byDate = {};
+  records.forEach(function (rec) {
+    if (!rec || !rec.dateKey || !rec.accountId) return;
+    if (!byDate[rec.dateKey]) byDate[rec.dateKey] = [];
+    byDate[rec.dateKey].push(rec);
+  });
+  let imported = 0;
+  Object.keys(byDate).sort().forEach(function (dateKey) {
+    let entry = pdGetRevenueEntryRaw(dateKey) || {};
+    entry.orcaAccounts = entry.orcaAccounts || {};
+    entry.accounts = entry.accounts || {};
+    byDate[dateKey].forEach(function (rec) {
+      let prev = entry.orcaAccounts[rec.accountId] || {};
+      let yesterdayAi = rec.yesterdayAiProfit != null
+        ? pdRoundOrca(rec.yesterdayAiProfit)
+        : (prev.yesterdayAiProfit != null ? pdRoundOrca(prev.yesterdayAiProfit) : 0);
+      let todayAff = rec.todayAffiliateProfit != null
+        ? pdRoundOrca(rec.todayAffiliateProfit)
+        : (prev.todayAffiliateProfit != null ? pdRoundOrca(prev.todayAffiliateProfit) : 0);
+      entry.orcaAccounts[rec.accountId] = {
+        yesterdayAiProfit: yesterdayAi,
+        todayAffiliateProfit: todayAff,
+        importSource: 'orca'
+      };
+      entry.accounts[rec.accountId] = {
+        projectKey: 'orca',
+        todayRevenue: pdOrcaAccountRevenueTotal(entry.orcaAccounts[rec.accountId]),
+        operationRevenue: 0
+      };
+      imported += 1;
+    });
+    entry = pdRecalculateRevenueEntry(entry, dateKey);
+    pdWriteRevenueEntry(dateKey, entry);
+  });
+  pdNotifyPerformanceChanged({ type: 'import-orca', count: imported });
+  return { imported: imported, dates: Object.keys(byDate).length };
+}
+
 function pdResolveRamAccountIdByExcelKey(excelKey) {
   if (!excelKey) return null;
   let key = String(excelKey).trim();
@@ -823,6 +864,10 @@ function pdPersist() {
 
 function pdRound(n) {
   return Math.round((Number(n) || 0) * 100) / 100;
+}
+
+function pdRoundOrca(n) {
+  return Math.round((Number(n) || 0) * 10000) / 10000;
 }
 
 function pdOrcaAccountTotal(a) {
@@ -1337,6 +1382,7 @@ if (typeof window !== 'undefined') {
   window.pdImportRamRevenueRecordsWithMeta = pdImportRamRevenueRecordsWithMeta;
   window.pdImportRamSalesRecords = pdImportRamSalesRecords;
   window.pdImportRamExcelMonth = pdImportRamExcelMonth;
+  window.pdImportOrcaRevenueRecords = pdImportOrcaRevenueRecords;
   window.pdResolveRamAccountIdByExcelKey = pdResolveRamAccountIdByExcelKey;
   window.pdSumProjectDayRevenue = pdSumProjectDayRevenue;
   window.pdProjectDayHasRevenue = pdProjectDayHasRevenue;

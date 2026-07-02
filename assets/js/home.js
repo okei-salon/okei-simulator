@@ -1541,7 +1541,7 @@ function getOrcaAccountEntry(entry, accountId) {
 function calcOrcaAccountTotal(accEntry) {
   if (!accEntry) return 0;
   if (accEntry.todayRevenue != null) return Number(accEntry.todayRevenue) || 0;
-  return Math.round(((accEntry.yesterdayAiProfit || 0) + (accEntry.todayAffiliateProfit || 0)) * 100) / 100;
+  return Math.round(((accEntry.yesterdayAiProfit || 0) + (accEntry.todayAffiliateProfit || 0)) * 10000) / 10000;
 }
 
 function isOrcaAccountEntered(entry, accountId) {

@@ -1143,6 +1143,7 @@ function xiHookShowPage() {
       if (typeof fxSettingsPage !== 'undefined') fxSettingsPage.classList.add('hidden');
       if (typeof revenueManagePage !== 'undefined') revenueManagePage.classList.add('hidden');
       if (typeof salesManagePage !== 'undefined') salesManagePage.classList.add('hidden');
+      if (typeof orcaImportPage !== 'undefined') orcaImportPage.classList.add('hidden');
       if (typeof excelImportPage !== 'undefined') excelImportPage.classList.remove('hidden');
       if (typeof setPageLocation === 'function') setPageLocation('Excelインポート');
       if (typeof syncMobileNav === 'function') syncMobileNav('settings');
