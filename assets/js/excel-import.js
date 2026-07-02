@@ -1,4 +1,4 @@
-/* OUKEI HUB Excel Import — Ver2.0.2
+/* OUKEI HUB Excel Import — Ver2.0.3
  * Past RAM revenue + sales migration from Excel → revenueLog / salesLog
  * Layout auto-detect: Pattern① separate 売上 sheet / Pattern② combined in 収益 sheet
  */
@@ -13,8 +13,13 @@ var XI_ROW_OPERATION = 'リターン';
 var XI_ROW_REVENUE = '報酬';
 var XI_ROW_SALES_DAILY = '売上日利';
 var XI_ROW_SALES_TOTAL = '売上合計';
-var XI_REVENUE_SHEET_RE = /収益R(\d+)\.(\d+)月/;
-var XI_SALES_SHEET_RE = /売上R(\d+)\.(\d+)月/;
+var XI_SHEET_META_RES = {
+  revenue: /^収益\s*R\s*(\d+)\s*[.．‧・]\s*(\d+)\s*月\s*$/i,
+  sales: /^売上\s*R\s*(\d+)\s*[.．‧・]\s*(\d+)\s*月\s*$/i
+};
+
+var xiImportQueue = [];
+var xiLastDiagnostics = null;
 
 function xiEscape(text) {
   return String(text || '')
@@ -329,13 +334,45 @@ function xiApplyAccountIdsToRecords(records) {
   });
 }
 
+function xiNormalizeSheetName(val) {
+  let s = String(val == null ? '' : val).trim();
+  if (s.normalize) s = s.normalize('NFKC');
+  return s.replace(/\s+/g, '');
+}
+
+function xiParseSheetMeta(sheetName, kind) {
+  kind = kind || 'revenue';
+  let re = XI_SHEET_META_RES[kind];
+  if (!re || !sheetName) return null;
+  let norm = xiNormalizeSheetName(sheetName);
+  let m = re.exec(norm);
+  if (!m) return null;
+  let reiwa = Number(m[1]);
+  let calMonth = Number(m[2]);
+  if (!reiwa || !calMonth || calMonth < 1 || calMonth > 12) return null;
+  let year = 2018 + reiwa;
+  let month = calMonth - 1;
+  return {
+    sheetName: sheetName,
+    kind: kind,
+    reiwaYear: reiwa,
+    calendarMonth: calMonth,
+    year: year,
+    month: month,
+    monthLabel: 'R' + reiwa + '.' + calMonth + '月'
+  };
+}
+
+function xiCompareSheetMeta(a, b) {
+  if (a.year !== b.year) return a.year - b.year;
+  return a.month - b.month;
+}
+
 function xiParseSheetYearMonth(sheetName) {
-  let name = String(sheetName || '');
-  let m = name.match(/R(\d+)\.(\d+)月/);
-  if (m) {
-    return { year: 2018 + Number(m[1]), month: Number(m[2]) - 1 };
-  }
-  m = name.match(/(\d{4})[.\-/年](\d{1,2})/);
+  let meta = xiParseSheetMeta(sheetName, 'revenue');
+  if (meta) return { year: meta.year, month: meta.month };
+  let name = xiNormalizeSheetName(sheetName);
+  let m = name.match(/(\d{4})[.\-/年](\d{1,2})/);
   if (m) {
     return { year: Number(m[1]), month: Number(m[2]) - 1 };
   }
@@ -353,52 +390,97 @@ function xiListRevenueSheets(workbook) {
   if (!workbook || !workbook.SheetNames) return [];
   let out = [];
   workbook.SheetNames.forEach(function (sn) {
-    if (!XI_REVENUE_SHEET_RE.test(String(sn))) return;
-    let ym = xiParseSheetYearMonth(sn);
-    if (!ym) return;
-    out.push({
-      sheetName: sn,
-      year: ym.year,
-      month: ym.month,
-      monthLabel: xiFormatMonthLabel(ym.year, ym.month)
-    });
+    let meta = xiParseSheetMeta(sn, 'revenue');
+    if (!meta) return;
+    out.push(meta);
   });
-  out.sort(function (a, b) {
-    if (a.year !== b.year) return a.year - b.year;
-    return a.month - b.month;
-  });
+  out.sort(xiCompareSheetMeta);
   return out;
+}
+
+function xiListSalesSheets(workbook) {
+  if (!workbook || !workbook.SheetNames) return [];
+  let out = [];
+  workbook.SheetNames.forEach(function (sn) {
+    let meta = xiParseSheetMeta(sn, 'sales');
+    if (!meta) return;
+    out.push(meta);
+  });
+  out.sort(xiCompareSheetMeta);
+  return out;
+}
+
+function xiGetMonthImportStatus(workbook, meta) {
+  let hasSales = xiMonthHasSalesInWorkbook(workbook, meta.year, meta.month, meta.sheetName);
+  let importStatus = typeof pdGetExcelMonthImportStatus === 'function'
+    ? pdGetExcelMonthImportStatus(meta.year, meta.month, hasSales)
+    : { revenueDone: false, salesDone: false };
+  let pending = !importStatus.revenueDone || (hasSales && !importStatus.salesDone);
+  return {
+    hasSales: hasSales,
+    importStatus: importStatus,
+    pending: pending
+  };
+}
+
+function xiDiagnoseWorkbook(workbook) {
+  let allSheets = (workbook && workbook.SheetNames) ? workbook.SheetNames.slice() : [];
+  let revenueSheets = xiListRevenueSheets(workbook);
+  let salesSheets = xiListSalesSheets(workbook);
+  let unmatchedRevenueLike = [];
+  allSheets.forEach(function (sn) {
+    if (xiParseSheetMeta(sn, 'revenue')) return;
+    let norm = xiNormalizeSheetName(sn);
+    if (norm.indexOf('収益') >= 0) unmatchedRevenueLike.push(sn);
+  });
+  let pending = [];
+  let imported = [];
+  revenueSheets.forEach(function (meta) {
+    let st = xiGetMonthImportStatus(workbook, meta);
+    let entry = Object.assign({}, meta, st);
+    if (st.pending) pending.push(entry);
+    else imported.push(entry);
+  });
+  return {
+    allSheets: allSheets,
+    revenueSheets: revenueSheets,
+    salesSheets: salesSheets,
+    unmatchedRevenueLike: unmatchedRevenueLike,
+    pending: pending,
+    imported: imported
+  };
+}
+
+function xiLogWorkbookDiagnostics(diag) {
+  if (typeof console === 'undefined' || !console.group) return;
+  console.group('[OUKEI HUB Excel Import] シート診断');
+  console.log('① Excel内の全シート名 (' + diag.allSheets.length + '件):', diag.allSheets);
+  console.log('② 収益シートとして検出 (' + diag.revenueSheets.length + '件):',
+    diag.revenueSheets.map(function (m) { return m.sheetName + ' → ' + m.monthLabel; }));
+  console.log('③ 売上シートとして検出 (' + diag.salesSheets.length + '件):',
+    diag.salesSheets.map(function (m) { return m.sheetName + ' → ' + m.monthLabel; }));
+  console.log('④ 未インポート (' + diag.pending.length + '件):',
+    diag.pending.map(function (m) { return m.monthLabel + '(' + m.sheetName + ')'; }));
+  console.log('⑤ インポート済み (' + diag.imported.length + '件):',
+    diag.imported.map(function (m) { return m.monthLabel; }));
+  if (diag.unmatchedRevenueLike.length) {
+    console.warn('※ 「収益」を含むがパターン未マッチ:', diag.unmatchedRevenueLike);
+  }
+  console.groupEnd();
 }
 
 function xiFindSalesSheetForMonth(workbook, year, month) {
   if (!workbook || !workbook.SheetNames) return null;
-  let targetLabel = xiFormatMonthLabel(year, month);
-  for (let i = 0; i < workbook.SheetNames.length; i++) {
-    let sn = workbook.SheetNames[i];
-    if (!XI_SALES_SHEET_RE.test(String(sn))) continue;
-    let ym = xiParseSheetYearMonth(sn);
-    if (ym && ym.year === year && ym.month === month) return sn;
-  }
-  for (let j = 0; j < workbook.SheetNames.length; j++) {
-    let sn2 = workbook.SheetNames[j];
-    if (!XI_SALES_SHEET_RE.test(String(sn2))) continue;
-    if (String(sn2).indexOf(targetLabel.replace('月', '')) >= 0) return sn2;
+  let sheets = xiListSalesSheets(workbook);
+  for (let i = 0; i < sheets.length; i++) {
+    if (sheets[i].year === year && sheets[i].month === month) return sheets[i].sheetName;
   }
   return null;
-}
-
-function xiIsCombinedLayoutMonth(year, month) {
-  if (year > 2026) return true;
-  if (year === 2026 && month >= 2) return true;
-  return false;
 }
 
 function xiDetectSheetLayout(workbook, revenueSheetName, year, month) {
   let revenueRows = xiSheetToRows(workbook, revenueSheetName);
   let salesSheetName = xiFindSalesSheetForMonth(workbook, year, month);
-  if (xiIsCombinedLayoutMonth(year, month) && xiSheetContainsSalesLabels(revenueRows)) {
-    return { pattern: 2, patternLabel: 'パターン②（収益シート一体）', salesSheetName: null };
-  }
   if (salesSheetName) {
     return { pattern: 1, patternLabel: 'パターン①（収益＋売上シート）', salesSheetName: salesSheetName };
   }
@@ -442,17 +524,8 @@ function xiMonthHasSalesInWorkbook(workbook, year, month, revenueSheetName) {
 }
 
 function xiIsMonthPendingImport(workbook, year, month, revenueSheetName) {
-  let hasSales = xiMonthHasSalesInWorkbook(workbook, year, month, revenueSheetName);
-  if (typeof pdIsExcelMonthFullyImported === 'function') {
-    return !pdIsExcelMonthFullyImported(year, month, hasSales);
-  }
-  if (typeof pdDetectImportedRamMonth === 'function' && !pdDetectImportedRamMonth(year, month)) {
-    return true;
-  }
-  if (hasSales && typeof pdDetectImportedRamSalesMonth === 'function') {
-    return !pdDetectImportedRamSalesMonth(year, month);
-  }
-  return false;
+  let meta = { year: year, month: month, sheetName: revenueSheetName };
+  return xiGetMonthImportStatus(workbook, meta).pending;
 }
 
 function xiIsMonthImported(year, month) {
@@ -616,33 +689,38 @@ function xiParseRamSheet(workbook, sheetName) {
 }
 
 function xiAnalyzeWorkbook(workbook) {
-  let sheets = xiListRevenueSheets(workbook);
-  if (!sheets.length) {
-    return { ok: false, error: '「収益R○.○月」形式のシートが見つかりません。' };
+  let diag = xiDiagnoseWorkbook(workbook);
+  xiLastDiagnostics = diag;
+  xiLogWorkbookDiagnostics(diag);
+  xiImportQueue = diag.pending.slice();
+
+  if (!diag.revenueSheets.length) {
+    return {
+      ok: false,
+      error: '「収益R○.○月」形式のシートが見つかりません。',
+      diagnostics: diag
+    };
   }
-  let imported = sheets.filter(function (s) {
-    return !xiIsMonthPendingImport(workbook, s.year, s.month, s.sheetName);
-  });
-  let pending = sheets.filter(function (s) {
-    return xiIsMonthPendingImport(workbook, s.year, s.month, s.sheetName);
-  });
-  if (!pending.length) {
+  if (!diag.pending.length) {
     return {
       ok: false,
       allImported: true,
-      sheets: sheets,
-      importedSheets: imported,
+      sheets: diag.revenueSheets,
+      importedSheets: diag.imported,
+      diagnostics: diag,
       error: '検出された収益シートはすべてインポート済みです。'
     };
   }
-  let target = pending[0];
+  let target = diag.pending[0];
   let parsed = xiParseRamSheet(workbook, target.sheetName);
-  if (!parsed.ok) return parsed;
-  parsed.pendingSheets = pending;
-  parsed.importedSheets = imported;
-  parsed.detectedSheets = sheets;
+  if (!parsed.ok) return Object.assign({ diagnostics: diag }, parsed);
+  parsed.pendingSheets = diag.pending;
+  parsed.importedSheets = diag.imported;
+  parsed.detectedSheets = diag.revenueSheets;
+  parsed.importQueue = diag.pending;
+  parsed.diagnostics = diag;
   parsed.unimportedLabel = target.monthLabel;
-  parsed.remainingCount = pending.length;
+  parsed.remainingCount = diag.pending.length;
   return parsed;
 }
 
@@ -665,6 +743,27 @@ function xiReadExcelFile(file) {
   });
 }
 
+function xiRenderDetectionPanel(diag) {
+  if (!diag || !diag.revenueSheets.length) return '';
+  let rows = diag.revenueSheets.map(function (meta) {
+    let st = xiGetMonthImportStatus(xiPendingWorkbook, meta);
+    let badge = st.pending ? '未' : '済';
+    let cls = st.pending ? 'xiDetectPending' : 'xiDetectDone';
+    return '<div class="xiDetectRow ' + cls + '"><span>' + xiEscape(meta.monthLabel) + '</span>' +
+      '<small>' + xiEscape(meta.sheetName) + '</small><b>' + badge + '</b></div>';
+  }).join('');
+  let note = '検出 ' + diag.revenueSheets.length + '件';
+  if (diag.pending.length) note += ' / 未インポート ' + diag.pending.length + '件';
+  return '<div class="xiInfo panel xiDetectPanel">' +
+    '<div class="xiStepTitle">収益シート検出一覧（' + note + '）</div>' +
+    '<p class="help">古い順: ' + diag.revenueSheets.map(function (m) { return m.monthLabel; }).join(' → ') + '</p>' +
+    rows +
+    (diag.unmatchedRevenueLike.length
+      ? '<p class="help xiWarn">未マッチ: ' + xiEscape(diag.unmatchedRevenueLike.join('、')) + '</p>'
+      : '') +
+    '</div>';
+}
+
 function xiRenderImportedMonthsNote(importedSheets) {
   if (!importedSheets || !importedSheets.length) return '';
   let labels = importedSheets.map(function (s) { return s.monthLabel; }).join('、');
@@ -676,6 +775,7 @@ function xiRenderImportPage() {
   if (!el) return;
   let preview = xiPendingImport;
   let previewHtml = '';
+  let detectionHtml = xiLastDiagnostics ? xiRenderDetectionPanel(xiLastDiagnostics) : '';
   if (preview && preview.ok) {
     let totalRecords = (preview.records || []).length;
     let totalSalesRecords = (preview.salesRecords || []).length;
@@ -720,8 +820,11 @@ function xiRenderImportPage() {
         '</div>';
     }
     let importedNote = xiRenderImportedMonthsNote(preview.importedSheets);
-    let remainingNote = preview.remainingCount > 1
-      ? '<div class="xiInfo">他に未インポート月が ' + (preview.remainingCount - 1) + '件あります。取込後に続けてインポートできます。</div>'
+    let queueCount = (preview.importQueue || preview.pendingSheets || []).length;
+    let remainingNote = queueCount > 1
+      ? '<div class="xiInfo">未インポート ' + queueCount + 'ヶ月を古い順に一括インポートします（' +
+        (preview.importQueue || preview.pendingSheets).map(function (m) { return m.monthLabel; }).join(' → ') +
+        '）</div>'
       : '';
     let totalLine = '収益 ' + totalRecords + '件';
     if (preview.hasSalesData) totalLine += ' / 売上 ' + totalSalesRecords + '件';
@@ -778,11 +881,13 @@ function xiRenderImportPage() {
     '<p class="help">収益: リターン→運用 / 報酬→本日収益。売上: 売上日利→売上 / 売上合計→累計売上。インポート済みの月はスキップします。</p>' +
     '</div></div>' +
     importedListHtml +
+    detectionHtml +
     previewHtml +
     (xiLastImportResult
       ? '<div class="xiPreview panel xiSuccess">' +
         '<div class="xiPreviewTitle">インポート完了</div>' +
         '<div class="xiPreviewMeta"><span>対象シート</span><b>' + xiEscape(xiLastImportResult.sheetName || '') + '</b></div>' +
+        '<div class="xiPreviewMeta"><span>取込月数</span><b>' + (xiLastImportResult.monthsImported || 1) + 'ヶ月</b></div>' +
         '<div class="xiPreviewMeta"><span>取込件数</span><b>収益' + (xiLastImportResult.revenueImported || 0) + ' / 売上' + (xiLastImportResult.salesImported || 0) + '</b></div>' +
         '<div class="xiPreviewMeta"><span>合計</span><b>' + xiLastImportResult.imported + '件</b></div>' +
         '<div class="xiPreviewMeta"><span>対象日数</span><b>' + xiLastImportResult.dates + '日</b></div>' +
@@ -799,6 +904,8 @@ function xiResetImport() {
   xiPendingImport = null;
   xiPendingWorkbook = null;
   xiLastImportResult = null;
+  xiImportQueue = [];
+  xiLastDiagnostics = null;
   let input = document.getElementById('xiFileInput');
   if (input) input.value = '';
   xiRenderImportPage();
@@ -857,53 +964,27 @@ function xiHandleFileSelect(ev) {
   });
 }
 
-function xiExecuteImport() {
-  if (!xiPendingImport || !xiPendingImport.ok) return;
-  let status = xiPendingImport.importStatus || {};
-  let revenueRecords = xiApplyAccountIdsToRecords(xiPendingImport.records || []);
-  let salesRecords = xiApplyAccountIdsToRecords(xiPendingImport.salesRecords || []);
-  let unmapped = XI_RAM_ACCOUNTS.filter(function (k) {
-    let needRev = !status.revenueDone;
-    let needSales = xiPendingImport.hasSalesData && !status.salesDone;
-    if (!needRev && !needSales) return false;
-    let revOk = !needRev || revenueRecords.some(function (r) { return r.accountKey === k && r.accountId; });
-    let salesOk = !needSales || salesRecords.some(function (r) { return r.accountKey === k && r.accountId; });
-    return !revOk || !salesOk;
-  });
-  if (unmapped.length) {
-    alert('HUBアカウント（' + unmapped.join(', ') + '）が見つかりません。\n組織図のRAMアカウント（ユーザー名 kai1 / kai2）を確認してください。');
-    return;
-  }
+function xiImportSingleMonth(parsed) {
+  let status = parsed.importStatus || {};
+  let revenueRecords = xiApplyAccountIdsToRecords(parsed.records || []);
+  let salesRecords = xiApplyAccountIdsToRecords(parsed.salesRecords || []);
   let importableRev = status.revenueDone ? [] : revenueRecords.filter(function (r) { return r.accountId; });
-  let importableSales = (status.salesDone || !xiPendingImport.hasSalesData)
+  let importableSales = (status.salesDone || !parsed.hasSalesData)
     ? []
     : salesRecords.filter(function (r) { return r.accountId; });
   if (!importableRev.length && !importableSales.length) {
-    alert('インポート可能なデータがありません。');
-    return;
+    return { ok: false, error: (parsed.monthLabel || parsed.sheetName) + ': インポート可能なデータがありません。' };
   }
-  let monthLabel = xiPendingImport.unimportedLabel || xiPendingImport.monthLabel || xiPendingImport.sheetName;
-  let confirmMsg = monthLabel + ' をインポートします。\n\n';
-  if (importableRev.length) confirmMsg += '収益: ' + importableRev.length + '件\n';
-  if (importableSales.length) confirmMsg += '売上: ' + importableSales.length + '件\n';
-  confirmMsg += '\n既存の同日データは上書きされます。\n実行しますか？';
-  if (!confirm(confirmMsg)) return;
-
-  if (typeof pdCreatePerformanceSnapshot === 'function') {
-    xiUndoSnapshot = pdCreatePerformanceSnapshot();
-  }
-
   let importMeta = {
-    year: xiPendingImport.year,
-    month: xiPendingImport.month,
-    sheetName: xiPendingImport.sheetName,
-    salesSheetName: xiPendingImport.salesSheetName || '',
-    layoutPattern: xiPendingImport.layoutPattern || 0,
-    hasSalesData: xiPendingImport.hasSalesData,
+    year: parsed.year,
+    month: parsed.month,
+    sheetName: parsed.sheetName,
+    salesSheetName: parsed.salesSheetName || '',
+    layoutPattern: parsed.layoutPattern || 0,
+    hasSalesData: parsed.hasSalesData,
     revenueDone: status.revenueDone,
     salesDone: status.salesDone
   };
-
   let result = typeof pdImportRamExcelMonth === 'function'
     ? pdImportRamExcelMonth(
       importableRev.map(function (rec) {
@@ -925,9 +1006,67 @@ function xiExecuteImport() {
       importMeta
     )
     : { imported: 0, revenueImported: 0, salesImported: 0, dates: 0 };
+  return { ok: true, result: result, parsed: parsed };
+}
 
-  if (typeof hubSetViewMonth === 'function') {
-    hubSetViewMonth(xiPendingImport.year, xiPendingImport.month);
+function xiExecuteImport() {
+  if (!xiPendingImport || !xiPendingImport.ok || !xiPendingWorkbook) return;
+  let queue = (xiImportQueue && xiImportQueue.length)
+    ? xiImportQueue.slice()
+    : (xiPendingImport.importQueue || xiPendingImport.pendingSheets || [xiPendingImport]).slice();
+  if (!queue.length) {
+    alert('インポート対象がありません。');
+    return;
+  }
+
+  let firstParsed = xiPendingImport;
+  let revenueRecords = xiApplyAccountIdsToRecords(firstParsed.records || []);
+  let salesRecords = xiApplyAccountIdsToRecords(firstParsed.salesRecords || []);
+  let unmapped = XI_RAM_ACCOUNTS.filter(function (k) {
+    return !revenueRecords.some(function (r) { return r.accountKey === k && r.accountId; }) &&
+      !(firstParsed.hasSalesData && salesRecords.some(function (r) { return r.accountKey === k && r.accountId; }));
+  });
+  if (unmapped.length) {
+    alert('HUBアカウント（' + unmapped.join(', ') + '）が見つかりません。\n組織図のRAMアカウント（ユーザー名 kai1 / kai2）を確認してください。');
+    return;
+  }
+
+  let queueLabels = queue.map(function (m) { return m.monthLabel; }).join(' → ');
+  let confirmMsg = '未インポート ' + queue.length + 'ヶ月を古い順にインポートします。\n\n' +
+    queueLabels + '\n\n既存の同日データは上書きされます。\n実行しますか？';
+  if (!confirm(confirmMsg)) return;
+
+  if (typeof pdCreatePerformanceSnapshot === 'function') {
+    xiUndoSnapshot = pdCreatePerformanceSnapshot();
+  }
+
+  let total = { imported: 0, revenueImported: 0, salesImported: 0, dates: 0, months: 0 };
+  let lastSheetName = '';
+  let lastMonthLabel = '';
+  let failed = '';
+
+  for (let i = 0; i < queue.length; i++) {
+    let monthInfo = queue[i];
+    let parsed = xiParseRamSheet(xiPendingWorkbook, monthInfo.sheetName);
+    if (!parsed.ok) {
+      failed = (monthInfo.monthLabel || monthInfo.sheetName) + ': ' + (parsed.error || '解析失敗');
+      break;
+    }
+    let one = xiImportSingleMonth(parsed);
+    if (!one.ok) {
+      failed = one.error || 'インポート失敗';
+      break;
+    }
+    total.imported += one.result.imported || 0;
+    total.revenueImported += one.result.revenueImported || 0;
+    total.salesImported += one.result.salesImported || 0;
+    total.dates = Math.max(total.dates, one.result.dates || 0);
+    total.months += 1;
+    lastSheetName = parsed.sheetName;
+    lastMonthLabel = parsed.monthLabel;
+    if (typeof hubSetViewMonth === 'function') {
+      hubSetViewMonth(parsed.year, parsed.month);
+    }
   }
 
   if (typeof updateHomeDashboard === 'function' && typeof allOrgSummary === 'function') {
@@ -938,21 +1077,31 @@ function xiExecuteImport() {
   if (typeof renderSalesManage === 'function') renderSalesManage();
   if (typeof render === 'function') render();
 
-  let remaining = (xiPendingImport.pendingSheets || []).length - 1;
-  xiLastImportResult = {
-    imported: result.imported,
-    revenueImported: result.revenueImported || 0,
-    salesImported: result.salesImported || 0,
-    dates: result.dates,
-    sheetName: xiPendingImport.sheetName,
-    monthLabel: monthLabel,
-    remainingCount: Math.max(0, remaining)
-  };
+  xiImportQueue = [];
   xiPendingImport = null;
+  if (xiPendingWorkbook) {
+    xiLastDiagnostics = xiDiagnoseWorkbook(xiPendingWorkbook);
+    xiLogWorkbookDiagnostics(xiLastDiagnostics);
+  }
+
+  let remaining = xiLastDiagnostics ? xiLastDiagnostics.pending.length : 0;
+  xiLastImportResult = {
+    imported: total.imported,
+    revenueImported: total.revenueImported,
+    salesImported: total.salesImported,
+    dates: total.dates,
+    monthsImported: total.months,
+    sheetName: lastSheetName,
+    monthLabel: lastMonthLabel,
+    remainingCount: remaining,
+    failed: failed
+  };
   xiRenderImportPage();
 
-  if (typeof showToast === 'function') {
-    showToast('✅ ' + result.imported + '件インポートしました');
+  if (failed) {
+    alert('インポートを中断しました。\n' + failed + '\n\n成功: ' + total.months + 'ヶ月 / ' + total.imported + '件');
+  } else if (typeof showToast === 'function') {
+    showToast('✅ ' + total.months + 'ヶ月・' + total.imported + '件インポートしました');
   }
 }
 
@@ -1022,5 +1171,6 @@ if (typeof window !== 'undefined') {
   window.xiContinueNextMonth = xiContinueNextMonth;
   window.xiParseRamSheet = xiParseRamSheet;
   window.xiListRevenueSheets = xiListRevenueSheets;
-  window.xiAnalyzeWorkbook = xiAnalyzeWorkbook;
+  window.xiDiagnoseWorkbook = xiDiagnoseWorkbook;
+  window.xiLogWorkbookDiagnostics = xiLogWorkbookDiagnostics;
 }

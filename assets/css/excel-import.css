@@ -1,4 +1,4 @@
-/* OUKEI HUB Excel Import — Ver2.0.2 */
+/* OUKEI HUB Excel Import — Ver2.0.3 */
 
 .xiMain {
   display: flex;
@@ -124,6 +124,35 @@
   margin-top: 8px;
   padding-top: 8px;
   border-top: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+.xiDetectPanel {
+  margin-top: 12px;
+}
+
+.xiDetectRow {
+  display: grid;
+  grid-template-columns: 72px 1fr 28px;
+  gap: 8px;
+  align-items: center;
+  padding: 6px 0;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+  font-size: 12px;
+}
+
+.xiDetectRow small {
+  color: #94a3b8;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.xiDetectRow.xiDetectDone b {
+  color: #86efac;
+}
+
+.xiDetectRow.xiDetectPending b {
+  color: #fde68a;
 }
 
 .xiSuccess {
