@@ -1019,16 +1019,53 @@ function updateHomeMonthlyProjects(sAll) {
   renderHomeMonthlyProjGrid(sAll);
 }
 
+function getHomeTodayProjectAmount(projectKey, entry, dateKey) {
+  if (!entry) return null;
+  if (typeof pdSumProjectDayRevenue === 'function') {
+    return pdSumProjectDayRevenue(entry, projectKey, dateKey);
+  }
+  if (typeof getProjectInputSavedTotal === 'function') {
+    return getProjectInputSavedTotal(projectKey, entry);
+  }
+  return Number(entry[projectKey]) || 0;
+}
+
+function homeTodayEntryHasRevenue(entry, dateKey) {
+  if (!entry) return false;
+  if (typeof pdProjectDayHasRevenue === 'function') {
+    return getHomeProjectRegistry().some(function (p) {
+      return pdProjectDayHasRevenue(entry, p.key, dateKey);
+    }) || Object.keys(entry).some(function (k) {
+      if (k === 'total' || k === 'savedAt' || k === 'accounts' || k.slice(-8) === 'Accounts') return false;
+      return Number(entry[k]) > 0;
+    });
+  }
+  return (Number(entry.total) || 0) > 0;
+}
+
+function resolveHomeTodayEntry(dateKey) {
+  let entry = getRevenueEntry(dateKey);
+  if (!entry || !homeTodayEntryHasRevenue(entry, dateKey)) {
+    return { entry: null, total: null };
+  }
+  if (typeof pdRecalculateRevenueEntry === 'function') {
+    let calc = pdRecalculateRevenueEntry(JSON.parse(JSON.stringify(entry)), dateKey);
+    return { entry: entry, total: calc.total };
+  }
+  return { entry: entry, total: Number(entry.total) || 0 };
+}
+
 function getHomeTodayProjectRows(ctx) {
   if (!ctx) return [];
   let registry = getHomeProjectRegistry();
   let entry = ctx.todayEntry;
+  let dateKey = typeof todayKey === 'function' ? todayKey() : '';
 
   if (entry) {
     Object.keys(entry).forEach(function (k) {
-      if (k === 'total' || k === 'savedAt') return;
+      if (k === 'total' || k === 'savedAt' || k === 'accounts' || k.slice(-8) === 'Accounts') return;
       if (registry.some(function (p) { return p.key === k; })) return;
-      if ((entry[k] || 0) <= 0) return;
+      if ((Number(entry[k]) || 0) <= 0) return;
       registry.push({
         key: k,
         name: k.charAt(0).toUpperCase() + k.slice(1),
@@ -1038,7 +1075,7 @@ function getHomeTodayProjectRows(ctx) {
   }
 
   return registry.map(function (p) {
-    let amt = entry ? (entry[p.key] || 0) : null;
+    let amt = entry ? getHomeTodayProjectAmount(p.key, entry, dateKey) : null;
     let pct = ctx.todayTotal != null && ctx.todayTotal > 0 && amt != null
       ? Math.round((amt / ctx.todayTotal) * 1000) / 10 : 0;
     return { proj: p, amt: amt, pct: pct };
@@ -1180,10 +1217,20 @@ function updateHomeTodaySection(sAll) {
   if (!sAll && typeof allOrgSummary === 'function') sAll = allOrgSummary();
   if (!sAll) return;
 
-  let todayEntry = getRevenueEntry(todayKey());
+  let tk = todayKey();
+  let todayResolved = resolveHomeTodayEntry(tk);
+  let todayEntry = todayResolved.entry;
+  let todayTotal = todayResolved.total;
   let yesterdayEntry = getRevenueEntry(yesterdayKey());
-  let todayTotal = todayEntry ? (todayEntry.total || 0) : null;
   let yesterdayTotal = yesterdayEntry ? (yesterdayEntry.total || 0) : null;
+  if (yesterdayEntry && typeof pdRecalculateRevenueEntry === 'function' &&
+      typeof homeTodayEntryHasRevenue === 'function' &&
+      homeTodayEntryHasRevenue(yesterdayEntry, yesterdayKey())) {
+    yesterdayTotal = pdRecalculateRevenueEntry(
+      JSON.parse(JSON.stringify(yesterdayEntry)),
+      yesterdayKey()
+    ).total;
+  }
 
   let dailyEl = document.getElementById('homeDaily');
   let yenEl = document.getElementById('homeDailyYen');

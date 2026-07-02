@@ -3,7 +3,7 @@
  * Add {key}.png to the folder and register below to enable a project icon.
  */
 
-var PJ_ICON_VERSION = '20260628-v210';
+var PJ_ICON_VERSION = '20260628-v211';
 var PJ_ICON_BASE = 'assets/projects/';
 
 var PJ_ICON_REGISTRY = {
@@ -17,8 +17,8 @@ var PJ_ICON_REGISTRY = {
 };
 
 var PJ_ICON_SIZE_BY_CLASS = {
-  homeMonthlyProjIcon: 'sm',
-  homeTodayProjIcon: 'sm',
+  homeMonthlyProjIcon: 'md',
+  homeTodayProjIcon: 'md',
   homeProjCardIcon: 'md',
   rmRowIcon: 'md',
   rmFilterIconImg: 'md',

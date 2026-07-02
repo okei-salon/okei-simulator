@@ -820,7 +820,7 @@
 .homeMonthlyCard .homeMonthlyProjCardName {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 7px;
   font-size: 11px;
   font-weight: 800;
   color: #b8cce4;
@@ -831,50 +831,35 @@
 }
 
 .homeMonthlyCard .homeMonthlyProjDot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--pj-icon-size-md);
+  height: var(--pj-icon-size-md);
   flex-shrink: 0;
+  background: transparent !important;
+  border: none;
+  box-shadow: none;
 }
 
 .homeMonthlyCard .homeMonthlyProjCard--ram {
   border-color: rgba(59, 130, 246, .28);
 }
 
-.homeMonthlyCard .homeMonthlyProjCard--ram .homeMonthlyProjDot {
-  background: #3b82f6;
-}
-
 .homeMonthlyCard .homeMonthlyProjCard--orca {
   border-color: rgba(20, 184, 166, .28);
-}
-
-.homeMonthlyCard .homeMonthlyProjCard--orca .homeMonthlyProjDot {
-  background: #14b8a6;
 }
 
 .homeMonthlyCard .homeMonthlyProjCard--genesis {
   border-color: rgba(168, 85, 247, .28);
 }
 
-.homeMonthlyCard .homeMonthlyProjCard--genesis .homeMonthlyProjDot {
-  background: #a855f7;
-}
-
 .homeMonthlyCard .homeMonthlyProjCard--cary {
   border-color: rgba(168, 85, 247, .28);
 }
 
-.homeMonthlyCard .homeMonthlyProjCard--cary .homeMonthlyProjDot {
-  background: #a855f7;
-}
-
 .homeMonthlyCard .homeMonthlyProjCard--custom {
   border-color: rgba(148, 163, 184, .28);
-}
-
-.homeMonthlyCard .homeMonthlyProjCard--custom .homeMonthlyProjDot {
-  background: #94a3b8;
 }
 
 .homeMonthlyCard .homeMonthlyProjCardPct {
@@ -1246,52 +1231,31 @@
 }
 
 .homeTodayCard .homeTodayProjMark {
-  width: 20px;
-  height: 20px;
-  border-radius: 5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--pj-icon-size-md);
+  height: var(--pj-icon-size-md);
   flex-shrink: 0;
-  background: rgba(59, 130, 246, .18);
-  border: 1px solid rgba(59, 130, 246, .35);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .06);
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
 }
 
 .homeTodayCard .homeTodayProjCard--ram {
   border-color: rgba(59, 130, 246, .28);
 }
 
-.homeTodayCard .homeTodayProjCard--ram .homeTodayProjMark {
-  background: rgba(59, 130, 246, .22);
-  border-color: rgba(59, 130, 246, .45);
-  box-shadow: 0 0 10px rgba(59, 130, 246, .15);
-}
-
 .homeTodayCard .homeTodayProjCard--orca {
   border-color: rgba(20, 184, 166, .28);
-}
-
-.homeTodayCard .homeTodayProjCard--orca .homeTodayProjMark {
-  background: rgba(20, 184, 166, .18);
-  border-color: rgba(20, 184, 166, .4);
-  box-shadow: 0 0 10px rgba(20, 184, 166, .12);
 }
 
 .homeTodayCard .homeTodayProjCard--genesis {
   border-color: rgba(168, 85, 247, .28);
 }
 
-.homeTodayCard .homeTodayProjCard--genesis .homeTodayProjMark {
-  background: rgba(168, 85, 247, .18);
-  border-color: rgba(168, 85, 247, .4);
-  box-shadow: 0 0 10px rgba(168, 85, 247, .12);
-}
-
 .homeTodayCard .homeTodayProjCard--cary {
   border-color: rgba(168, 85, 247, .28);
-}
-
-.homeTodayCard .homeTodayProjCard--custom .homeTodayProjMark {
-  background: rgba(148, 163, 184, .18);
-  border-color: rgba(148, 163, 184, .4);
 }
 
 .homeTodayCard .homeTodayProjCardPct {
