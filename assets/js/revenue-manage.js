@@ -1198,6 +1198,7 @@ function rmRenderCompareChart() {
   let numeric = curVals.concat(prevVals).filter(function (v) { return v != null; });
   let dataMax = numeric.length ? Math.max.apply(null, numeric) : 1;
   let axisMax = typeof niceChartAxisMax === 'function' ? niceChartAxisMax(dataMax) : Math.max(dataMax, 450);
+  let cc = { current: '#60a5fa', prev: '#64748b', label: '#7f97b3', grid: 'rgba(80,110,150,.25)', dotStroke: '#0b182b' };
 
   let w = 520;
   let h = 168;
@@ -1227,30 +1228,30 @@ function rmRenderCompareChart() {
   let prevSegments = rmBuildChartLineSegments(prevVals, plotX, plotY);
   let curSegments = rmBuildChartLineSegments(curVals, plotX, plotY);
   let prevLines = prevSegments.map(function (seg) {
-    return '<polyline points="' + seg.join(' ') + '" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="4 4"></polyline>';
+    return '<polyline points="' + seg.join(' ') + '" fill="none" stroke="' + cc.prev + '" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="4 4"></polyline>';
   }).join('');
   let curLines = curSegments.map(function (seg) {
-    return '<polyline points="' + seg.join(' ') + '" fill="none" stroke="#60a5fa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></polyline>';
+    return '<polyline points="' + seg.join(' ') + '" fill="none" stroke="' + cc.current + '" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></polyline>';
   }).join('');
 
   let ticks = typeof chartAxisTicks === 'function' ? chartAxisTicks(axisMax, 5) : [0, axisMax / 2, axisMax];
   let grid = ticks.map(function (t) {
     let yPos = plotY(t);
     let label = typeof formatAxisDollar === 'function' ? formatAxisDollar(t) : rmMoney(t);
-    return '<line x1="' + padLeft + '" y1="' + yPos.toFixed(1) + '" x2="' + (w - padRight) + '" y2="' + yPos.toFixed(1) + '" stroke="rgba(80,110,150,.25)" stroke-width="1"></line>' +
-      '<text x="' + (padLeft - 6) + '" y="' + (yPos + 3.5).toFixed(1) + '" text-anchor="end" fill="#7f97b3" font-size="10" font-weight="700">' + label + '</text>';
+    return '<line x1="' + padLeft + '" y1="' + yPos.toFixed(1) + '" x2="' + (w - padRight) + '" y2="' + yPos.toFixed(1) + '" stroke="' + cc.grid + '" stroke-width="1"></line>' +
+      '<text x="' + (padLeft - 6) + '" y="' + (yPos + 3.5).toFixed(1) + '" text-anchor="end" fill="' + cc.label + '" font-size="10" font-weight="700">' + label + '</text>';
   }).join('');
 
   let xSvg = RM_CHART_X_DAYS.filter(function (d) { return d <= days; }).map(function (d) {
     let x = plotX(d - 1);
-    return '<text x="' + x.toFixed(1) + '" y="' + (h - 3) + '" text-anchor="middle" fill="#7f97b3" font-size="10" font-weight="700">' + d + '日</text>';
+    return '<text x="' + x.toFixed(1) + '" y="' + (h - 3) + '" text-anchor="middle" fill="' + cc.label + '" font-size="10" font-weight="700">' + d + '日</text>';
   }).join('');
 
   el.innerHTML =
     '<div class="rmCompareChartInner">' +
     '<svg class="rmCompareSvg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + w + ' ' + h + '" preserveAspectRatio="none" aria-hidden="true">' +
-    grid + xSvg + prevLines + lineDots(prevVals, '#64748b', '#0b182b') +
-    curLines + lineDots(curVals, '#60a5fa', '#0b182b') +
+    grid + xSvg + prevLines + lineDots(prevVals, cc.prev, cc.dotStroke) +
+    curLines + lineDots(curVals, cc.current, cc.dotStroke) +
     '</svg>' +
     '<div class="rmCompareLegend">' +
     '<span class="rmCompareLegendItem"><i class="isCurrent"></i>今月（' + rmFormatMonthLabel(y, m) + '）</span>' +
