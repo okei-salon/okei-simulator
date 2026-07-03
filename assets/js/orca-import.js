@@ -1,4 +1,4 @@
-/* OUKEI HUB ORCA Import — Ver2.0.3
+/* OUKEI HUB ORCA Import — Ver2.0.4
  * Paste AI profit history → yesterdayAiProfit
  * Paste USDT wallet history → todayAffiliateProfit (本日AF収益)
  */

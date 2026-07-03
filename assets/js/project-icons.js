@@ -1,4 +1,4 @@
-/* OUKEI HUB Project Icons — Ver2.0.3
+/* OUKEI HUB Project Icons — Ver2.0.4
  * PNG icons loaded from assets/projects/
  * Add {key}.png to the folder and register below to enable a project icon.
  */

@@ -1,4 +1,4 @@
-/* OUKEI HUB Performance Data — Ver2.0.2
+/* OUKEI HUB Performance Data — Ver2.0.4
  * Single Source of Truth for revenue & sales actuals.
  * Storage: settings.revenueLog[dateKey], settings.salesLog[dateKey]
  *           settings.investmentHistory[accountId] — 投資履歴（運用額の一元管理）

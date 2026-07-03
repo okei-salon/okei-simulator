@@ -52,16 +52,6 @@
   filter: drop-shadow(0 10px 28px rgba(0, 0, 0, .22));
 }
 
-.homeTagline {
-  margin: 10px 0 0;
-  font-size: 16px;
-  font-weight: 700;
-  letter-spacing: .12em;
-  color: #b8cce4;
-  text-align: center;
-  line-height: 1.6;
-}
-
 /* --- homeGreeting (将来用・互換) --- */
 .homeGreeting {
   align-self: stretch;
@@ -215,21 +205,21 @@
 /* --- ochanArea (位置調整: .ochanContainer または .ochanAvatar) --- */
 .ochanArea {
   margin: 2px 0 10px;
-  padding-top: 15px;
-  padding-left: 112px;
+  padding-top: 12px;
+  padding-left: 126px;
   position: relative;
   overflow: visible;
   z-index: 1;
   display: flex;
   align-items: flex-end;
-  min-height: 54px;
+  min-height: 58px;
 }
 
 .ochanContainer {
   position: absolute;
   left: var(--ochan-left, 0);
-  bottom: var(--ochan-bottom, -40px);
-  width: 118px;
+  bottom: var(--ochan-bottom, -44px);
+  width: 136px;
   height: 0;
   transform: var(--ochan-transform, none);
   z-index: 2;
@@ -239,8 +229,8 @@
   position: absolute;
   left: 0;
   bottom: 0;
-  width: var(--ochan-width, 158px);
-  height: var(--ochan-height, 158px);
+  width: var(--ochan-width, 185px);
+  height: var(--ochan-height, 185px);
   object-fit: contain;
   object-position: bottom left;
   background: transparent;
@@ -265,10 +255,10 @@
   background: #081426;
   border: 1px solid rgba(96, 165, 250, .35);
   border-radius: 16px;
-  padding: 20px 22px;
-  margin: 0 0 0 4px;
+  padding: 18px 20px;
+  margin: 0 0 2px 8px;
   position: relative;
-  min-height: 110px;
+  min-height: 116px;
   display: flex;
   align-items: flex-start;
   align-self: flex-end;
@@ -278,7 +268,7 @@
   content: '';
   position: absolute;
   left: -7px;
-  bottom: 30px;
+  bottom: 32px;
   width: 0;
   height: 0;
   border-top: 7px solid transparent;
@@ -290,7 +280,7 @@
   content: '';
   position: absolute;
   left: -5px;
-  bottom: 31px;
+  bottom: 33px;
   width: 0;
   height: 0;
   border-top: 6px solid transparent;
@@ -2429,9 +2419,9 @@
 
   .ochanArea {
     order: 3;
-    padding-top: 10px;
-    padding-left: 82px;
-    min-height: 50px;
+    padding-top: 8px;
+    padding-left: 96px;
+    min-height: 54px;
   
   }
 
@@ -2451,12 +2441,6 @@
 
   .homeLogoArea .homeLogo {
     width: min(214px, 62vw) !important;
-  }
-
-  .homeTagline {
-    font-size: 13px;
-    letter-spacing: .1em;
-    margin-top: 8px;
   }
 
   .homeTaskBody {
@@ -2500,27 +2484,27 @@
   }
 
   .ochanContainer {
-    width: 94px;
-    --ochan-left: -12px;
-    --ochan-bottom: -35px;
+    width: 110px;
+    --ochan-left: -10px;
+    --ochan-bottom: -38px;
   }
 
   .ochanAvatar {
-    width: var(--ochan-width, 138px);
-    height: var(--ochan-height, 138px);
+    width: var(--ochan-width, 161px);
+    height: var(--ochan-height, 161px);
   }
 
   .ochanSpeechBubble {
     flex: 1;
     min-width: 0;
-    min-height: 105px;
-    padding: 14px 12px 14px 8px;
-    margin-left: -6px;
+    min-height: 112px;
+    padding: 15px 12px 14px 10px;
+    margin-left: -2px;
     margin-right: 0;
   }
 
-  .ochanSpeechBubble::before { bottom: 26px; }
-  .ochanSpeechBubble::after { bottom: 27px; }
+  .ochanSpeechBubble::before { bottom: 29px; }
+  .ochanSpeechBubble::after { bottom: 30px; }
 
   .ochanMessageText {
     font-size: 12.5px;

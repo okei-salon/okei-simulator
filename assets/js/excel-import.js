@@ -1,4 +1,4 @@
-/* OUKEI HUB Excel Import — Ver2.0.3
+/* OUKEI HUB Excel Import — Ver2.0.4
  * Past RAM revenue + sales migration from Excel → revenueLog / salesLog
  * Layout auto-detect: Pattern① separate 売上 sheet / Pattern② combined in 収益 sheet
  */
