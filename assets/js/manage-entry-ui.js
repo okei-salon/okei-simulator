@@ -68,6 +68,17 @@ function pfAnnotateAccountSeries(accounts) {
   });
 }
 
+function pfNormalizeRamSeriesColors(projectKey, accounts) {
+  if (projectKey !== 'ram' || !accounts || !accounts.length) return accounts;
+  return accounts.map(function (a) {
+    let label = String(a.name || '').normalize ? String(a.name).normalize('NFKC') : String(a.name || '');
+    if (/甲斐|kai/i.test(label)) {
+      return Object.assign({}, a, { seriesIndex: 0 });
+    }
+    return a;
+  });
+}
+
 function pfRenderSeriesMarker(seriesIndex) {
   let color = PF_SERIES_COLORS[(seriesIndex || 0) % PF_SERIES_COLORS.length];
   return '<span class="pfSeriesMarker" style="background:' + color + '" aria-hidden="true"></span>';
@@ -290,9 +301,12 @@ function pfFilterManageAccounts(projectKey, accounts, options) {
 }
 
 function pfResolveManageAccounts(projectKey, liveAccounts, demoAccounts) {
+  let annotate = function (list) {
+    return pfNormalizeRamSeriesColors(projectKey, pfAnnotateAccountSeries(list));
+  };
   if (typeof pdIsDemoMode === 'function' && pdIsDemoMode() &&
       demoAccounts && demoAccounts.length) {
-    return pfAnnotateAccountSeries(
+    return annotate(
       pfApplyManageAccountLabels(projectKey,
         pfFilterManageAccounts(projectKey, demoAccounts, { useDemoBypass: true })
       )
@@ -317,7 +331,7 @@ function pfResolveManageAccounts(projectKey, liveAccounts, demoAccounts) {
   }
   merged = pfFilterManageAccounts(projectKey, merged);
   merged = pfApplyManageAccountLabels(projectKey, merged);
-  return pfAnnotateAccountSeries(merged);
+  return annotate(merged);
 }
 
 function pfAddManageDisplayFromOrg(projectKey, accountId) {

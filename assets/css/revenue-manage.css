@@ -930,3 +930,107 @@ td.pfEditableCell {
     padding: 0;
   }
 }
+
+/* --- 月選択ピッカー（ポートフォリオ / 収益管理 / 売上管理 共通） --- */
+.hubMonthPickerBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 180;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  background: rgba(0, 0, 0, .58);
+}
+
+.hubMonthPickerBackdrop.hidden {
+  display: none;
+}
+
+.hubMonthPicker {
+  width: min(320px, 100%);
+  padding: 16px 14px 14px;
+  border-radius: 16px;
+  border: 1px solid #355375;
+  background: #0d1b30;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, .45);
+}
+
+.hubMonthPickerHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.hubMonthPickerYear {
+  flex: 1;
+  text-align: center;
+  font-size: 16px;
+  font-weight: 900;
+  color: #f8fafc;
+  letter-spacing: .04em;
+}
+
+.hubMonthPickerNav {
+  width: 34px;
+  height: 34px;
+  border: 1px solid rgba(53, 87, 119, .55);
+  border-radius: 10px;
+  background: rgba(8, 20, 38, .72);
+  color: #dbeafe;
+  font-size: 14px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.hubMonthPickerNav:hover {
+  background: rgba(37, 99, 235, .18);
+}
+
+.hubMonthPickerGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.hubMonthPickerMonth {
+  height: 42px;
+  border: 1px solid rgba(53, 87, 119, .45);
+  border-radius: 10px;
+  background: rgba(8, 20, 38, .72);
+  color: #dbeafe;
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.hubMonthPickerMonth:hover {
+  border-color: rgba(96, 165, 250, .55);
+  background: rgba(37, 99, 235, .14);
+}
+
+.hubMonthPickerMonth.isActive {
+  border-color: #60a5fa;
+  background: rgba(37, 99, 235, .28);
+  color: #f0f7ff;
+}
+
+.pfMonthNav .pfMonthPickerBtn {
+  width: 30px;
+  height: 30px;
+  margin-left: 2px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+}
+
+.pfMonthNav .pfMonthPickerBtn:hover {
+  background: rgba(37, 99, 235, .18);
+}
+
+.pfMonthNav .pfMonthPickerBtn svg {
+  width: 16px;
+  height: 16px;
+}

@@ -187,25 +187,25 @@ body.simulationMode .simBanner{display:block}
 
 </style>
 <link rel="stylesheet" href="assets/css/project-icons.css?v=20260628-v211">
-<link rel="stylesheet" href="assets/css/home.css?v=20260628-v211">
+<link rel="stylesheet" href="assets/css/home.css?v=20260703-v213">
 <link rel="stylesheet" href="assets/css/portfolio-ui.css?v=20260626-pf186">
 <link rel="stylesheet" href="assets/css/settings-ui.css?v=20260626-pf181">
 <link rel="stylesheet" href="assets/css/excel-import.css?v=20260628-v203">
 <link rel="stylesheet" href="assets/css/orca-import.css?v=20260628-v205">
-<link rel="stylesheet" href="assets/css/revenue-manage.css?v=20260626-pd195b">
+<link rel="stylesheet" href="assets/css/revenue-manage.css?v=20260703-v213">
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="assets/js/project-icons.js?v=20260628-v211"></script>
-<script src="assets/js/home.js?v=20260628-v212"></script>
+<script src="assets/js/home.js?v=20260703-v213"></script>
 <script src="assets/js/home-demo.js?v=20260701-xi200"></script>
-<script src="assets/js/performance-data.js?v=20260628-v205"></script>
+<script src="assets/js/performance-data.js?v=20260703-v213"></script>
 <script src="assets/js/orca-import.js?v=20260628-v207"></script>
 <script src="assets/js/excel-import.js?v=20260628-v203"></script>
-<script src="assets/js/portfolio.js?v=20260701-xi200"></script>
+<script src="assets/js/portfolio.js?v=20260703-v214"></script>
 <script src="assets/js/project-master.js?v=20260701-xi200"></script>
 <script src="assets/js/settings-ui.js?v=20260701-xi200"></script>
-<script src="assets/js/manage-entry-ui.js?v=20260701-xi200"></script>
-<script src="assets/js/revenue-manage.js?v=20260628-v201"></script>
-<script src="assets/js/sales-manage.js?v=20260701-xi200"></script>
+<script src="assets/js/manage-entry-ui.js?v=20260703-v213"></script>
+<script src="assets/js/revenue-manage.js?v=20260703-v215"></script>
+<script src="assets/js/sales-manage.js?v=20260703-v214"></script>
 <script src="assets/js/ochan-lines.js?v=20260628-dict-v3"></script>
 <script src="assets/js/ochan-engine.js?v=20260628-dict-v3"></script>
 </head>
@@ -319,6 +319,7 @@ body.simulationMode .simBanner{display:block}
 <button type="button" class="rmMonthNavBtn" onclick="hubPrevMonth()" aria-label="前の月">◀</button>
 <span class="rmMonthLabel" id="pfMonthLabel">2026年6月</span>
 <button type="button" class="rmMonthNavBtn" onclick="hubNextMonth()" aria-label="次の月">▶</button>
+<button type="button" class="rmIconBtn pfMonthPickerBtn" onclick="hubOpenMonthPicker(event)" aria-label="月を選択"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M8 2v4M16 2v4M3 10h18"/></svg></button>
 </div>
 </div>
 <p class="pfSubtitle">あなたの資産全体を一元管理</p>
@@ -359,7 +360,7 @@ body.simulationMode .simBanner{display:block}
 <span class="rmMonthLabel" id="rmMonthLabel">2026年6月</span>
 <button type="button" class="rmMonthNavBtn" onclick="hubNextMonth()" aria-label="次の月">▶</button>
 </div>
-<button type="button" class="rmIconBtn" aria-label="カレンダー"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M8 2v4M16 2v4M3 10h18"/></svg></button>
+<button type="button" class="rmIconBtn" onclick="hubOpenMonthPicker(event)" aria-label="月を選択"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M8 2v4M16 2v4M3 10h18"/></svg></button>
 <span class="rmUpdated" id="rmLastUpdate">最終更新：—</span>
 <button type="button" class="rmExportBtn" onclick="rmExportPlaceholder()">エクスポート</button>
 </div>
@@ -414,7 +415,7 @@ body.simulationMode .simBanner{display:block}
 <span class="rmMonthLabel" id="smMonthLabel">2026年6月</span>
 <button type="button" class="rmMonthNavBtn" onclick="hubNextMonth()" aria-label="次の月">▶</button>
 </div>
-<button type="button" class="rmIconBtn" aria-label="カレンダー"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M8 2v4M16 2v4M3 10h18"/></svg></button>
+<button type="button" class="rmIconBtn" onclick="hubOpenMonthPicker(event)" aria-label="月を選択"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M8 2v4M16 2v4M3 10h18"/></svg></button>
 <span class="rmUpdated" id="smLastUpdate">最終更新：—</span>
 <button type="button" class="rmExportBtn" onclick="smExportPlaceholder()">エクスポート</button>
 </div>
@@ -603,7 +604,7 @@ body.simulationMode .simBanner{display:block}
 </div>
 </div>
 </section>
-</main><div id="toast" class="toast"></div><div class="modalBg" id="modalBg" onclick="if(event.target.id==='modalBg')closeModal()"><div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle"><div class="modalHeader"><h3 id="modalTitle">詳細</h3><button type="button" class="modalCloseX" onclick="closeModal()" aria-label="閉じる">×</button></div><div class="modalBody" id="modalContent"></div><div class="modalFooter"><button type="button" class="btn2" onclick="closeModal()">閉じる</button></div></div></div>
+</main><div id="hubMonthPickerBackdrop" class="hubMonthPickerBackdrop hidden" onclick="hubCloseMonthPicker()"><div class="hubMonthPicker" onclick="event.stopPropagation()"><div class="hubMonthPickerHead"><button type="button" class="hubMonthPickerNav" onclick="hubPickerPrevYear()" aria-label="前の年">◀</button><span class="hubMonthPickerYear" id="hubPickerYearLabel">2026年</span><button type="button" class="hubMonthPickerNav" onclick="hubPickerNextYear()" aria-label="次の年">▶</button></div><div class="hubMonthPickerGrid" id="hubMonthPickerGrid"></div></div></div><div id="toast" class="toast"></div><div class="modalBg" id="modalBg" onclick="if(event.target.id==='modalBg')closeModal()"><div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle"><div class="modalHeader"><h3 id="modalTitle">詳細</h3><button type="button" class="modalCloseX" onclick="closeModal()" aria-label="閉じる">×</button></div><div class="modalBody" id="modalContent"></div><div class="modalFooter"><button type="button" class="btn2" onclick="closeModal()">閉じる</button></div></div></div>
 <script>
 const rankRate={0:0,1:.01,2:.02,3:.03,4:.045,5:.06},rankName={0:'L0',1:'L1',2:'L2',3:'L3',4:'L4',5:'L5'};let rootId='m1',zoom=1,pinchStartDist=0,pinchStartZoom=1,rootAccountIds=[];
 let currentData=[{id:'m1',parent:null,name:'甲斐',username:'kai',rank:3,investment:1200,manualVolume:5705100,open:true},{id:'m2',parent:'m1',name:'京谷さん',username:'kyotani',rank:4,investment:2400,manualVolume:5421700,open:false},{id:'m5',parent:'m1',name:'肥田さん',username:'hida',rank:1,investment:300,manualVolume:278900,open:true},{id:'m6',parent:'m5',name:'大仁さん',username:'ooni',rank:2,investment:600,manualVolume:275400,open:true},{id:'m7',parent:'m6',name:'大仁2さん',username:'ooni2',rank:1,investment:300,manualVolume:231800,open:true},{id:'m8',parent:'m7',name:'武田さん',username:'takeda',rank:2,investment:600,manualVolume:224300,open:false},{id:'m9',parent:'m8',name:'虎白さん',username:'kohaku',rank:2,investment:600,manualVolume:131100,open:false},{id:'m10',parent:'m5',name:'肥田2さん',username:'hida2',rank:0,investment:1000,manualVolume:1900,open:false},{id:'m11',parent:'m1',name:'甲斐3さん',username:'kai3',rank:0,investment:300,manualVolume:0,open:false}];

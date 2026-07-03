@@ -865,9 +865,12 @@ function bindMonthlyChartTooltip(container, points, monthNum) {
 
   function showTip(node, p) {
     if (!p) return;
+    let amtHtml = p.hasData
+      ? money(p.val)
+      : '<span class="homeMonthlyChartTipEmpty">データなし</span>';
     tip.innerHTML =
       '<span class="homeMonthlyChartTipDate">' + monthNum + '/' + p.d + '</span>' +
-      '<span class="homeMonthlyChartTipAmt">' + money(p.val) + '</span>';
+      '<span class="homeMonthlyChartTipAmt">' + amtHtml + '</span>';
     tip.classList.add('isVisible');
     positionTip(node);
     container.querySelectorAll('.homeMonthlyChartDot').forEach(function (d) { d.classList.remove('isActive'); });
@@ -880,24 +883,81 @@ function bindMonthlyChartTooltip(container, points, monthNum) {
     container.querySelectorAll('.homeMonthlyChartDot').forEach(function (d) { d.classList.remove('isActive'); });
   }
 
-  container.querySelectorAll('.homeMonthlyChartHit').forEach(function (node) {
+  function bindHit(node) {
     node.addEventListener('mouseenter', function () {
       showTip(node, points[Number(node.getAttribute('data-idx'))]);
     });
     node.addEventListener('mouseleave', hideTip);
-  });
-
-  let todayIdx = points.findIndex(function (p) { return p.isToday; });
-  if (todayIdx >= 0) {
-    let todayHit = container.querySelector('.homeMonthlyChartHit[data-idx="' + todayIdx + '"]');
-    if (todayHit) showTip(todayHit, points[todayIdx]);
+    node.addEventListener('click', function (ev) {
+      ev.preventDefault();
+      showTip(node, points[Number(node.getAttribute('data-idx'))]);
+    });
   }
+
+  container.querySelectorAll('.homeMonthlyChartHit').forEach(bindHit);
 }
 
-function monthlyChartPlotX(index, daysInMonth, chartLeft, plotPadLeft, plotW) {
-  if (daysInMonth <= 1) return chartLeft + plotPadLeft + plotW / 2;
-  return chartLeft + plotPadLeft + (index / (daysInMonth - 1)) * plotW;
+function homeChartLastDataDay(y, m) {
+  let ref = getHomeReferenceDate();
+  let daysInMonth = new Date(y, m + 1, 0).getDate();
+  if (y < ref.getFullYear() || (y === ref.getFullYear() && m < ref.getMonth())) return daysInMonth;
+  if (y === ref.getFullYear() && m === ref.getMonth()) return ref.getDate();
+  return 0;
 }
+
+function homeCalcPrevMonth(y, m) {
+  let pm = m - 1;
+  let py = y;
+  if (pm < 0) { pm = 11; py -= 1; }
+  return { y: py, m: pm };
+}
+
+function homeDayHasRevenueEntry(y, m, d) {
+  let dateKey = revenueDateKey(y, m, d);
+  let entry = getRevenueEntry(dateKey);
+  if (!entry) return false;
+  if (typeof homeTodayEntryHasRevenue === 'function') {
+    return homeTodayEntryHasRevenue(entry, dateKey);
+  }
+  return (Number(entry.total) || 0) > 0;
+}
+
+function homeCollectDailyTotals(y, m) {
+  let days = new Date(y, m + 1, 0).getDate();
+  let lastDay = homeChartLastDataDay(y, m);
+  let vals = [];
+  for (let d = 1; d <= days; d++) {
+    if (d > lastDay || !homeDayHasRevenueEntry(y, m, d)) {
+      vals.push(null);
+      continue;
+    }
+    let dateKey = revenueDateKey(y, m, d);
+    let entry = getRevenueEntry(dateKey);
+    let total = Number(entry.total) || 0;
+    if (typeof pdRecalculateRevenueEntry === 'function') {
+      total = pdRecalculateRevenueEntry(JSON.parse(JSON.stringify(entry)), dateKey).total;
+    }
+    vals.push(total);
+  }
+  return vals;
+}
+
+function homeBuildChartLineSegments(vals, plotX, plotY) {
+  let segments = [];
+  let current = [];
+  vals.forEach(function (v, i) {
+    if (v === null || v === undefined) {
+      if (current.length >= 2) segments.push(current.slice());
+      current = [];
+      return;
+    }
+    current.push(plotX(i).toFixed(1) + ',' + plotY(v).toFixed(1));
+  });
+  if (current.length >= 2) segments.push(current);
+  return segments;
+}
+
+var HOME_CHART_X_DAYS = [1, 5, 10, 15, 20, 25, 30];
 
 function renderHomeMonthlyLineChart() {
   let el = document.getElementById('homeMonthlyLineChart');
@@ -906,83 +966,92 @@ function renderHomeMonthlyLineChart() {
   let y = homeCalView.y;
   let m = homeCalView.m;
   let monthNum = m + 1;
-  let daysInMonth = new Date(y, m + 1, 0).getDate();
-  let today = getHomeReferenceDate();
-  let vals = [];
-  let dataMax = 0;
+  let prev = homeCalcPrevMonth(y, m);
+  let days = new Date(y, m + 1, 0).getDate();
+  let curVals = homeCollectDailyTotals(y, m);
+  let prevVals = homeCollectDailyTotals(prev.y, prev.m);
+  let numeric = curVals.concat(prevVals).filter(function (v) { return v != null; });
+  let dataMax = numeric.length ? Math.max.apply(null, numeric) : 1;
+  let axisMax = typeof niceChartAxisMax === 'function' ? niceChartAxisMax(dataMax) : Math.max(dataMax, 450);
 
-  for (let d = 1; d <= daysInMonth; d++) {
-    let entry = getRevenueEntry(revenueDateKey(y, m, d));
-    let val = entry ? (entry.total || 0) : 0;
-    vals.push({ d: d, val: val, isToday: today.getFullYear() === y && today.getMonth() === m && today.getDate() === d });
-    if (val > dataMax) dataMax = val;
+  let w = 520;
+  let h = 168;
+  let padLeft = 42;
+  let padRight = 16;
+  let padTop = 10;
+  let padBottom = 20;
+  let plotW = w - padLeft - padRight;
+  let plotH = h - padTop - padBottom;
+
+  function plotY(val) {
+    return padTop + plotH - (Math.max(0, val) / axisMax) * plotH;
   }
 
-  let axisMax = niceChartAxisMax(dataMax);
-  let ticks = chartAxisTicks(axisMax, 5);
-  let xMarks = chartXLabels(daysInMonth, monthNum);
+  function plotX(idx) {
+    if (days <= 1) return padLeft + plotW / 2;
+    return padLeft + (idx / (days - 1)) * plotW;
+  }
 
-  let w = 400;
-  let h = 190;
-  let yAxisW = 30;
-  let padRight = 24;
-  let padBottom = 16;
-  let padY = 8;
-  let plotPadLeft = 4;
-  let plotPadRight = 14;
-  let chartLeft = yAxisW;
-  let innerW = w - chartLeft - padRight;
-  let plotW = innerW - plotPadLeft - plotPadRight;
-  let innerH = h - padY - padBottom;
-  let plotRight = chartLeft + plotPadLeft + plotW;
-
-  let gridSvg = ticks.map(function (t) {
-    let yPos = padY + innerH - (t / axisMax) * innerH;
-    return '<line class="homeMonthlyChartGrid" x1="' + chartLeft + '" y1="' + yPos.toFixed(1) + '" x2="' + plotRight.toFixed(1) + '" y2="' + yPos.toFixed(1) + '"></line>' +
-      '<text class="homeMonthlyChartYLabel" x="' + (chartLeft - 4) + '" y="' + (yPos + 3.5).toFixed(1) + '" text-anchor="end">' + formatAxisDollar(t) + '</text>';
+  let ticks = typeof chartAxisTicks === 'function' ? chartAxisTicks(axisMax, 5) : [0, axisMax / 2, axisMax];
+  let grid = ticks.map(function (t) {
+    let yPos = plotY(t);
+    let label = typeof formatAxisDollar === 'function' ? formatAxisDollar(t) : money(t);
+    return '<line x1="' + padLeft + '" y1="' + yPos.toFixed(1) + '" x2="' + (w - padRight) + '" y2="' + yPos.toFixed(1) + '" stroke="rgba(80,110,150,.25)" stroke-width="1"></line>' +
+      '<text x="' + (padLeft - 6) + '" y="' + (yPos + 3.5).toFixed(1) + '" text-anchor="end" fill="#7f97b3" font-size="10" font-weight="700">' + label + '</text>';
   }).join('');
 
-  let xSvg = xMarks.map(function (mark) {
-    let x = monthlyChartPlotX(mark.d - 1, daysInMonth, chartLeft, plotPadLeft, plotW);
-    let anchor = mark.d === 1 ? 'start' : (mark.d === daysInMonth ? 'end' : 'middle');
-    return '<text class="homeMonthlyChartXLabel" x="' + x.toFixed(1) + '" y="' + (h - 4) + '" text-anchor="' + anchor + '">' + mark.label + '</text>';
+  let xSvg = HOME_CHART_X_DAYS.filter(function (d) { return d <= days; }).map(function (d) {
+    let x = plotX(d - 1);
+    return '<text x="' + x.toFixed(1) + '" y="' + (h - 3) + '" text-anchor="middle" fill="#7f97b3" font-size="10" font-weight="700">' + d + '日</text>';
   }).join('');
 
-  let pts = vals.map(function (v, i) {
-    let x = monthlyChartPlotX(i, daysInMonth, chartLeft, plotPadLeft, plotW);
-    let yPos = padY + innerH - (v.val / axisMax) * innerH;
-    return x.toFixed(1) + ',' + yPos.toFixed(1);
-  }).join(' ');
-
-  let fillPts = pts + ' ' + plotRight.toFixed(1) + ',' + (padY + innerH).toFixed(1) + ' ' + (chartLeft + plotPadLeft).toFixed(1) + ',' + (padY + innerH).toFixed(1);
-
-  let dots = vals.map(function (v, i) {
-    let x = monthlyChartPlotX(i, daysInMonth, chartLeft, plotPadLeft, plotW);
-    let yPos = padY + innerH - (v.val / axisMax) * innerH;
-    let xf = x.toFixed(1);
-    let yf = yPos.toFixed(1);
-    let dotR = v.isToday ? 3 : 1.5;
-    let cls = v.isToday ? 'homeMonthlyChartDot isToday' : 'homeMonthlyChartDot';
-    return '<g class="homeMonthlyChartPoint">' +
-      '<circle class="homeMonthlyChartHit" data-idx="' + i + '" cx="' + xf + '" cy="' + yf + '" r="8"></circle>' +
-      '<circle class="' + cls + '" cx="' + xf + '" cy="' + yf + '" r="' + dotR + '"></circle></g>';
+  let prevSegments = homeBuildChartLineSegments(prevVals, plotX, plotY);
+  let curSegments = homeBuildChartLineSegments(curVals, plotX, plotY);
+  let prevLines = prevSegments.map(function (seg) {
+    return '<polyline points="' + seg.join(' ') + '" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="4 4"></polyline>';
   }).join('');
+  let curLines = curSegments.map(function (seg) {
+    return '<polyline points="' + seg.join(' ') + '" fill="none" stroke="#60a5fa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></polyline>';
+  }).join('');
+
+  function lineDots(vals, fill, stroke) {
+    return vals.map(function (v, i) {
+      if (v === null || v === undefined) return '';
+      return '<circle cx="' + plotX(i).toFixed(1) + '" cy="' + plotY(v).toFixed(1) + '" r="3.2" fill="' + fill + '" stroke="' + stroke + '" stroke-width="1.2"></circle>';
+    }).join('');
+  }
+
+  let hits = curVals.map(function (v, i) {
+    let d = i + 1;
+    let hasData = v !== null && v !== undefined;
+    let cy = hasData ? plotY(v) : plotY(0);
+    return '<circle class="homeMonthlyChartHit" data-idx="' + i + '" cx="' + plotX(i).toFixed(1) + '" cy="' + cy.toFixed(1) + '" r="8" fill="transparent"></circle>';
+  }).join('');
+
+  let points = curVals.map(function (v, i) {
+    return { d: i + 1, val: v, hasData: v !== null && v !== undefined };
+  });
+
+  let prevLabel = typeof hubFormatMonthLabel === 'function'
+    ? hubFormatMonthLabel(prev.y, prev.m)
+    : (prev.y + '年' + (prev.m + 1) + '月');
+  let curLabel = typeof hubFormatMonthLabel === 'function'
+    ? hubFormatMonthLabel(y, m)
+    : (y + '年' + monthNum + '月');
 
   el.innerHTML =
     '<div class="homeMonthlyChartInner">' +
     '<div class="homeMonthlyChartTip"></div>' +
-    '<svg class="homeMonthlyChartSvg" viewBox="0 0 ' + w + ' ' + h + '" preserveAspectRatio="none" aria-hidden="true">' +
-    '<defs><linearGradient id="homeMonthlyLineGrad" x1="0" y1="0" x2="0" y2="1">' +
-    '<stop offset="0%" stop-color="rgba(96,165,250,.24)"/>' +
-    '<stop offset="100%" stop-color="rgba(96,165,250,0)"/>' +
-    '</linearGradient></defs>' +
-    gridSvg + xSvg +
-    '<polyline class="homeMonthlyChartFill" points="' + fillPts + '"></polyline>' +
-    '<polyline class="homeMonthlyChartLine" points="' + pts + '"></polyline>' +
-    dots +
-    '</svg></div>';
+    '<svg class="homeMonthlyChartSvg rmCompareSvg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + w + ' ' + h + '" preserveAspectRatio="none" aria-hidden="true">' +
+    grid + xSvg + prevLines + lineDots(prevVals, '#64748b', '#0b182b') +
+    curLines + lineDots(curVals, '#60a5fa', '#0b182b') + hits +
+    '</svg>' +
+    '<div class="rmCompareLegend homeMonthlyChartLegend">' +
+    '<span class="rmCompareLegendItem"><i class="isCurrent"></i>今月（' + curLabel + '）</span>' +
+    '<span class="rmCompareLegendItem"><i class="isPrev"></i>前月（' + prevLabel + '）</span>' +
+    '</div></div>';
 
-  bindMonthlyChartTooltip(el, vals, monthNum);
+  bindMonthlyChartTooltip(el, points, monthNum);
 }
 
 function renderHomeMonthlyProjGrid(sAll) {

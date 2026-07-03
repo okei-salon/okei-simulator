@@ -25,6 +25,26 @@ var RM_PROJECTS = [
   { key: 'other', name: 'その他', iconKey: 'custom' }
 ];
 
+function rmGetActiveProjects() {
+  if (typeof pdFilterProjectsWithData === 'function') {
+    return pdFilterProjectsWithData(RM_PROJECTS);
+  }
+  return RM_PROJECTS;
+}
+
+function rmSyncProjectFilterOptions() {
+  let sel = document.getElementById('rmProjectFilter');
+  if (!sel) return;
+  let active = rmGetActiveProjects();
+  let activeKeys = active.map(function (p) { return p.key; });
+  if (rmFilter !== 'all' && activeKeys.indexOf(rmFilter) < 0) rmFilter = 'all';
+  sel.innerHTML = '<option value="all">すべてのプロジェクト</option>' +
+    active.map(function (p) {
+      return '<option value="' + rmEscapeAttr(p.key) + '">' + rmEscape(p.name) + '</option>';
+    }).join('');
+  sel.value = rmFilter;
+}
+
 var RM_WEEKDAYS = ['日', '月', '火', '水', '木', '金', '土'];
 
 var RM_DEMO_STATS = {
@@ -679,7 +699,7 @@ function rmGetRowDayAmount(row, y, m, d) {
 
 function rmGetTableRows() {
   if (rmFilter === 'all') {
-    return RM_PROJECTS.map(function (p) {
+    return rmGetActiveProjects().map(function (p) {
       return { key: p.key, name: p.name, iconKey: p.iconKey, isTotal: false };
     }).concat([{ key: 'total', name: '合計', iconKey: '', isTotal: true }]);
   }
@@ -882,7 +902,18 @@ function rmGetFilteredDayTotal(y, m, d) {
   let entry = rmGetPerformanceEntry(y, m, d);
   let dateKey = typeof revenueDateKey === 'function' ? revenueDateKey(y, m, d) : null;
   if (rmFilter === 'all') {
-    if (entry) return Number(entry.total) || 0;
+    if (entry && dateKey) {
+      let sum = 0;
+      let hasAny = false;
+      rmGetActiveProjects().forEach(function (p) {
+        let v = rmGetProjectDayAmount(entry, p.key, dateKey);
+        if (v !== null && v !== undefined) {
+          hasAny = true;
+          sum += v;
+        }
+      });
+      if (hasAny) return Math.round(sum * 100) / 100;
+    }
     return rmIsDemoMode() ? rmGetDemoDayTotal(d, daysInMonth) : null;
   }
   if (entry && dateKey) {
@@ -951,8 +982,67 @@ function rmCollectDailySeries(y, m) {
   return vals;
 }
 
+function rmChartLastDataDay(y, m) {
+  let ref = typeof getHomeReferenceDate === 'function' ? getHomeReferenceDate() : new Date();
+  let daysInMonth = new Date(y, m + 1, 0).getDate();
+  if (y < ref.getFullYear() || (y === ref.getFullYear() && m < ref.getMonth())) return daysInMonth;
+  if (y === ref.getFullYear() && m === ref.getMonth()) return ref.getDate();
+  return 0;
+}
+
+function rmCollectChartSeries(y, m) {
+  let days = new Date(y, m + 1, 0).getDate();
+  let lastDay = rmChartLastDataDay(y, m);
+  let raw = rmCollectDailySeries(y, m);
+  let useDemo = !rmHasChartData(raw) && rmIsDemoMode();
+  let vals = [];
+  for (let d = 1; d <= days; d++) {
+    if (d > lastDay) {
+      vals.push(null);
+      continue;
+    }
+    if (useDemo) {
+      if (rmFilter === 'all') {
+        vals.push(rmGetDemoDayTotal(d, days));
+      } else {
+        vals.push(rmGetFilteredDayTotal(y, m, d));
+      }
+      continue;
+    }
+    vals.push(rmGetFilteredDayTotal(y, m, d));
+  }
+  return vals;
+}
+
+function rmBuildChartLineSegments(vals, plotX, plotY) {
+  let segments = [];
+  let current = [];
+  vals.forEach(function (v, i) {
+    if (v === null || v === undefined) {
+      if (current.length >= 2) segments.push(current.slice());
+      current = [];
+      return;
+    }
+    current.push(plotX(i).toFixed(1) + ',' + plotY(v).toFixed(1));
+  });
+  if (current.length >= 2) segments.push(current);
+  return segments;
+}
+
 function rmMonthTotalFromSeries(vals) {
   return Math.round(vals.reduce(function (s, v) { return s + v; }, 0) * 100) / 100;
+}
+
+function rmMonthTotalFromChartSeries(vals) {
+  let sum = 0;
+  let hasAny = false;
+  vals.forEach(function (v) {
+    if (v !== null && v !== undefined) {
+      hasAny = true;
+      sum += v;
+    }
+  });
+  return hasAny ? Math.round(sum * 100) / 100 : 0;
 }
 
 function rmMonthTotal(y, m) {
@@ -1103,9 +1193,10 @@ function rmRenderCompareChart() {
   let m = rmView.m;
   let prev = rmCalcPrevMonth(y, m);
   let days = new Date(y, m + 1, 0).getDate();
-  let curVals = rmResolveDailySeries(y, m);
-  let prevVals = rmResolveDailySeries(prev.y, prev.m);
-  let dataMax = Math.max.apply(null, curVals.concat(prevVals).concat([1]));
+  let curVals = rmCollectChartSeries(y, m);
+  let prevVals = rmCollectChartSeries(prev.y, prev.m);
+  let numeric = curVals.concat(prevVals).filter(function (v) { return v != null; });
+  let dataMax = numeric.length ? Math.max.apply(null, numeric) : 1;
   let axisMax = typeof niceChartAxisMax === 'function' ? niceChartAxisMax(dataMax) : Math.max(dataMax, 450);
 
   let w = 520;
@@ -1126,17 +1217,21 @@ function rmRenderCompareChart() {
     return padLeft + (idx / (days - 1)) * plotW;
   }
 
-  function linePoints(vals) {
-    return vals.map(function (v, i) {
-      return plotX(i).toFixed(1) + ',' + plotY(v).toFixed(1);
-    }).join(' ');
-  }
-
   function lineDots(vals, fill, stroke) {
     return vals.map(function (v, i) {
+      if (v === null || v === undefined) return '';
       return '<circle cx="' + plotX(i).toFixed(1) + '" cy="' + plotY(v).toFixed(1) + '" r="3.2" fill="' + fill + '" stroke="' + stroke + '" stroke-width="1.2"></circle>';
     }).join('');
   }
+
+  let prevSegments = rmBuildChartLineSegments(prevVals, plotX, plotY);
+  let curSegments = rmBuildChartLineSegments(curVals, plotX, plotY);
+  let prevLines = prevSegments.map(function (seg) {
+    return '<polyline points="' + seg.join(' ') + '" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="4 4"></polyline>';
+  }).join('');
+  let curLines = curSegments.map(function (seg) {
+    return '<polyline points="' + seg.join(' ') + '" fill="none" stroke="#60a5fa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></polyline>';
+  }).join('');
 
   let ticks = typeof chartAxisTicks === 'function' ? chartAxisTicks(axisMax, 5) : [0, axisMax / 2, axisMax];
   let grid = ticks.map(function (t) {
@@ -1154,11 +1249,8 @@ function rmRenderCompareChart() {
   el.innerHTML =
     '<div class="rmCompareChartInner">' +
     '<svg class="rmCompareSvg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + w + ' ' + h + '" preserveAspectRatio="none" aria-hidden="true">' +
-    grid + xSvg +
-    '<polyline points="' + linePoints(prevVals) + '" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="4 4"></polyline>' +
-    lineDots(prevVals, '#64748b', '#0b182b') +
-    '<polyline points="' + linePoints(curVals) + '" fill="none" stroke="#60a5fa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></polyline>' +
-    lineDots(curVals, '#60a5fa', '#0b182b') +
+    grid + xSvg + prevLines + lineDots(prevVals, '#64748b', '#0b182b') +
+    curLines + lineDots(curVals, '#60a5fa', '#0b182b') +
     '</svg>' +
     '<div class="rmCompareLegend">' +
     '<span class="rmCompareLegendItem"><i class="isCurrent"></i>今月（' + rmFormatMonthLabel(y, m) + '）</span>' +
@@ -1175,10 +1267,10 @@ function rmRenderChartSummary() {
   let y = rmView.y;
   let m = rmView.m;
   let prev = rmCalcPrevMonth(y, m);
-  let curVals = rmResolveDailySeries(y, m);
-  let prevVals = rmResolveDailySeries(prev.y, prev.m);
-  let curTotal = rmMonthTotalFromSeries(curVals);
-  let prevTotal = rmMonthTotalFromSeries(prevVals);
+  let curVals = rmCollectChartSeries(y, m);
+  let prevVals = rmCollectChartSeries(prev.y, prev.m);
+  let curTotal = rmMonthTotalFromChartSeries(curVals);
+  let prevTotal = rmMonthTotalFromChartSeries(prevVals);
   let pct = rmPctChange(curTotal, prevTotal);
   let pctCls = pct >= 0 ? 'isUp' : 'isDown';
   let arrow = pct >= 0 ? '↗' : '↘';
@@ -1320,7 +1412,7 @@ function rmRenderProjectStats() {
       '<div class="rmStatTableCol rmStatTableCol--metric">最高日収</div>' +
       '<div class="rmStatTableCol rmStatTableCol--metric">最高月収</div>' +
       '</div>' +
-      RM_PROJECTS.map(function (p) {
+      rmGetActiveProjects().map(function (p) {
         let stats = rmGetProjectStats(p.key);
         return '<div class="rmStatTableRow">' +
           '<div class="rmStatTableCol rmStatTableCol--project">' + rmRenderProjectIcon(p.iconKey, 'rmRowIcon') + rmEscape(p.name) + '</div>' +
@@ -1421,8 +1513,7 @@ function renderRevenueManage() {
   if (typeof hubEnsureViewMonth === 'function') hubEnsureViewMonth();
   if (typeof pfSyncMainTabs === 'function') pfSyncMainTabs('revenueManage');
 
-  let sel = document.getElementById('rmProjectFilter');
-  if (sel) sel.value = rmFilter;
+  rmSyncProjectFilterOptions();
   if (typeof pjUpdateFilterIcon === 'function') pjUpdateFilterIcon('rmFilterIcon', rmFilter);
 
   rmUpdateHeaderMeta();

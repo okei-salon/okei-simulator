@@ -168,11 +168,18 @@ function pfGetLiveOperatingUsd(projectKey) {
   return pdGetProjectOperatingUsd(projectKey, dateKey);
 }
 
-function pfGetEnabledOperatingRows() {
+function pfGetActiveProjects() {
   let list = typeof getEnabledHomeProjects === 'function'
     ? getEnabledHomeProjects()
     : [{ key: 'ram', name: 'RAM' }, { key: 'orca', name: 'ORCA' }, { key: 'cary', name: 'Cary Pact' }];
-  return list.map(function (p) {
+  if (typeof pdFilterProjectsWithData === 'function') {
+    return pdFilterProjectsWithData(list);
+  }
+  return list;
+}
+
+function pfGetEnabledOperatingRows() {
+  return pfGetActiveProjects().map(function (p) {
     let mock = pfGetProjectMock(p.key);
     return {
       key: p.key,
@@ -183,9 +190,7 @@ function pfGetEnabledOperatingRows() {
 }
 
 function pfGetEnabledProjectRows() {
-  let list = typeof getEnabledHomeProjects === 'function'
-    ? getEnabledHomeProjects()
-    : [{ key: 'ram', name: 'RAM' }, { key: 'orca', name: 'ORCA' }, { key: 'cary', name: 'Cary Pact' }];
+  let list = pfGetActiveProjects();
   let cumulative = typeof pdSumAllTimeRevenue === 'function' ? pdSumAllTimeRevenue() : null;
   let hasRevenueLog = cumulative && cumulative.total > 0;
   return list.map(function (p) {
@@ -370,7 +375,7 @@ function pfRenderSummaryCards() {
       trend: hasOperating ? profitRatio : pfEmptyMark(), trendLabel: '運用額比', trendArrow: false
     }) +
     cardHtml({
-      accent: 'recovery', icon: 'chart', label: '回収率',
+      accent: 'recovery', icon: 'chart', label: '達成率',
       value: pfDisplayPct(recoveryPct, hasOperating && hasProfit), sub: '総利益 ÷ 運用額'
     }) +
     cardHtml({
@@ -412,10 +417,10 @@ function pfRenderProjectCard(row) {
     '<div class="pfProjectMetrics">' +
     '<div class="pfProjectMetric"><span class="pfProjectMetricLabel">運用額</span><span class="pfProjectMetricVal">' + row.operating + '</span></div>' +
     '<div class="pfProjectMetric"><span class="pfProjectMetricLabel">累計利益</span><span class="pfProjectMetricVal isProfit">' + row.profit + '</span></div>' +
-    '<div class="pfProjectMetric"><span class="pfProjectMetricLabel">回収率</span><span class="pfProjectMetricVal isRecovery">' + (row.recoveryDisplay || row.recovery + '%') + '</span></div>' +
+    '<div class="pfProjectMetric"><span class="pfProjectMetricLabel">達成率</span><span class="pfProjectMetricVal isRecovery">' + (row.recoveryDisplay || row.recovery + '%') + '</span></div>' +
     '</div>' +
     '<div class="pfRecoveryBlock">' +
-    '<div class="pfRecoveryLabel"><span>回収率</span><b>' + (row.recoveryDisplay || row.recovery + '%') + '</b></div>' +
+    '<div class="pfRecoveryLabel"><span>達成率</span><b>' + (row.recoveryDisplay || row.recovery + '%') + '</b></div>' +
     '<div class="pfRecoveryTrack"><div class="pfRecoveryFill" style="width:' + row.fill + '%"></div><i class="pfRecoveryMark"></i></div>' +
     '<div class="pfRecoveryScale"><span>0%</span><span>100%</span><span>200%</span></div></div>' +
     '<div class="pfRecoveryDateRow"><span>回収予定日</span><b>' + pfEscape(row.recoveryDate) + '</b></div>' +
@@ -568,16 +573,45 @@ function pfCommitGoalSettings() {
   renderPortfolio();
 }
 
+function pfBuildAllocationRows() {
+  let rows = pfGetEnabledOperatingRows();
+  let total = rows.reduce(function (sum, row) { return sum + row.operatingUsd; }, 0);
+  if (total <= 0) {
+    if (!pfIsDemoMode()) return [];
+    rows = pfGetActiveProjects().map(function (p) {
+      let mock = pfGetProjectMock(p.key);
+      return { key: p.key, name: p.name, operatingUsd: mock.operatingUsd };
+    });
+    total = rows.reduce(function (sum, row) { return sum + row.operatingUsd; }, 0);
+    if (total <= 0) return [];
+  }
+  return rows
+    .filter(function (row) { return row.operatingUsd > 0; })
+    .map(function (row) {
+      return {
+        key: row.key,
+        name: row.name,
+        color: PF_COLORS[row.key] || '#64748b',
+        pct: Math.round((row.operatingUsd / total) * 1000) / 10
+      };
+    });
+}
+
 function pfRenderAllocation() {
   let el = document.getElementById('pfAllocationChart');
   if (!el) return;
   let operatingTotal = pfSumEnabledOperatingUsd();
-  let alloc = pfIsDemoMode() ? PF_MOCK_ALLOC : [];
-  if (!pfIsDemoMode() && operatingTotal <= 0) {
+  let alloc = pfBuildAllocationRows();
+  if (!alloc.length) {
     el.innerHTML = '<div class="pfAllocLayout pfAllocLayout--empty"><p class="pfEmptyHint">' + pfEmptyMark() + ' 運用額未入力</p></div>';
     return;
   }
-  if (!alloc.length) alloc = PF_MOCK_ALLOC;
+  if (operatingTotal <= 0 && pfIsDemoMode()) {
+    operatingTotal = alloc.reduce(function (sum, row) {
+      let mock = pfGetProjectMock(row.key);
+      return sum + (mock.operatingUsd || 0);
+    }, 0);
+  }
   let acc = 0;
   let gradient = alloc.map(function (row) {
     let start = acc;
@@ -626,7 +660,7 @@ function pfRenderStackedBars() {
 
   let cols = stacked.map(function (month) {
     let segments = [];
-    PF_STACK_ORDER.forEach(function (key) {
+    pfGetActiveProjects().map(function (p) { return p.key; }).forEach(function (key) {
       let val = month[key] || 0;
       if (val <= 0) return;
       let h = axisMax > 0 ? (val / axisMax) * chartH : 0;
@@ -645,9 +679,8 @@ function pfRenderStackedBars() {
     return '<span style="bottom:' + (r * 100) + '%">' + label + '</span>';
   }).join('');
 
-  let legend = PF_STACK_ORDER.filter(function () { return true; }).map(function (key) {
-    let names = { ram: 'RAM', orca: 'ORCA', cary: 'Cary Pact', genesis: 'GENESIS', other: 'その他' };
-    return '<span class="pfStackLegendItem"><i style="background:' + PF_COLORS[key] + '"></i>' + names[key] + '</span>';
+  let legend = pfGetActiveProjects().map(function (p) {
+    return '<span class="pfStackLegendItem"><i style="background:' + (PF_COLORS[p.key] || '#94a3b8') + '"></i>' + pfEscape(p.name) + '</span>';
   }).join('');
 
   el.innerHTML =

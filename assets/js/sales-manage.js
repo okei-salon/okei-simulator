@@ -28,6 +28,26 @@ var SM_PROJECTS = [
   { key: 'other', name: 'その他', iconKey: 'custom' }
 ];
 
+function smGetActiveProjects() {
+  if (typeof pdFilterProjectsWithData === 'function') {
+    return pdFilterProjectsWithData(SM_PROJECTS);
+  }
+  return SM_PROJECTS;
+}
+
+function smSyncProjectFilterOptions() {
+  let sel = document.getElementById('smProjectFilter');
+  if (!sel) return;
+  let active = smGetActiveProjects();
+  let activeKeys = active.map(function (p) { return p.key; });
+  if (smFilter !== 'all' && activeKeys.indexOf(smFilter) < 0) smFilter = 'all';
+  sel.innerHTML = '<option value="all">すべてのプロジェクト</option>' +
+    active.map(function (p) {
+      return '<option value="' + smEscapeAttr(p.key) + '">' + smEscape(p.name) + '</option>';
+    }).join('');
+  sel.value = smFilter;
+}
+
 var SM_WEEKDAYS = ['日', '月', '火', '水', '木', '金', '土'];
 
 var SM_DEMO_STATS = {
@@ -375,28 +395,31 @@ function smGetAccountDaySales(accountId, projectKey, y, m, d) {
 
 function smGetProjectDayAmountDeduped(projectKey, y, m, d) {
   let entry = smGetPerformanceEntry(y, m, d);
+  let accounts = smGetProjectAccounts(projectKey);
+  if (accounts.length) {
+    let aggIds = smGetAggregationAccountIds(accounts);
+    let sum = 0;
+    let hasAny = false;
+    aggIds.forEach(function (id) {
+      let v = smGetAccountDaySalesFromLog(id, projectKey, y, m, d);
+      if (v !== null && v !== undefined) {
+        hasAny = true;
+        sum += v;
+      }
+    });
+    if (hasAny) return Math.round(sum * 100) / 100;
+  }
   if (entry && entry[projectKey] != null) {
     return Math.round(Number(entry[projectKey]) * 100) / 100;
   }
 
-  let accounts = smGetProjectAccounts(projectKey);
   if (!accounts.length) {
     return smIsDemoMode()
       ? smGetDemoProjectDayAmountFallback(projectKey, d, new Date(y, m + 1, 0).getDate())
       : null;
   }
 
-  let aggIds = smGetAggregationAccountIds(accounts);
-  let sum = 0;
-  let hasAny = false;
-  aggIds.forEach(function (id) {
-    let v = smGetAccountDaySales(id, projectKey, y, m, d);
-    if (v !== null && v !== undefined) {
-      hasAny = true;
-      sum += v;
-    }
-  });
-  return hasAny ? Math.round(sum * 100) / 100 : null;
+  return null;
 }
 
 function smGetDemoProjectDayAmountFallback(projectKey, d, daysInMonth) {
@@ -413,7 +436,7 @@ function smGetDemoProjectDayAmountFallback(projectKey, d, daysInMonth) {
 }
 
 function smGetDemoDayTotal(d, daysInMonth) {
-  return SM_PROJECTS.reduce(function (sum, p) {
+  return smGetActiveProjects().reduce(function (sum, p) {
     return sum + smGetProjectDayAmountDeduped(p.key, smView.y, smView.m, d);
   }, 0);
 }
@@ -484,7 +507,7 @@ function smGetRowDayAmount(row, y, m, d) {
     if (smFilter === 'all') {
       let sum = 0;
       let hasAny = false;
-      SM_PROJECTS.forEach(function (p) {
+      smGetActiveProjects().forEach(function (p) {
         let v = smGetProjectDayAmountDeduped(p.key, y, m, d);
         if (v !== null && v !== undefined) {
           hasAny = true;
@@ -500,7 +523,7 @@ function smGetRowDayAmount(row, y, m, d) {
 
 function smGetTableRows() {
   if (smFilter === 'all') {
-    return SM_PROJECTS.map(function (p) {
+    return smGetActiveProjects().map(function (p) {
       return { key: p.key, name: p.name, iconKey: p.iconKey, isProject: true, isTotal: false };
     }).concat([{ key: 'total', name: '合計', iconKey: '', isTotal: true }]);
   }
@@ -555,7 +578,7 @@ function smGetFilteredDayTotal(y, m, d) {
   if (smFilter === 'all') {
     let sum = 0;
     let hasAny = false;
-    SM_PROJECTS.forEach(function (p) {
+    smGetActiveProjects().forEach(function (p) {
       let v = smGetProjectDayAmountDeduped(p.key, y, m, d);
       if (v !== null && v !== undefined) {
         hasAny = true;
@@ -574,6 +597,49 @@ function smCollectDailySeries(y, m) {
     vals.push(smGetFilteredDayTotal(y, m, d));
   }
   return vals;
+}
+
+function smChartLastDataDay(y, m) {
+  let ref = typeof getHomeReferenceDate === 'function' ? getHomeReferenceDate() : new Date();
+  let daysInMonth = new Date(y, m + 1, 0).getDate();
+  if (y < ref.getFullYear() || (y === ref.getFullYear() && m < ref.getMonth())) return daysInMonth;
+  if (y === ref.getFullYear() && m === ref.getMonth()) return ref.getDate();
+  return 0;
+}
+
+function smCollectChartSeries(y, m) {
+  let days = new Date(y, m + 1, 0).getDate();
+  let lastDay = smChartLastDataDay(y, m);
+  let raw = smCollectDailySeries(y, m);
+  let useDemo = !smHasChartData(raw) && smIsDemoMode();
+  let vals = [];
+  for (let d = 1; d <= days; d++) {
+    if (d > lastDay) {
+      vals.push(null);
+      continue;
+    }
+    if (useDemo) {
+      vals.push(smGetDemoDayTotal(d, days));
+      continue;
+    }
+    vals.push(smGetFilteredDayTotal(y, m, d));
+  }
+  return vals;
+}
+
+function smBuildChartLineSegments(vals, plotX, plotY) {
+  let segments = [];
+  let current = [];
+  vals.forEach(function (v, i) {
+    if (v === null || v === undefined) {
+      if (current.length >= 2) segments.push(current.slice());
+      current = [];
+      return;
+    }
+    current.push(plotX(i).toFixed(1) + ',' + plotY(v).toFixed(1));
+  });
+  if (current.length >= 2) segments.push(current);
+  return segments;
 }
 
 function smGetDemoDailySeries(y, m) {
@@ -759,9 +825,10 @@ function smRenderCompareChart() {
     let m = smView.m;
     let prev = smCalcPrevMonth(y, m);
     let days = new Date(y, m + 1, 0).getDate();
-    let curVals = smResolveDailySeries(y, m);
-    let prevVals = smResolveDailySeries(prev.y, prev.m);
-    let dataMax = Math.max.apply(null, curVals.concat(prevVals).concat([1]));
+    let curVals = smCollectChartSeries(y, m);
+    let prevVals = smCollectChartSeries(prev.y, prev.m);
+    let numeric = curVals.concat(prevVals).filter(function (v) { return v != null; });
+    let dataMax = numeric.length ? Math.max.apply(null, numeric) : 1;
     let axisMax = typeof niceChartAxisMax === 'function' ? niceChartAxisMax(dataMax) : Math.max(dataMax, 1800);
 
     let w = 520;
@@ -782,17 +849,21 @@ function smRenderCompareChart() {
       return padLeft + (idx / (days - 1)) * plotW;
     }
 
-    function linePoints(vals) {
-      return vals.map(function (v, i) {
-        return plotX(i).toFixed(1) + ',' + plotY(v).toFixed(1);
-      }).join(' ');
-    }
-
     function lineDots(vals, fill, stroke) {
       return vals.map(function (v, i) {
+        if (v === null || v === undefined) return '';
         return '<circle cx="' + plotX(i).toFixed(1) + '" cy="' + plotY(v).toFixed(1) + '" r="3.2" fill="' + fill + '" stroke="' + stroke + '" stroke-width="1.2"></circle>';
       }).join('');
     }
+
+    let prevSegments = smBuildChartLineSegments(prevVals, plotX, plotY);
+    let curSegments = smBuildChartLineSegments(curVals, plotX, plotY);
+    let prevLines = prevSegments.map(function (seg) {
+      return '<polyline points="' + seg.join(' ') + '" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="4 4"></polyline>';
+    }).join('');
+    let curLines = curSegments.map(function (seg) {
+      return '<polyline points="' + seg.join(' ') + '" fill="none" stroke="#60a5fa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></polyline>';
+    }).join('');
 
     let ticks = typeof chartAxisTicks === 'function' ? chartAxisTicks(axisMax, 5) : [0, axisMax / 2, axisMax];
     let grid = ticks.map(function (t) {
@@ -810,11 +881,8 @@ function smRenderCompareChart() {
     el.innerHTML =
       '<div class="rmCompareChartInner">' +
       '<svg class="rmCompareSvg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + w + ' ' + h + '" preserveAspectRatio="none" aria-hidden="true">' +
-      grid + xSvg +
-      '<polyline points="' + linePoints(prevVals) + '" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="4 4"></polyline>' +
-      lineDots(prevVals, '#64748b', '#0b182b') +
-      '<polyline points="' + linePoints(curVals) + '" fill="none" stroke="#60a5fa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></polyline>' +
-      lineDots(curVals, '#60a5fa', '#0b182b') +
+      grid + xSvg + prevLines + lineDots(prevVals, '#64748b', '#0b182b') +
+      curLines + lineDots(curVals, '#60a5fa', '#0b182b') +
       '</svg>' +
       '<div class="rmCompareLegend">' +
       '<span class="rmCompareLegendItem"><i class="isCurrent"></i>今月（' + smFormatMonthLabel(y, m) + '）</span>' +
@@ -825,6 +893,18 @@ function smRenderCompareChart() {
 
 function smMonthTotalFromSeries(vals) {
   return Math.round(vals.reduce(function (s, v) { return s + v; }, 0) * 100) / 100;
+}
+
+function smMonthTotalFromChartSeries(vals) {
+  let sum = 0;
+  let hasAny = false;
+  vals.forEach(function (v) {
+    if (v !== null && v !== undefined) {
+      hasAny = true;
+      sum += v;
+    }
+  });
+  return hasAny ? Math.round(sum * 100) / 100 : 0;
 }
 
 function smPctChange(current, prev) {
@@ -840,10 +920,10 @@ function smRenderChartSummary() {
     let y = smView.y;
     let m = smView.m;
     let prev = smCalcPrevMonth(y, m);
-    let curVals = smResolveDailySeries(y, m);
-    let prevVals = smResolveDailySeries(prev.y, prev.m);
-    let curTotal = smMonthTotalFromSeries(curVals);
-    let prevTotal = smMonthTotalFromSeries(prevVals);
+    let curVals = smCollectChartSeries(y, m);
+    let prevVals = smCollectChartSeries(prev.y, prev.m);
+    let curTotal = smMonthTotalFromChartSeries(curVals);
+    let prevTotal = smMonthTotalFromChartSeries(prevVals);
     let pct = smPctChange(curTotal, prevTotal);
     let pctCls = pct >= 0 ? 'isUp' : 'isDown';
     let arrow = pct >= 0 ? '↗' : '↘';
@@ -964,7 +1044,7 @@ function smRenderProjectStats() {
       '<div class="rmStatTableCol rmStatTableCol--metric">最高日売上</div>' +
       '<div class="rmStatTableCol rmStatTableCol--metric">最高月売上</div>' +
       '</div>' +
-      SM_PROJECTS.map(function (p) {
+      smGetActiveProjects().map(function (p) {
         let stats = smGetProjectStats(p.key);
         return '<div class="rmStatTableRow">' +
           '<div class="rmStatTableCol rmStatTableCol--project">' + smRenderProjectIcon(p.iconKey, 'rmRowIcon') + smEscape(p.name) + '</div>' +
@@ -1064,8 +1144,7 @@ function renderSalesManage() {
   if (typeof hubEnsureViewMonth === 'function') hubEnsureViewMonth();
   if (typeof pfSyncMainTabs === 'function') pfSyncMainTabs('salesManage');
 
-  let sel = document.getElementById('smProjectFilter');
-  if (sel) sel.value = smFilter;
+  smSyncProjectFilterOptions();
   if (typeof pjUpdateFilterIcon === 'function') pjUpdateFilterIcon('smFilterIcon', smFilter);
 
   smUpdateHeaderMeta();

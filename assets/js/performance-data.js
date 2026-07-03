@@ -117,6 +117,97 @@ function hubNextMonth() {
   hubRefreshMonthViews();
 }
 
+var hubPickerYear = null;
+
+function hubOpenMonthPicker(ev) {
+  hubEnsureViewMonth();
+  hubPickerYear = hubViewMonth.y;
+  hubRenderMonthPickerGrid();
+  let bg = document.getElementById('hubMonthPickerBackdrop');
+  if (bg) bg.classList.remove('hidden');
+  if (ev && ev.stopPropagation) ev.stopPropagation();
+}
+
+function hubCloseMonthPicker() {
+  let bg = document.getElementById('hubMonthPickerBackdrop');
+  if (bg) bg.classList.add('hidden');
+}
+
+function hubRenderMonthPickerGrid() {
+  let grid = document.getElementById('hubMonthPickerGrid');
+  let yearLabel = document.getElementById('hubPickerYearLabel');
+  if (!grid || hubPickerYear == null) return;
+  if (yearLabel) yearLabel.textContent = hubPickerYear + '年';
+  grid.innerHTML = '';
+  for (let m = 0; m < 12; m++) {
+    let btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'hubMonthPickerMonth' +
+      (hubPickerYear === hubViewMonth.y && m === hubViewMonth.m ? ' isActive' : '');
+    btn.textContent = (m + 1) + '月';
+    btn.setAttribute('onclick', 'hubPickMonth(' + m + ')');
+    grid.appendChild(btn);
+  }
+}
+
+function hubPickMonth(m) {
+  if (hubPickerYear == null) return;
+  hubSetViewMonth(hubPickerYear, m);
+  hubCloseMonthPicker();
+  hubRefreshMonthViews();
+}
+
+function hubPickerPrevYear() {
+  if (hubPickerYear == null) hubPickerYear = hubViewMonth.y;
+  hubPickerYear -= 1;
+  hubRenderMonthPickerGrid();
+}
+
+function hubPickerNextYear() {
+  if (hubPickerYear == null) hubPickerYear = hubViewMonth.y;
+  hubPickerYear += 1;
+  hubRenderMonthPickerGrid();
+}
+
+function pdProjectHasActualData(projectKey) {
+  if (pdIsDemoMode()) {
+    if (projectKey === 'ram' || projectKey === 'orca') return true;
+    if (projectKey === 'cary' && typeof HOME_DEMO_MONTHLY !== 'undefined') {
+      return Number(HOME_DEMO_MONTHLY.cary) > 0;
+    }
+    return false;
+  }
+  ensurePerformanceLogs();
+  if (pdListRevenueDateKeys().some(function (dateKey) {
+    let entry = pdGetRevenueEntry(dateKey);
+    return entry && pdProjectDayHasRevenue(entry, projectKey, dateKey);
+  })) return true;
+  if (Object.keys(settings.salesLog || {}).some(function (dateKey) {
+    let entry = settings.salesLog[dateKey];
+    if (!entry) return false;
+    if (Number(entry[projectKey]) > 0) return true;
+    if (!entry.accounts) return false;
+    return Object.keys(entry.accounts).some(function (id) {
+      let ae = entry.accounts[id];
+      return (ae.projectKey || 'other') === projectKey &&
+        ae.todaySales != null && ae.todaySales !== '';
+    });
+  })) return true;
+  return false;
+}
+
+function pdFilterProjectsWithData(projects) {
+  return (projects || []).filter(function (p) {
+    return pdProjectHasActualData(p.key);
+  });
+}
+
+function pdHasAnyManageProjectData() {
+  return PD_PROJECT_KEYS.some(function (key) {
+    return pdProjectHasActualData(key);
+  });
+}
+
 function pdHasAccountRevenueInEntry(entry, projectKey, accountId) {
   if (!entry) return false;
   if (projectKey === 'ram' && entry.ramAccounts && entry.ramAccounts[accountId]) {
@@ -775,47 +866,54 @@ function pdResolveRamAccountIdByExcelKey(excelKey) {
     if (mapped) return mapped;
   }
 
-  function memberKeys(m) {
-    let keys = [];
-    [m.username, m.name].forEach(function (field) {
-      if (!field) return;
-      let s = String(field).trim();
-      if (s.normalize) s = s.normalize('NFKC');
-      keys.push(s.replace(/^@/, '').toLowerCase());
-    });
-    return keys;
+  function normalizeToken(field) {
+    if (!field) return '';
+    let s = String(field).trim();
+    if (s.normalize) s = s.normalize('NFKC');
+    return s.replace(/^@/, '').toLowerCase();
   }
 
-  function matchesKey(m) {
-    let keys = memberKeys(m);
-    if (keys.indexOf(key) >= 0) return true;
-    if (key === 'kai1' && keys.some(function (k) { return k === 'kai1' || k.indexOf('kai1') >= 0; })) return true;
-    if (key === 'kai2' && keys.some(function (k) { return k === 'kai2' || k.indexOf('kai2') >= 0; })) return true;
-    return false;
+  function matchesExcelKey(m) {
+    let tokens = [normalizeToken(m.username), normalizeToken(m.name)];
+    if (key === 'kai1') {
+      return tokens.some(function (t) {
+        return t === 'kai1' || t === '甲斐1' || t === '甲斐' || t === 'kai';
+      });
+    }
+    if (key === 'kai2') {
+      return tokens.some(function (t) {
+        return t === 'kai2' || t === '甲斐2';
+      });
+    }
+    return tokens.indexOf(key) >= 0;
   }
 
   if (typeof getRamInputAccounts === 'function') {
     let accounts = getRamInputAccounts();
-    let exact = accounts.find(function (a) {
-      let u = String(a.username || '').trim();
-      if (u.normalize) u = u.normalize('NFKC');
-      u = u.replace(/^@/, '').toLowerCase();
-      return u === key || (key === 'kai1' && u.indexOf('kai1') >= 0) || (key === 'kai2' && u.indexOf('kai2') >= 0);
-    });
-    if (exact) return exact.id;
+    for (let i = 0; i < accounts.length; i++) {
+      let acc = accounts[i];
+      let token = normalizeToken(acc.username);
+      if (key === 'kai1' && (token === 'kai1' || token === '甲斐1' || token === '甲斐' || token === 'kai')) {
+        return acc.id;
+      }
+      if (key === 'kai2' && (token === 'kai2' || token === '甲斐2')) {
+        return acc.id;
+      }
+      if (token === key) return acc.id;
+    }
   }
 
   if (typeof getRootIdsForSummary === 'function' && typeof members !== 'undefined') {
     let ids = getRootIdsForSummary();
     for (let i = 0; i < ids.length; i++) {
       let m = members.find(function (x) { return x.id === ids[i]; });
-      if (m && matchesKey(m)) return m.id;
+      if (m && matchesExcelKey(m)) return m.id;
     }
   }
 
   if (typeof members !== 'undefined') {
     for (let j = 0; j < members.length; j++) {
-      if (matchesKey(members[j])) return members[j].id;
+      if (matchesExcelKey(members[j])) return members[j].id;
     }
   }
 
@@ -1350,7 +1448,15 @@ if (typeof window !== 'undefined') {
   window.hubResetViewMonth = hubResetViewMonth;
   window.hubPrevMonth = hubPrevMonth;
   window.hubNextMonth = hubNextMonth;
+  window.hubOpenMonthPicker = hubOpenMonthPicker;
+  window.hubCloseMonthPicker = hubCloseMonthPicker;
+  window.hubPickMonth = hubPickMonth;
+  window.hubPickerPrevYear = hubPickerPrevYear;
+  window.hubPickerNextYear = hubPickerNextYear;
   window.hubFormatMonthLabel = hubFormatMonthLabel;
+  window.pdProjectHasActualData = pdProjectHasActualData;
+  window.pdFilterProjectsWithData = pdFilterProjectsWithData;
+  window.pdHasAnyManageProjectData = pdHasAnyManageProjectData;
   window.pdDeleteAccountPerformanceData = pdDeleteAccountPerformanceData;
   window.pdCollectRevenueAccountIds = pdCollectRevenueAccountIds;
   window.pdCollectSalesAccountIds = pdCollectSalesAccountIds;
