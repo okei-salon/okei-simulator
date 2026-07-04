@@ -1,18 +1,26 @@
-/* OUKEI HUB Google Auth — Ver2.0.5 */
+/* OUKEI HUB Google Auth — Firebase official redirect pattern (compat SDK)
+ *
+ * Order (Firebase docs):
+ *   initializeApp → firebase.auth() → setPersistence → getRedirectResult (once)
+ *   onAuthStateChanged runs in parallel; signInWithRedirect after setPersistence
+ *
+ * initializeAuth is modular SDK only; compat uses firebase.auth().
+ */
 
 var hubCurrentProfile = null;
 var hubAuthListenerAttached = false;
 var hubAuthBusy = false;
 var hubAuthInitDone = false;
+var hubAuthBootstrapStarted = false;
 var hubLastAuthUid = '';
-var hubPendingAuthUser = null;
-var hubRedirectResultUser = null;
-var hubAuthBootstrapFinished = false;
+var HUB_AUTH_JS_VERSION = 'v237';
 var hubAuthDebug = {
+  jsVersion: HUB_AUTH_JS_VERSION,
+  authDomain: '',
+  redirectResult: 'pending',
+  currentUser: 'null',
   onAuthStateChangedCalled: false,
   onAuthStateUser: null,
-  redirectResult: 'pending',
-  currentUser: null,
   step: 'init',
   errorCode: '',
   errorMessage: ''
@@ -22,49 +30,33 @@ function hubAuthDebugRender() {
   let el = document.getElementById('hubAuthDebug');
   if (!el) return;
   let d = hubAuthDebug;
-  let lines = [
+  el.textContent = [
+    'jsVersion: ' + d.jsVersion,
+    'authDomain: ' + (d.authDomain || '—'),
+    'step: ' + d.step,
+    'getRedirectResult: ' + d.redirectResult,
+    'auth.currentUser: ' + d.currentUser,
     'onAuthStateChanged called: ' + (d.onAuthStateChangedCalled ? 'yes' : 'no'),
     'user: ' + (d.onAuthStateUser ? 'exists (' + d.onAuthStateUser + ')' : 'null'),
-    'getRedirectResult: ' + d.redirectResult,
-    'auth.currentUser: ' + (d.currentUser ? d.currentUser : 'null'),
-    'step: ' + d.step
-  ];
-  if (d.errorCode) lines.push('error.code: ' + d.errorCode);
-  if (d.errorMessage) lines.push('error.message: ' + d.errorMessage);
-  el.textContent = lines.join('\n');
+    d.errorCode ? ('error.code: ' + d.errorCode) : '',
+    d.errorMessage ? ('error.message: ' + d.errorMessage) : ''
+  ].filter(Boolean).join('\n');
 }
 
 function hubAuthDebugSetError(err) {
   if (!err) return;
-  let info = hubNormalizeError(err);
-  hubAuthDebug.errorCode = info.code;
-  hubAuthDebug.errorMessage = info.message;
+  let code = err.code ? String(err.code) : 'error/unknown';
+  let message = err.message ? String(err.message) : 'ログインに失敗しました。';
+  hubAuthDebug.errorCode = code;
+  hubAuthDebug.errorMessage = message;
   hubAuthDebugRender();
 }
 
-function hubAuthDebugUpdateCurrentUser(auth) {
+function hubAuthDebugSync(auth) {
+  let cfg = typeof HUB_FIREBASE_CONFIG !== 'undefined' ? HUB_FIREBASE_CONFIG : null;
+  hubAuthDebug.authDomain = cfg && cfg.authDomain ? cfg.authDomain : '—';
   hubAuthDebug.currentUser = auth && auth.currentUser ? auth.currentUser.uid : 'null';
   hubAuthDebugRender();
-}
-
-function hubPromiseTimeout(promise, ms, fallbackValue) {
-  return Promise.race([
-    promise,
-    new Promise(function (resolve) {
-      setTimeout(function () { resolve(fallbackValue); }, ms);
-    })
-  ]);
-}
-
-function hubIsAuthRedirectReturn() {
-  if (typeof location === 'undefined') return false;
-  let href = location.href || '';
-  return /authType=signInViaRedirect|\/__\/auth\/handler/.test(href);
-}
-
-function hubAuthBootstrapTimeoutMs() {
-  if (hubIsAuthRedirectReturn()) return 8000;
-  return hubIsIosSafari() ? 8000 : 6000;
 }
 
 function hubNormalizeError(err) {
@@ -81,12 +73,95 @@ function hubFormatAuthError(err, targetId) {
     return;
   }
   let info = hubNormalizeError(err);
+  hubAuthDebugSetError(err);
   hubSetAuthError('[' + info.code + '] ' + info.message, targetId);
 }
 
 function hubIsProfileGateVisible() {
   let profile = document.getElementById('hubAuthProfile');
   return !!(profile && !profile.classList.contains('hidden'));
+}
+
+function hubSetAuthPersistence(auth) {
+  return auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(function () {
+    return auth.setPersistence(firebase.auth.Auth.Persistence.SESSION);
+  });
+}
+
+function hubAttachAuthListener(auth) {
+  if (hubAuthListenerAttached) return;
+  hubAuthListenerAttached = true;
+  auth.onAuthStateChanged(function (user) {
+    hubAuthDebug.onAuthStateChangedCalled = true;
+    hubAuthDebug.onAuthStateUser = user ? user.uid : null;
+    hubAuthDebugSync(auth);
+
+    if (user) {
+      if (!hubAuthInitDone || !document.body.classList.contains('hub-auth-ready')) {
+        hubHandleAuthUser(user);
+        return;
+      }
+      hubProcessAuthState(user);
+      return;
+    }
+
+    if (!hubAuthInitDone || hubAuthBusy) return;
+    hubHandleSignedOut();
+  });
+}
+
+function hubCompleteAuthBootstrap(auth, handledUser) {
+  hubAuthInitDone = true;
+  hubAuthDebug.step = handledUser ? 'signed-in' : 'show-login';
+  hubAuthDebugSync(auth);
+  if (handledUser) return;
+  if (document.body.classList.contains('hub-auth-ready') || hubIsProfileGateVisible()) return;
+  if (!auth.currentUser) {
+    hubSetAuthError('');
+    hubShowAuthScreen('login');
+  }
+}
+
+function hubRunRedirectAuthBootstrap(auth) {
+  if (hubAuthBootstrapStarted) return;
+  hubAuthBootstrapStarted = true;
+  hubAuthDebug.step = 'setPersistence';
+  hubAuthDebugRender();
+
+  hubAttachAuthListener(auth);
+
+  let handledUser = false;
+  hubSetAuthPersistence(auth)
+    .then(function () {
+      hubAuthDebug.step = 'getRedirectResult';
+      hubAuthDebugRender();
+      return auth.getRedirectResult();
+    })
+    .then(function (result) {
+      if (result && result.user) {
+        hubAuthDebug.redirectResult = 'user exists (' + result.user.uid + ')';
+        handledUser = true;
+        return hubHandleAuthUser(result.user);
+      }
+      hubAuthDebug.redirectResult = result ? 'empty' : 'null';
+      hubAuthDebugRender();
+      if (auth.currentUser) {
+        handledUser = true;
+        return hubHandleAuthUser(auth.currentUser);
+      }
+    })
+    .catch(function (err) {
+      if (err && err.code !== 'auth/no-auth-event') {
+        hubFormatAuthError(err);
+      }
+      if (auth.currentUser) {
+        handledUser = true;
+        return hubHandleAuthUser(auth.currentUser);
+      }
+    })
+    .then(function () {
+      hubCompleteAuthBootstrap(auth, handledUser);
+    });
 }
 
 function hubProcessAuthState(user) {
@@ -101,197 +176,8 @@ function hubProcessAuthState(user) {
     return hubHandleAuthUser(user);
   }
   if (!hubAuthInitDone || hubAuthBusy) return Promise.resolve();
-  let auth = typeof hubGetFirebaseAuth === 'function' ? hubGetFirebaseAuth() : null;
-  if (auth && auth.currentUser) {
-    return hubProcessAuthState(auth.currentUser);
-  }
-  if (hubPendingAuthUser) {
-    return hubProcessAuthState(hubPendingAuthUser);
-  }
-  hubLastAuthUid = '';
   hubHandleSignedOut();
   return Promise.resolve();
-}
-
-function hubIsIosSafari() {
-  if (typeof navigator === 'undefined') return false;
-  let ua = navigator.userAgent || '';
-  let isAppleMobile = /iPhone|iPad|iPod/i.test(ua);
-  let isSafari = /Safari/i.test(ua) && !/CriOS|FxiOS|EdgiOS|OPiOS/i.test(ua);
-  return isAppleMobile && isSafari;
-}
-
-function hubTestBrowserStorage() {
-  try {
-    localStorage.setItem('hubAuthProbe', '1');
-    localStorage.removeItem('hubAuthProbe');
-  } catch (e) {
-    return false;
-  }
-  return true;
-}
-
-function hubSetAuthPersistence(auth) {
-  if (!hubTestBrowserStorage()) {
-    return auth.setPersistence(firebase.auth.Auth.Persistence.SESSION);
-  }
-  return auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(function () {
-    return auth.setPersistence(firebase.auth.Auth.Persistence.SESSION);
-  });
-}
-
-function hubResolveAuthUser(auth) {
-  if (hubRedirectResultUser) return hubRedirectResultUser;
-  if (auth && auth.currentUser) return auth.currentUser;
-  if (hubPendingAuthUser) return hubPendingAuthUser;
-  return null;
-}
-
-
-function hubWaitForSignedInUser(auth, maxWaitMs) {
-  let immediate = hubResolveAuthUser(auth);
-  if (immediate) return Promise.resolve(immediate);
-
-  maxWaitMs = typeof maxWaitMs === 'number' ? maxWaitMs : 5000;
-  let intervalMs = 200;
-  let elapsed = 0;
-
-  return new Promise(function (resolve) {
-    function tick() {
-      hubAuthDebugUpdateCurrentUser(auth);
-      let user = hubResolveAuthUser(auth);
-      if (user) {
-        resolve(user);
-        return;
-      }
-      elapsed += intervalMs;
-      if (elapsed >= maxWaitMs) {
-        resolve(null);
-        return;
-      }
-      setTimeout(tick, intervalMs);
-    }
-    tick();
-  });
-}
-
-function hubFinishAuthBootstrap(auth, user) {
-  if (hubAuthBootstrapFinished) return Promise.resolve();
-  hubAuthBootstrapFinished = true;
-  hubAuthInitDone = true;
-  hubAuthDebug.step = user ? 'signed-in' : 'show-login';
-  hubAuthDebugUpdateCurrentUser(auth);
-  if (user) {
-    return hubProcessAuthState(user);
-  }
-  hubSetAuthError('');
-  hubShowAuthScreen('login');
-  return Promise.resolve();
-}
-
-function hubOnAuthStateChanged(user) {
-  hubAuthDebug.onAuthStateChangedCalled = true;
-  hubAuthDebug.onAuthStateUser = user ? user.uid : null;
-  hubAuthDebugRender();
-
-  if (user) {
-    hubPendingAuthUser = user;
-    if (!hubAuthInitDone) return;
-    hubProcessAuthState(user);
-    return;
-  }
-
-  if (!hubAuthInitDone) return;
-
-  if (hubAuthBusy) return;
-  let auth = typeof hubGetFirebaseAuth === 'function' ? hubGetFirebaseAuth() : null;
-  if (auth && auth.currentUser) {
-    hubProcessAuthState(auth.currentUser);
-    return;
-  }
-  hubProcessAuthState(null);
-}
-
-function hubBootstrapAuth(auth) {
-  hubAuthBootstrapFinished = false;
-  hubRedirectResultUser = null;
-  hubAuthDebug.step = 'persistence';
-  hubAuthDebug.redirectResult = 'pending';
-  hubAuthDebug.errorCode = '';
-  hubAuthDebug.errorMessage = '';
-  hubAuthDebugRender();
-
-  let timeoutMs = hubAuthBootstrapTimeoutMs();
-  let bootstrapTimer = setTimeout(function () {
-    hubAuthDebug.step = 'timeout -> login';
-    hubAuthDebugRender();
-    hubFinishAuthBootstrap(auth, hubResolveAuthUser(auth));
-  }, timeoutMs);
-
-  function finish(user) {
-    clearTimeout(bootstrapTimer);
-    return hubFinishAuthBootstrap(auth, user);
-  }
-
-  return hubSetAuthPersistence(auth)
-    .then(function () {
-      hubAuthDebug.step = 'getRedirectResult';
-      hubAuthDebugRender();
-      return hubPromiseTimeout(auth.getRedirectResult(), 5000, null);
-    })
-    .catch(function (err) {
-      if (err && err.code !== 'auth/no-auth-event') hubAuthDebugSetError(err);
-      return null;
-    })
-    .then(function (redirectResult) {
-      if (redirectResult && redirectResult.user) {
-        hubRedirectResultUser = redirectResult.user;
-        hubPendingAuthUser = redirectResult.user;
-        hubAuthDebug.redirectResult = 'user exists (' + redirectResult.user.uid + ')';
-      } else {
-        hubAuthDebug.redirectResult = redirectResult ? 'empty' : 'null';
-      }
-      hubAuthDebug.step = 'waiting user';
-      hubAuthDebugRender();
-      let remainMs = Math.max(1500, timeoutMs - 2000);
-      return hubWaitForSignedInUser(auth, remainMs);
-    })
-    .then(function (user) {
-      return finish(user || hubResolveAuthUser(auth));
-    })
-    .catch(function (err) {
-      hubAuthDebugSetError(err);
-      return finish(hubResolveAuthUser(auth));
-    });
-}
-
-function hubResumeAuthIfNeeded() {
-  if (!hubAuthInitDone || hubAuthBusy) return;
-  let auth = typeof hubGetFirebaseAuth === 'function' ? hubGetFirebaseAuth() : null;
-  if (!auth) return;
-  if (auth.currentUser) {
-    hubProcessAuthState(auth.currentUser);
-    return;
-  }
-  if (document.body.classList.contains('hub-auth-ready')) return;
-  hubShowAuthLoading('ログイン状態を再確認しています…');
-  hubWaitForSignedInUser(auth, 5000).then(function (user) {
-    if (user) {
-      hubProcessAuthState(user);
-      return;
-    }
-    hubShowAuthScreen('login');
-  });
-}
-
-function hubBindIosAuthResume() {
-  if (typeof window === 'undefined') return;
-  window.addEventListener('pageshow', function () {
-    hubResumeAuthIfNeeded();
-  });
-  document.addEventListener('visibilitychange', function () {
-    if (document.visibilityState === 'visible') hubResumeAuthIfNeeded();
-  });
 }
 
 function hubShowAuthLoading(message) {
@@ -331,7 +217,9 @@ function hubShowAuthScreen(mode) {
   } else {
     if (login) login.classList.remove('hidden');
     if (profile) profile.classList.add('hidden');
+    hubBindAuthUi();
   }
+  hubAuthDebugRender();
 }
 
 function hubShowAppShell() {
@@ -514,6 +402,7 @@ function hubHandleAuthUser(user) {
     return Promise.resolve();
   }
   hubAuthBusy = true;
+  hubAuthInitDone = true;
   hubSetAuthError('');
   hubShowAuthLoading('プロフィールを確認しています…');
   hubSetCurrentUid(user.uid);
@@ -533,7 +422,6 @@ function hubHandleAuthUser(user) {
     });
   }).catch(function (err) {
     hubFormatAuthError(err);
-    let auth = typeof hubGetFirebaseAuth === 'function' ? hubGetFirebaseAuth() : null;
     if (auth && auth.currentUser) {
       hubShowAuthScreen('profile');
     } else {
@@ -665,19 +553,22 @@ function hubLogout() {
 
 function hubInitAuth() {
   hubShowAuthLoading('ログイン状態を確認しています…');
-  hubAuthDebug.step = 'init';
-  hubAuthDebugRender();
+  hubAuthDebugSync(null);
   hubSetAuthError('');
+  hubBindAuthUi();
+
   if (typeof hubFirebaseConfigValid === 'function' && !hubFirebaseConfigValid()) {
     hubShowAuthScreen('login');
     hubSetAuthError('Firebase設定が未完了です。firebase-config.js を設定してください。');
     hubSetSyncStatus('offline', 'オフライン');
+    hubAuthInitDone = true;
     return;
   }
   if (typeof hubInitFirebaseServices === 'function' && !hubInitFirebaseServices()) {
     hubShowAuthScreen('login');
     hubSetAuthError('Firebaseに接続できません。ネットワーク接続を確認してください。');
     hubSetSyncStatus('offline', 'オフライン');
+    hubAuthInitDone = true;
     return;
   }
 
@@ -685,45 +576,42 @@ function hubInitAuth() {
   if (!auth) {
     hubShowAuthScreen('login');
     hubSetAuthError('認証サービスを開始できません。');
+    hubAuthInitDone = true;
     return;
   }
 
-  if (!hubAuthListenerAttached) {
-    hubAuthListenerAttached = true;
-    auth.onAuthStateChanged(function (user) {
-      hubOnAuthStateChanged(user);
-    });
-  }
-
-  hubBootstrapAuth(auth);
+  hubAuthDebugSync(auth);
+  hubRunRedirectAuthBootstrap(auth);
 }
 
 function hubBootApplication() {
   if (typeof initPinchZoom === 'function') initPinchZoom();
-  if (typeof hubInitAuth === 'function') hubInitAuth();
 }
 
 function hubBindAuthUi() {
   let googleBtn = document.getElementById('hubGoogleLoginBtn');
-  if (googleBtn) {
-    googleBtn.addEventListener('click', function () {
+  if (googleBtn && googleBtn.dataset.hubAuthBound !== '1') {
+    googleBtn.dataset.hubAuthBound = '1';
+    googleBtn.addEventListener('click', function (e) {
+      e.preventDefault();
       hubLoginWithGoogle();
     });
   }
   let startBtn = document.getElementById('hubProfileStartBtn');
-  if (startBtn) {
-    startBtn.addEventListener('click', function () {
-      hubCompleteProfileSetup();
-    });
+  if (startBtn && startBtn.dataset.hubAuthBound !== '1') {
+    startBtn.dataset.hubAuthBound = '1';
+    startBtn.addEventListener('click', hubCompleteProfileSetup);
   }
   let setupUsernameInput = document.getElementById('hubUsernameInput');
-  if (setupUsernameInput) {
+  if (setupUsernameInput && setupUsernameInput.dataset.hubAuthBound !== '1') {
+    setupUsernameInput.dataset.hubAuthBound = '1';
     setupUsernameInput.addEventListener('keydown', function (e) {
       if (e.key === 'Enter') hubCompleteProfileSetup();
     });
   }
   let usernameInput = document.getElementById('hubAccountUsernameInput');
-  if (usernameInput) {
+  if (usernameInput && usernameInput.dataset.hubAuthBound !== '1') {
+    usernameInput.dataset.hubAuthBound = '1';
     usernameInput.addEventListener('keydown', function (e) {
       if (e.key === 'Enter') hubSaveUsername();
     });
@@ -733,6 +621,7 @@ function hubBindAuthUi() {
 if (typeof window !== 'undefined') {
   window.hubInitAuth = hubInitAuth;
   window.hubBootApplication = hubBootApplication;
+  window.hubBindAuthUi = hubBindAuthUi;
   window.hubLoginWithGoogle = hubLoginWithGoogle;
   window.hubCompleteProfileSetup = hubCompleteProfileSetup;
   window.hubLogout = hubLogout;
@@ -741,13 +630,7 @@ if (typeof window !== 'undefined') {
   window.hubSaveUsername = hubSaveUsername;
   window.hubCopyUid = hubCopyUid;
   window.hubCurrentProfile = function () { return hubCurrentProfile; };
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', function () {
-      hubBindAuthUi();
-      hubBindIosAuthResume();
-    });
-  } else {
-    hubBindAuthUi();
-    hubBindIosAuthResume();
-  }
+
+  hubBindAuthUi();
+  hubInitAuth();
 }

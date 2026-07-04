@@ -190,7 +190,7 @@ body.simulationMode .simBanner{display:block}
 <link rel="stylesheet" href="assets/css/home.css?v=20260703-v216">
 <link rel="stylesheet" href="assets/css/portfolio-ui.css?v=20260626-pf186">
 <link rel="stylesheet" href="assets/css/settings-ui.css?v=20260703-v217">
-<link rel="stylesheet" href="assets/css/hub-auth.css?v=20260704-v232">
+<link rel="stylesheet" href="assets/css/hub-auth.css?v=20260704-v237">
 <link rel="stylesheet" href="assets/css/excel-import.css?v=20260628-v203">
 <link rel="stylesheet" href="assets/css/orca-import.css?v=20260628-v205">
 <link rel="stylesheet" href="assets/css/revenue-manage.css?v=20260703-v213">
@@ -224,7 +224,7 @@ body.simulationMode .simBanner{display:block}
 <img class="hubAuthLogo" src="assets/brand/apple-touch-icon.png?v=20260628-pwa1" alt="OUKEI HUB">
 <h1 class="hubAuthTitle">OUKEI HUB</h1>
 <p class="hubAuthLead">Googleアカウントでログインして、どの端末からも同じデータを利用できます。</p>
-<button type="button" class="hubAuthGoogleBtn" id="hubGoogleLoginBtn"><svg viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.54 0 6.72 1.22 9.23 3.6l6.9-6.9C35.9 2.45 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l8.06 6.26C12.66 13.04 17.88 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.64-.15-3.22-.42-4.74H24v9.01h12.66c-.55 2.96-2.21 5.46-4.71 7.14l7.27 5.64C43.98 37.13 46.5 31.36 46.5 24.5z"/><path fill="#FBBC05" d="M10.62 28.38a14.5 14.5 0 0 1 0-8.76l-8.06-6.26A24 24 0 0 0 0 24c0 3.93.95 7.65 2.56 10.9l8.06-6.52z"/><path fill="#34A853" d="M24 48c6.48 0 11.92-2.13 15.89-5.81l-7.27-5.64c-2.02 1.36-4.62 2.17-8.62 2.17-6.12 0-11.3-4.13-13.16-9.71l-8.06 6.26C6.51 42.62 14.62 48 24 48z"/></svg>Googleでログイン</button>
+<button type="button" class="hubAuthGoogleBtn" id="hubGoogleLoginBtn" onclick="return window.hubLoginWithGoogle && window.hubLoginWithGoogle(), false;"><svg viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.54 0 6.72 1.22 9.23 3.6l6.9-6.9C35.9 2.45 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l8.06 6.26C12.66 13.04 17.88 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.64-.15-3.22-.42-4.74H24v9.01h12.66c-.55 2.96-2.21 5.46-4.71 7.14l7.27 5.64C43.98 37.13 46.5 31.36 46.5 24.5z"/><path fill="#FBBC05" d="M10.62 28.38a14.5 14.5 0 0 1 0-8.76l-8.06-6.26A24 24 0 0 0 0 24c0 3.93.95 7.65 2.56 10.9l8.06-6.52z"/><path fill="#34A853" d="M24 48c6.48 0 11.92-2.13 15.89-5.81l-7.27-5.64c-2.02 1.36-4.62 2.17-8.62 2.17-6.12 0-11.3-4.13-13.16-9.71l-8.06 6.26C6.51 42.62 14.62 48 24 48z"/></svg>Googleでログイン</button>
 <div class="hubAuthError" id="hubAuthError"></div>
 </div>
 </div>
@@ -251,10 +251,10 @@ body.simulationMode .simBanner{display:block}
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
-<script src="assets/js/firebase-config.js?v=20260704-v232"></script>
-<script src="assets/js/hub-storage.js?v=20260704-v232"></script>
-<script src="assets/js/hub-firebase.js?v=20260704-v232"></script>
-<script src="assets/js/hub-auth.js?v=20260704-v232"></script>
+<script src="assets/js/firebase-config.js?v=20260704-v237"></script>
+<script src="assets/js/hub-storage.js?v=20260704-v237"></script>
+<script src="assets/js/hub-firebase.js?v=20260704-v237"></script>
+<script src="assets/js/hub-auth.js?v=20260704-v237"></script>
 <script src="assets/js/pwa-splash.js?v=20260628-splash177"></script>
 <div class="menu" id="menu">
   <div class="oukeiSidebarBrand">
