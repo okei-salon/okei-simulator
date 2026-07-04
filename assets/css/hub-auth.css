@@ -55,6 +55,14 @@ body:not(.hub-auth-ready) > .menu {
   line-height: 1.6;
 }
 
+#hubAuthLoading .hubAuthCard {
+  min-height: 180px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
 .hubAuthGoogleBtn {
   display: inline-flex;
   align-items: center;
