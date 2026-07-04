@@ -279,6 +279,49 @@ body:not(.hub-auth-ready) > .menu {
   word-break: break-all;
 }
 
+.hubFsDebugPanel {
+  width: min(420px, 100%);
+  margin-top: 12px;
+  padding: 12px 14px;
+  background: rgba(8, 20, 38, 0.92);
+  border: 1px solid #355777;
+  border-radius: 14px;
+  text-align: left;
+  max-height: 42vh;
+  overflow: auto;
+}
+
+.hubFsDebugTitle {
+  margin: 0 0 8px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: #7dd3fc;
+  text-transform: uppercase;
+}
+
+.hubFsDebugList {
+  margin: 0;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 10px;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.hubFsDebugList dt {
+  margin: 0;
+  color: #9fb3cc;
+  white-space: nowrap;
+}
+
+.hubFsDebugList dd {
+  margin: 0;
+  color: #e2e8f0;
+  word-break: break-all;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
 .hubAccountUsername {
   font-size: 11px;
   color: #7f97b3;
