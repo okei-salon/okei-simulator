@@ -3,15 +3,44 @@
 var hubCurrentProfile = null;
 var hubAuthListenerAttached = false;
 var hubAuthBusy = false;
+var hubAuthInitDone = false;
+var hubLastAuthUid = '';
+
+function hubNormalizeError(err) {
+  if (!err) return { code: 'error/unknown', message: 'ログインに失敗しました。' };
+  return {
+    code: err.code ? String(err.code) : 'error/unknown',
+    message: err.message ? String(err.message) : 'ログインに失敗しました。'
+  };
+}
 
 function hubFormatAuthError(err, targetId) {
   if (!err) {
     hubSetAuthError('', targetId);
     return;
   }
-  let code = err.code ? String(err.code) : 'error/unknown';
-  let message = err.message ? String(err.message) : 'ログインに失敗しました。';
-  hubSetAuthError('[' + code + '] ' + message, targetId);
+  let info = hubNormalizeError(err);
+  hubSetAuthError('[' + info.code + '] ' + info.message, targetId);
+}
+
+function hubIsProfileGateVisible() {
+  let profile = document.getElementById('hubAuthProfile');
+  return !!(profile && !profile.classList.contains('hidden'));
+}
+
+function hubProcessAuthState(user) {
+  if (user) {
+    if (hubLastAuthUid === user.uid) {
+      if (document.body.classList.contains('hub-auth-ready') || hubIsProfileGateVisible()) {
+        return Promise.resolve();
+      }
+    }
+    hubLastAuthUid = user.uid;
+    return hubHandleAuthUser(user);
+  }
+  hubLastAuthUid = '';
+  if (hubAuthBusy) return Promise.resolve();
+  hubHandleSignedOut();
 }
 
 function hubShowAuthScreen(mode) {
@@ -228,7 +257,12 @@ function hubHandleAuthUser(user) {
     });
   }).catch(function (err) {
     hubFormatAuthError(err);
-    hubShowAuthScreen('login');
+    let auth = typeof hubGetFirebaseAuth === 'function' ? hubGetFirebaseAuth() : null;
+    if (auth && auth.currentUser) {
+      hubShowAuthScreen('profile');
+    } else {
+      hubShowAuthScreen('login');
+    }
   }).finally(function () {
     hubAuthBusy = false;
   });
@@ -338,10 +372,12 @@ function hubCompleteProfileSetup() {
 function hubLogout() {
   if (!confirm('ログアウトしますか？\n\n次回起動時は再度Googleログインが必要です。')) return;
   let auth = typeof hubGetFirebaseAuth === 'function' ? hubGetFirebaseAuth() : null;
+  hubLastAuthUid = '';
   if (typeof hubClearStorageForLogout === 'function') hubClearStorageForLogout();
   hubLastPushedHash = '';
   if (auth) {
-    auth.signOut().catch(function () {
+    auth.signOut().catch(function (err) {
+      hubFormatAuthError(err);
       hubHandleSignedOut();
     });
   } else {
@@ -349,8 +385,15 @@ function hubLogout() {
   }
 }
 
+function hubFinishAuthBootstrap(auth) {
+  hubAuthInitDone = true;
+  hubSetAuthError('');
+  return hubProcessAuthState(auth.currentUser);
+}
+
 function hubInitAuth() {
   hubShowAuthScreen('login');
+  hubSetAuthError('ログイン状態を確認しています…');
   if (typeof hubFirebaseConfigValid === 'function' && !hubFirebaseConfigValid()) {
     hubSetAuthError('Firebase設定が未完了です。firebase-config.js を設定してください。');
     hubSetSyncStatus('offline', 'オフライン');
@@ -372,24 +415,24 @@ function hubInitAuth() {
   auth.getRedirectResult()
     .then(function (result) {
       if (result && result.user) {
-        return hubHandleAuthUser(result.user);
+        hubLastAuthUid = result.user.uid;
       }
-      return null;
+      return result;
     })
     .catch(function (err) {
       if (err && err.code !== 'auth/no-auth-event') {
         hubFormatAuthError(err);
       }
+    })
+    .finally(function () {
+      hubFinishAuthBootstrap(auth);
     });
 
   if (hubAuthListenerAttached) return;
   hubAuthListenerAttached = true;
   auth.onAuthStateChanged(function (user) {
-    if (user) {
-      hubHandleAuthUser(user);
-    } else {
-      hubHandleSignedOut();
-    }
+    if (!hubAuthInitDone) return;
+    hubProcessAuthState(user);
   });
 }
 
