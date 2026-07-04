@@ -1,0 +1,158 @@
+/* OUKEI HUB Auth Gate — Ver2.0.5 */
+
+body:not(.hub-auth-ready) > header,
+body:not(.hub-auth-ready) > main,
+body:not(.hub-auth-ready) > nav,
+body:not(.hub-auth-ready) > .menu {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+#hubAuthGate {
+  position: fixed;
+  inset: 0;
+  z-index: 99990;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: radial-gradient(circle at top left, #142a55, #07111f 42%, #040812);
+}
+
+#hubAuthGate.hidden {
+  display: none !important;
+}
+
+.hubAuthCard {
+  width: min(420px, 100%);
+  background: linear-gradient(180deg, #13243d, #0d1b30);
+  border: 1px solid #355777;
+  border-radius: 20px;
+  padding: 28px 24px;
+  text-align: center;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+}
+
+.hubAuthLogo {
+  width: 72px;
+  height: 72px;
+  border-radius: 18px;
+  object-fit: cover;
+  border: 1px solid #44617f;
+  margin: 0 auto 16px;
+}
+
+.hubAuthTitle {
+  margin: 0 0 8px;
+  font-size: 24px;
+  font-weight: 900;
+}
+
+.hubAuthLead {
+  margin: 0 0 22px;
+  color: #9fb3cc;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.hubAuthGoogleBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 48px;
+  border: 1px solid #355777;
+  border-radius: 14px;
+  background: #fff;
+  color: #1f2937;
+  font-size: 15px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.hubAuthGoogleBtn:hover {
+  background: #f8fafc;
+}
+
+.hubAuthGoogleBtn svg {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.hubAuthField {
+  text-align: left;
+  margin: 18px 0 16px;
+}
+
+.hubAuthField label {
+  display: block;
+  margin: 0 0 8px;
+  font-size: 13px;
+  color: #bfd0e6;
+  font-weight: 700;
+}
+
+.hubAuthField input {
+  width: 100%;
+}
+
+.hubAuthStartBtn {
+  width: 100%;
+  min-height: 48px;
+  font-size: 15px;
+}
+
+.hubAuthError {
+  margin-top: 12px;
+  color: #fecdd3;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.hubAccountCard {
+  background: #081426;
+  border: 1px solid #2a4264;
+  border-radius: 14px;
+  padding: 12px;
+  margin-bottom: 12px;
+}
+
+.hubAccountSummary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.hubAccountAvatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1px solid #355777;
+  background: #132842;
+}
+
+.hubAccountMeta {
+  min-width: 0;
+  text-align: left;
+}
+
+.hubAccountName {
+  font-weight: 900;
+  font-size: 14px;
+}
+
+.hubAccountEmail {
+  font-size: 12px;
+  color: #9fb3cc;
+  word-break: break-all;
+}
+
+.hubAccountUsername {
+  font-size: 11px;
+  color: #7f97b3;
+  margin-top: 2px;
+}

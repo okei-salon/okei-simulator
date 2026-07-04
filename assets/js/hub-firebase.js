@@ -1,8 +1,7 @@
 /* OUKEI HUB Firebase Sync — Ver2.0.5
- * LocalStorage を即時、Firestore をデバウンス同期
+ * Google 認証後に LocalStorage / Firestore を同期
  */
 
-var HUB_FIRESTORE_DOC = 'users/{uid}/hubData/main';
 var hubFirebaseApp = null;
 var hubFirebaseAuth = null;
 var hubFirebaseDb = null;
@@ -37,9 +36,19 @@ function hubSetSyncStatus(state, message) {
   }
 }
 
+function hubSetCurrentUid(uid) {
+  hubFirebaseUid = uid || '';
+  if (typeof hubSetActiveUid === 'function') hubSetActiveUid(uid || '');
+}
+
 function hubFirestoreDocRef() {
   if (!hubFirebaseDb || !hubFirebaseUid) return null;
   return hubFirebaseDb.collection('users').doc(hubFirebaseUid).collection('hubData').doc('main');
+}
+
+function hubProfileDocRef() {
+  if (!hubFirebaseDb || !hubFirebaseUid) return null;
+  return hubFirebaseDb.collection('users').doc(hubFirebaseUid).collection('profile').doc('main');
 }
 
 function hubInitFirebaseServices() {
@@ -61,11 +70,8 @@ function hubInitFirebaseServices() {
   }
 }
 
-function hubSignInAnonymously() {
-  return hubFirebaseAuth.signInAnonymously().then(function (cred) {
-    hubFirebaseUid = cred.user && cred.user.uid ? cred.user.uid : '';
-    return hubFirebaseUid;
-  });
+function hubGetFirebaseAuth() {
+  return hubFirebaseAuth;
 }
 
 function hubFetchCloudDoc() {
@@ -165,12 +171,8 @@ function hubApplyCloudDataIfNewer(cloudDoc, localUpdatedAt) {
   return false;
 }
 
-function hubInitFirebaseSync() {
-  if (!hubFirebaseConfigValid()) {
-    hubSetSyncStatus('offline', 'オフライン');
-    return Promise.resolve(false);
-  }
-  if (!hubInitFirebaseServices()) {
+function hubSyncHubData() {
+  if (!hubFirebaseReady || !hubFirebaseUid) {
     hubSetSyncStatus('offline', 'オフライン');
     return Promise.resolve(false);
   }
@@ -179,22 +181,20 @@ function hubInitFirebaseSync() {
   let local = hubLoadFromStorage();
   let localUpdatedAt = (local.data && local.data.updatedAt) || 0;
 
-  return hubSignInAnonymously().then(function () {
-    return hubFetchCloudDoc().then(function (cloudDoc) {
-      let result = hubApplyCloudDataIfNewer(cloudDoc, localUpdatedAt);
-      if (result === 'push') {
-        return hubRunCloudSave(true);
-      }
-      if (result === true) {
-        hubSetSyncStatus('done');
-        return true;
-      }
-      if (!cloudDoc && !local.isNew) {
-        return hubRunCloudSave(true);
-      }
+  return hubFetchCloudDoc().then(function (cloudDoc) {
+    let result = hubApplyCloudDataIfNewer(cloudDoc, localUpdatedAt);
+    if (result === 'push') {
+      return hubRunCloudSave(true);
+    }
+    if (result === true) {
       hubSetSyncStatus('done');
       return true;
-    });
+    }
+    if (!cloudDoc && !local.isNew) {
+      return hubRunCloudSave(true);
+    }
+    hubSetSyncStatus('done');
+    return true;
   }).catch(function () {
     hubSetSyncStatus('offline', 'オフライン');
     return false;
@@ -216,8 +216,13 @@ if (typeof window !== 'undefined') {
   window.hubSaveNow = function () {
     hubSaveToStorage({ immediate: true });
   };
-  window.hubInitFirebaseSync = hubInitFirebaseSync;
+  window.hubSyncHubData = hubSyncHubData;
   window.hubDeleteCloudData = hubDeleteCloudData;
   window.hubSetSyncStatus = hubSetSyncStatus;
+  window.hubInitFirebaseServices = hubInitFirebaseServices;
+  window.hubFirebaseConfigValid = hubFirebaseConfigValid;
+  window.hubGetFirebaseAuth = hubGetFirebaseAuth;
+  window.hubProfileDocRef = hubProfileDocRef;
+  window.hubSetCurrentUid = hubSetCurrentUid;
   hubBindFirebaseConnectivity();
 }

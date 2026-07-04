@@ -3,7 +3,9 @@
 var HUB_STORAGE_KEY = 'oukei_hub_v15_data';
 var HUB_STORAGE_LEGACY_KEY = 'okei_v14_data';
 var HUB_DEMO_MODE_KEY = 'oukei_home_demo_mode';
+var HUB_UID_KEY = 'oukei_hub_v15_uid';
 var hubLocalUpdatedAt = 0;
+var hubActiveUid = '';
 
 function hubCreateDefaultSettings() {
   return {
@@ -58,6 +60,50 @@ var HUB_DEV_ORG_SEED = {
 };
 
 HUB_DEV_ORG_SEED.members = JSON.parse(JSON.stringify(HUB_DEV_ORG_SEED.currentData));
+
+function hubSetActiveUid(uid) {
+  hubActiveUid = uid || '';
+}
+
+function hubStorageKeyForUid(uid) {
+  return uid ? HUB_STORAGE_KEY + ':' + uid : HUB_STORAGE_KEY;
+}
+
+function hubBindStorageToUid(uid) {
+  if (typeof localStorage === 'undefined') {
+    hubSetActiveUid(uid);
+    return hubLoadFromStorage();
+  }
+  let prevUid = localStorage.getItem(HUB_UID_KEY) || '';
+  if (prevUid && uid && prevUid !== uid) {
+    hubApplyData(hubCreateEmptyData());
+  }
+  if (uid) localStorage.setItem(HUB_UID_KEY, uid);
+  hubSetActiveUid(uid);
+  let result = hubLoadFromStorage();
+  hubApplyData(result.data);
+  return result;
+}
+
+function hubClearStorageForLogout() {
+  try {
+    if (typeof localStorage !== 'undefined') {
+      if (hubActiveUid) localStorage.removeItem(hubStorageKeyForUid(hubActiveUid));
+      localStorage.removeItem(HUB_STORAGE_KEY);
+      localStorage.removeItem(HUB_STORAGE_LEGACY_KEY);
+      localStorage.removeItem(HUB_DEMO_MODE_KEY);
+      localStorage.removeItem(HUB_UID_KEY);
+    }
+  } catch (e) {}
+  hubSetActiveUid('');
+  hubLocalUpdatedAt = 0;
+  hubApplyData(hubCreateEmptyData());
+}
+
+function hubResolveStorageKey() {
+  if (hubActiveUid) return hubStorageKeyForUid(hubActiveUid);
+  return HUB_STORAGE_KEY;
+}
 
 function hubNormalizeLoadedData(raw) {
   let base = hubCreateEmptyData();
@@ -184,7 +230,11 @@ function hubLoadFromStorage() {
     return { data: hubCreateEmptyData(), isNew: true };
   }
   try {
-    let raw = localStorage.getItem(HUB_STORAGE_KEY) || localStorage.getItem(HUB_STORAGE_LEGACY_KEY);
+    let key = hubResolveStorageKey();
+    let raw = localStorage.getItem(key);
+    if (!raw && hubActiveUid) {
+      raw = localStorage.getItem(HUB_STORAGE_KEY) || localStorage.getItem(HUB_STORAGE_LEGACY_KEY);
+    }
     if (!raw) return { data: hubCreateEmptyData(), isNew: true };
     return { data: hubNormalizeLoadedData(JSON.parse(raw)), isNew: false };
   } catch (e) {
@@ -198,7 +248,7 @@ function hubSaveToStorage(options) {
   try {
     let now = Date.now();
     hubLocalUpdatedAt = now;
-    localStorage.setItem(HUB_STORAGE_KEY, JSON.stringify(Object.assign(hubPackLocalData(), { updatedAt: now })));
+    localStorage.setItem(hubResolveStorageKey(), JSON.stringify(Object.assign(hubPackLocalData(), { updatedAt: now })));
     if (!options.localOnly && typeof hubScheduleCloudSave === 'function') {
       hubScheduleCloudSave(options.immediate === true);
     }
@@ -283,4 +333,7 @@ if (typeof window !== 'undefined') {
   window.hubInitStorage = hubInitStorage;
   window.hubLoadDevOrgSeed = hubLoadDevOrgSeed;
   window.hubClearAllData = hubClearAllData;
+  window.hubSetActiveUid = hubSetActiveUid;
+  window.hubBindStorageToUid = hubBindStorageToUid;
+  window.hubClearStorageForLogout = hubClearStorageForLogout;
 }
