@@ -3,13 +3,13 @@
  * Add {key}.png to the folder and register below to enable a project icon.
  */
 
-var PJ_ICON_VERSION = '20260628-v211';
+var PJ_ICON_VERSION = '20260704-v213';
 var PJ_ICON_BASE = 'assets/projects/';
 
 var PJ_ICON_REGISTRY = {
   ram: { file: 'ram.png', alt: 'RAM' },
   orca: { file: 'orca.png', alt: 'ORCA' },
-  cary: { alt: 'Cary Pact' },
+  cary: { file: 'cary.png', alt: 'CarryPact' },
   genesis: { alt: 'GENESIS' },
   other: { alt: 'その他' },
   demo2026: { alt: 'Demo' },

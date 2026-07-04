@@ -136,7 +136,6 @@ span.homeProjIcon--orca:not(.homeProjIcon--img) {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%235eead4' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 14c2-4 6-6 10-5 3 1 6 0 8-3 0 4-2 8-6 10s-8 1-12-2z'/%3E%3Ccircle cx='17' cy='9' r='1' fill='%235eead4'/%3E%3C/svg%3E");
 }
 
-span.homeProjIcon--cary:not(.homeProjIcon--img),
 span.homeProjIcon--genesis:not(.homeProjIcon--img),
 span.homeProjIcon--demo2026:not(.homeProjIcon--img) {
   background-color: rgba(168, 85, 247, .18);
