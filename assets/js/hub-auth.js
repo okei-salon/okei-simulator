@@ -13,7 +13,8 @@ var hubAuthBusy = false;
 var hubAuthInitDone = false;
 var hubAuthBootstrapStarted = false;
 var hubLastAuthUid = '';
-var HUB_AUTH_JS_VERSION = 'v237';
+var HUB_AUTH_JS_VERSION = 'v240';
+var HUB_AUTH_DEBUG_STORAGE_KEY = 'oukei_hub_auth_debug';
 var hubAuthDebug = {
   jsVersion: HUB_AUTH_JS_VERSION,
   authDomain: '',
@@ -26,9 +27,36 @@ var hubAuthDebug = {
   errorMessage: ''
 };
 
+function hubIsAuthDebugMode() {
+  if (typeof window === 'undefined') return false;
+  try {
+    if (localStorage.getItem(HUB_AUTH_DEBUG_STORAGE_KEY) === '1') return true;
+  } catch (e) {}
+  try {
+    let params = new URLSearchParams(window.location.search || '');
+    if (params.get('authDebug') === '1' || params.get('dev') === '1') return true;
+  } catch (e2) {}
+  let host = window.location.hostname || '';
+  return host === 'localhost' || host === '127.0.0.1' || host.endsWith('.local');
+}
+
+function hubAuthDebugSetVisible(show) {
+  let el = document.getElementById('hubAuthDebug');
+  if (!el) return;
+  if (show && hubIsAuthDebugMode()) {
+    el.classList.remove('hidden');
+    return;
+  }
+  el.classList.add('hidden');
+}
+
 function hubAuthDebugRender() {
   let el = document.getElementById('hubAuthDebug');
   if (!el) return;
+  if (!hubIsAuthDebugMode()) {
+    hubAuthDebugSetVisible(false);
+    return;
+  }
   let d = hubAuthDebug;
   el.textContent = [
     'jsVersion: ' + d.jsVersion,
@@ -41,6 +69,7 @@ function hubAuthDebugRender() {
     d.errorCode ? ('error.code: ' + d.errorCode) : '',
     d.errorMessage ? ('error.message: ' + d.errorMessage) : ''
   ].filter(Boolean).join('\n');
+  hubAuthDebugSetVisible(true);
 }
 
 function hubAuthDebugSetError(err) {
@@ -185,14 +214,13 @@ function hubShowAuthLoading(message) {
   let login = document.getElementById('hubAuthLogin');
   let profile = document.getElementById('hubAuthProfile');
   let loading = document.getElementById('hubAuthLoading');
-  let debug = document.getElementById('hubAuthDebug');
   if (!gate) return;
   gate.classList.remove('hidden');
   document.body.classList.remove('hub-auth-ready');
   if (login) login.classList.add('hidden');
   if (profile) profile.classList.add('hidden');
   if (loading) loading.classList.remove('hidden');
-  if (debug) debug.classList.remove('hidden');
+  hubAuthDebugSetVisible(false);
   let text = document.getElementById('hubAuthLoadingText');
   if (text) text.textContent = message || 'ログイン状態を確認しています…';
   hubAuthDebugRender();
@@ -203,12 +231,11 @@ function hubShowAuthScreen(mode) {
   let login = document.getElementById('hubAuthLogin');
   let profile = document.getElementById('hubAuthProfile');
   let loading = document.getElementById('hubAuthLoading');
-  let debug = document.getElementById('hubAuthDebug');
   if (!gate) return;
   gate.classList.remove('hidden');
   document.body.classList.remove('hub-auth-ready');
   if (loading) loading.classList.add('hidden');
-  if (debug) debug.classList.remove('hidden');
+  hubAuthDebugSetVisible(false);
   if (mode === 'profile') {
     if (login) login.classList.add('hidden');
     if (profile) profile.classList.remove('hidden');
@@ -224,9 +251,8 @@ function hubShowAuthScreen(mode) {
 
 function hubShowAppShell() {
   let gate = document.getElementById('hubAuthGate');
-  let debug = document.getElementById('hubAuthDebug');
   if (gate) gate.classList.add('hidden');
-  if (debug) debug.classList.add('hidden');
+  hubAuthDebugSetVisible(false);
   document.body.classList.add('hub-auth-ready');
 }
 
