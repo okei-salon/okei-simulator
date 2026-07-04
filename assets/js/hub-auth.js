@@ -118,32 +118,79 @@ function hubTouchProfileLogin(user, profile) {
   });
 }
 
-function hubRenderAccountSummary(user, profile) {
-  let wrap = document.getElementById('hubAccountSummary');
-  if (!wrap) return;
+function hubFormatProfileDate(value) {
+  if (!value) return '—';
+  let date = new Date(typeof value === 'number' ? value : value);
+  if (isNaN(date.getTime())) return '—';
+  return date.toLocaleString('ja-JP');
+}
+
+function hubValidateUsername(username) {
+  let name = String(username || '').trim();
+  if (!name) return { ok: false, message: 'ユーザー名を入力してください。' };
+  if (name.length > 32) return { ok: false, message: 'ユーザー名は32文字以内で入力してください。' };
+  return { ok: true, value: name };
+}
+
+function hubSetAccountInfoMessage(message, isError) {
+  let el = document.getElementById('hubAccountInfoMessage');
+  if (!el) return;
+  el.textContent = message || '';
+  el.classList.toggle('is-error', !!isError);
+}
+
+function hubRenderAccountInfo(user, profile) {
   user = user || (typeof hubGetFirebaseAuth === 'function' ? hubGetFirebaseAuth().currentUser : null);
   profile = profile || hubCurrentProfile || {};
+
+  let photo = document.getElementById('hubAccountPhoto');
+  let displayNameEl = document.getElementById('hubAccountDisplayName');
+  let emailEl = document.getElementById('hubAccountEmail');
+  let usernameInput = document.getElementById('hubAccountUsernameInput');
+  let uidEl = document.getElementById('hubAccountUid');
+  let createdEl = document.getElementById('hubAccountCreatedAt');
+
   if (!user) {
-    wrap.innerHTML = '<div class="hubAccountMeta"><div class="hubAccountName">未ログイン</div></div>';
+    if (photo) {
+      photo.classList.add('hidden');
+      photo.removeAttribute('src');
+    }
+    if (displayNameEl) displayNameEl.textContent = '未ログイン';
+    if (emailEl) emailEl.textContent = '—';
+    if (usernameInput) usernameInput.value = '';
+    if (uidEl) uidEl.textContent = '—';
+    if (createdEl) createdEl.textContent = '—';
     return;
   }
-  let avatar = profile.photoURL || user.photoURL || '';
-  let avatarHtml = avatar
-    ? '<img class="hubAccountAvatar" src="' + avatar + '" alt="">'
-    : '<div class="hubAccountAvatar"></div>';
-  wrap.innerHTML =
-    avatarHtml +
-    '<div class="hubAccountMeta">' +
-    '<div class="hubAccountName">' + (profile.displayName || user.displayName || 'Googleユーザー') + '</div>' +
-    '<div class="hubAccountEmail">' + (profile.email || user.email || '') + '</div>' +
-    '<div class="hubAccountUsername">@' + (profile.username || '—') + '</div>' +
-    '</div>';
+
+  let photoUrl = user.photoURL || profile.photoURL || '';
+  if (photo) {
+    if (photoUrl) {
+      photo.src = photoUrl;
+      photo.alt = profile.displayName || user.displayName || 'プロフィール画像';
+      photo.classList.remove('hidden');
+    } else {
+      photo.classList.add('hidden');
+      photo.removeAttribute('src');
+    }
+  }
+
+  if (displayNameEl) displayNameEl.textContent = profile.displayName || user.displayName || 'Googleユーザー';
+  if (emailEl) emailEl.textContent = profile.email || user.email || '—';
+  if (usernameInput) usernameInput.value = profile.username || '';
+  if (uidEl) uidEl.textContent = user.uid || '—';
+  if (createdEl) createdEl.textContent = hubFormatProfileDate(profile.createdAt);
+}
+
+function hubRenderAccountSummary(user, profile) {
+  hubRenderAccountInfo(user, profile);
 }
 
 function hubHandleSignedOut() {
   hubCurrentProfile = null;
   hubSetCurrentUid('');
   hubSetAuthError('');
+  hubSetAccountInfoMessage('');
   hubRenderAccountSummary(null, null);
   hubHideAppShell();
   hubShowAuthScreen('login');
@@ -203,15 +250,66 @@ function hubLoginWithGoogle() {
   });
 }
 
-function hubCompleteProfileSetup() {
-  let input = document.getElementById('hubUsernameInput');
-  let username = input ? String(input.value || '').trim() : '';
-  if (!username) {
-    hubSetAuthError('ユーザー名を入力してください。', 'hubAuthProfileError');
+function hubSaveUsername() {
+  let auth = typeof hubGetFirebaseAuth === 'function' ? hubGetFirebaseAuth() : null;
+  let user = auth ? auth.currentUser : null;
+  let input = document.getElementById('hubAccountUsernameInput');
+  let check = hubValidateUsername(input ? input.value : '');
+  if (!check.ok) {
+    hubSetAccountInfoMessage(check.message, true);
     return;
   }
-  if (username.length > 32) {
-    hubSetAuthError('ユーザー名は32文字以内で入力してください。', 'hubAuthProfileError');
+  if (!user) {
+    hubSetAccountInfoMessage('ログイン状態を確認できません。', true);
+    return;
+  }
+  hubSetAccountInfoMessage('');
+  hubSaveProfile(check.value, user).then(function () {
+    hubSetAccountInfoMessage('ユーザー名を保存しました。');
+    if (typeof showToast === 'function') showToast('✅ ユーザー名を保存しました');
+  }).catch(function () {
+    hubSetAccountInfoMessage('ユーザー名の保存に失敗しました。', true);
+  });
+}
+
+function hubCopyUid() {
+  let auth = typeof hubGetFirebaseAuth === 'function' ? hubGetFirebaseAuth() : null;
+  let uid = auth && auth.currentUser ? auth.currentUser.uid : '';
+  if (!uid) {
+    hubSetAccountInfoMessage('コピーする UID がありません。', true);
+    return;
+  }
+  function onCopied() {
+    hubSetAccountInfoMessage('UID をコピーしました。');
+    if (typeof showToast === 'function') showToast('✅ UIDをコピーしました');
+  }
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(uid).then(onCopied).catch(function () {
+      hubSetAccountInfoMessage('コピーに失敗しました。', true);
+    });
+    return;
+  }
+  let area = document.createElement('textarea');
+  area.value = uid;
+  area.setAttribute('readonly', '');
+  area.style.position = 'fixed';
+  area.style.left = '-9999px';
+  document.body.appendChild(area);
+  area.select();
+  try {
+    document.execCommand('copy');
+    onCopied();
+  } catch (e) {
+    hubSetAccountInfoMessage('コピーに失敗しました。', true);
+  }
+  document.body.removeChild(area);
+}
+
+function hubCompleteProfileSetup() {
+  let input = document.getElementById('hubUsernameInput');
+  let check = hubValidateUsername(input ? input.value : '');
+  if (!check.ok) {
+    hubSetAuthError(check.message, 'hubAuthProfileError');
     return;
   }
   let auth = typeof hubGetFirebaseAuth === 'function' ? hubGetFirebaseAuth() : null;
@@ -222,7 +320,7 @@ function hubCompleteProfileSetup() {
     return;
   }
   hubSetAuthError('');
-  hubSaveProfile(username, user).then(function () {
+  hubSaveProfile(check.value, user).then(function () {
     return typeof hubSyncHubData === 'function' ? hubSyncHubData() : Promise.resolve(false);
   }).then(function () {
     hubEnterApplication();
@@ -298,10 +396,16 @@ function hubBindAuthUi() {
       hubCompleteProfileSetup();
     });
   }
-  let usernameInput = document.getElementById('hubUsernameInput');
+  let setupUsernameInput = document.getElementById('hubUsernameInput');
+  if (setupUsernameInput) {
+    setupUsernameInput.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') hubCompleteProfileSetup();
+    });
+  }
+  let usernameInput = document.getElementById('hubAccountUsernameInput');
   if (usernameInput) {
     usernameInput.addEventListener('keydown', function (e) {
-      if (e.key === 'Enter') hubCompleteProfileSetup();
+      if (e.key === 'Enter') hubSaveUsername();
     });
   }
 }
@@ -313,6 +417,9 @@ if (typeof window !== 'undefined') {
   window.hubCompleteProfileSetup = hubCompleteProfileSetup;
   window.hubLogout = hubLogout;
   window.hubRenderAccountSummary = hubRenderAccountSummary;
+  window.hubRenderAccountInfo = hubRenderAccountInfo;
+  window.hubSaveUsername = hubSaveUsername;
+  window.hubCopyUid = hubCopyUid;
   window.hubCurrentProfile = function () { return hubCurrentProfile; };
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', hubBindAuthUi);

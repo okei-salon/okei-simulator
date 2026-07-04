@@ -119,6 +119,123 @@ body:not(.hub-auth-ready) > .menu {
   margin-bottom: 12px;
 }
 
+.hubAccountInfoCard {
+  background: #081426;
+  border: 1px solid #2a4264;
+  border-radius: 16px;
+  padding: 14px;
+  margin-bottom: 12px;
+}
+
+.hubAccountInfoHead {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 14px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid rgba(42, 66, 100, 0.55);
+}
+
+.hubAccountInfoPhoto {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1px solid #355777;
+  background: #132842;
+  flex-shrink: 0;
+}
+
+.hubAccountInfoPhoto.hidden {
+  display: none;
+}
+
+.hubAccountInfoHeadText {
+  min-width: 0;
+}
+
+.hubAccountInfoDisplayName {
+  font-size: 18px;
+  font-weight: 900;
+  line-height: 1.35;
+}
+
+.hubAccountInfoEmail {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #9fb3cc;
+  word-break: break-all;
+}
+
+.hubAccountInfoGrid {
+  display: grid;
+  gap: 12px;
+}
+
+.hubAccountInfoRow {
+  display: grid;
+  gap: 6px;
+}
+
+.hubAccountInfoLabel {
+  font-size: 11px;
+  font-weight: 800;
+  color: #7f97b3;
+}
+
+.hubAccountInfoValue {
+  font-size: 13px;
+  color: #eef7ff;
+  line-height: 1.5;
+}
+
+.hubAccountInfoEditRow,
+.hubAccountUidRow {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.hubAccountInfoEditRow input {
+  min-width: 0;
+}
+
+.hubAccountSaveBtn,
+.hubAccountCopyBtn {
+  white-space: nowrap;
+  min-height: 42px;
+}
+
+.hubAccountUid {
+  display: block;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: #0b182b;
+  border: 1px solid #2a4264;
+  font-size: 11px;
+  line-height: 1.45;
+  word-break: break-all;
+  color: #c9d9ec;
+}
+
+.hubAccountInfoMessage {
+  min-height: 0;
+  margin-top: 10px;
+  font-size: 12px;
+  color: #86efac;
+  line-height: 1.5;
+}
+
+.hubAccountInfoMessage.is-error {
+  color: #fecdd3;
+}
+
+.hubAccountLogoutBtn {
+  width: 100%;
+  margin-top: 14px;
+}
+
 .hubAccountSummary {
   display: flex;
   align-items: center;

@@ -427,7 +427,8 @@ function renderSettings() {
   let lastBackup = document.getElementById('settingsLastBackup');
   if (lastUpdate) lastUpdate.textContent = settings.lastUpdate || '-';
   if (lastBackup) lastBackup.textContent = settings.lastBackup || '-';
-  if (typeof hubRenderAccountSummary === 'function') hubRenderAccountSummary();
+  if (typeof hubRenderAccountInfo === 'function') hubRenderAccountInfo();
+  else if (typeof hubRenderAccountSummary === 'function') hubRenderAccountSummary();
 }
 
 function saveSettings() {
