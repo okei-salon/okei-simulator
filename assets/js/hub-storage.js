@@ -4,6 +4,7 @@
 
 var HUB_STORAGE_KEY = 'oukei_hub_v15_data';
 var HUB_STORAGE_LEGACY_KEY = 'okei_v14_data';
+var HUB_DEMO_MODE_KEY = 'oukei_home_demo_mode';
 
 function hubCreateDefaultSettings() {
   return {
@@ -140,6 +141,45 @@ function hubLoadDevOrgSeed() {
   if (typeof showToast === 'function') showToast('✅ サンプル組織図を読み込みました');
 }
 
+function hubClearAllData() {
+  let msg =
+    'この端末に保存されているデータをすべて削除します。\n\n' +
+    '・組織図\n' +
+    '・収益・売上の入力\n' +
+    '・プロジェクト設定\n' +
+    '・その他の端末内データ\n\n' +
+    '削除後は空の状態から再スタートします。\n' +
+    '元に戻すには、事前のバックアップが必要です。\n\n' +
+    '本当に削除しますか？';
+  if (!confirm(msg)) return;
+
+  try {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.removeItem(HUB_STORAGE_KEY);
+      localStorage.removeItem(HUB_STORAGE_LEGACY_KEY);
+      localStorage.removeItem(HUB_DEMO_MODE_KEY);
+    }
+  } catch (e) {}
+
+  hubApplyData(hubCreateEmptyData());
+  if (typeof undoImportSnapshot !== 'undefined') undoImportSnapshot = null;
+  if (typeof autoBackups !== 'undefined') autoBackups = [];
+  if (typeof toggleHomeDemoMode === 'function') toggleHomeDemoMode(false);
+  else if (typeof HOME_DEMO_MODE !== 'undefined') HOME_DEMO_MODE = false;
+  if (typeof hubResetViewMonth === 'function') hubResetViewMonth();
+  if (typeof pmEnsureProjectMaster === 'function') pmEnsureProjectMaster();
+  if (typeof pmEnsureFxSettings === 'function') pmEnsureFxSettings();
+  if (typeof pfEnsureManageDisplayAccounts === 'function') pfEnsureManageDisplayAccounts();
+  if (typeof ensurePerformanceLogs === 'function') ensurePerformanceLogs();
+  if (typeof ensureRevenueLog === 'function') ensureRevenueLog();
+  settings.lastLogin = new Date().toLocaleString();
+  settings.lastUpdate = new Date().toLocaleString();
+  hubSaveToStorage();
+  if (typeof render === 'function') render();
+  if (typeof showPage === 'function') showPage('home');
+  if (typeof showToast === 'function') showToast('✅ 端末のデータを削除しました');
+}
+
 if (typeof window !== 'undefined') {
   window.HUB_STORAGE_KEY = HUB_STORAGE_KEY;
   window.hubCreateEmptyData = hubCreateEmptyData;
@@ -148,4 +188,5 @@ if (typeof window !== 'undefined') {
   window.hubSaveToStorage = hubSaveToStorage;
   window.hubInitStorage = hubInitStorage;
   window.hubLoadDevOrgSeed = hubLoadDevOrgSeed;
+  window.hubClearAllData = hubClearAllData;
 }

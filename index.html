@@ -218,7 +218,7 @@ body.simulationMode .simBanner{display:block}
 </div>
 </div>
 </div>
-<script src="assets/js/hub-storage.js?v=20260704-v220"></script>
+<script src="assets/js/hub-storage.js?v=20260704-v221"></script>
 <script src="assets/js/pwa-splash.js?v=20260628-splash177"></script>
 <div class="menu" id="menu">
   <div class="oukeiSidebarBrand">
@@ -518,6 +518,9 @@ body.simulationMode .simBanner{display:block}
 <div class="settingBlock settingsRestoreBlock">
 <div class="settingBlockTitle">データ管理</div>
 <div class="notice">💾 データは各自の端末に保存されます。大きな変更前や機種変更時は、バックアップ作成を行ってください。</div>
+<p class="dangerNote">誤って取り込んだデータなどを消す場合、端末内のすべてのデータを削除して空の状態から再スタートできます。</p>
+<button type="button" class="btnDanger" onclick="hubClearAllData()">端末のデータをすべて削除</button>
+<p class="help">組織図・収益入力・設定など、この端末の LocalStorage に保存された内容がすべて消えます。復元には事前のバックアップが必要です。</p>
 </div>
 <div class="settingBlock settingsRestoreBlock">
 <div class="settingBlockTitle">バックアップ</div>
