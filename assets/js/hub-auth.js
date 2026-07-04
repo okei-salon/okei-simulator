@@ -226,8 +226,12 @@ function hubHandleAuthUser(user) {
 }
 
 function hubLoginWithGoogle() {
-  if (typeof hubInitFirebaseServices === 'function' && !hubInitFirebaseServices()) {
-    hubSetAuthError('Firebase設定が未完了です。');
+  if (typeof hubFirebaseConfigValid === 'function' && !hubFirebaseConfigValid()) {
+    hubSetAuthError('Firebase設定が未完了です。firebase-config.js を確認してください。');
+    return Promise.resolve();
+  }
+  if (typeof hubEnsureFirebaseServices === 'function' && !hubEnsureFirebaseServices()) {
+    hubSetAuthError('Firebaseに接続できません。ページを再読み込みしてください。');
     return Promise.resolve();
   }
   let auth = typeof hubGetFirebaseAuth === 'function' ? hubGetFirebaseAuth() : null;
@@ -351,7 +355,7 @@ function hubInitAuth() {
     return;
   }
   if (typeof hubInitFirebaseServices === 'function' && !hubInitFirebaseServices()) {
-    hubSetAuthError('Firebaseに接続できません。');
+    hubSetAuthError('Firebaseに接続できません。ネットワーク接続を確認してください。');
     hubSetSyncStatus('offline', 'オフライン');
     return;
   }

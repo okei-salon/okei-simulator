@@ -16,7 +16,20 @@ var hubSyncState = 'offline';
 
 function hubFirebaseConfigValid() {
   let cfg = typeof HUB_FIREBASE_CONFIG !== 'undefined' ? HUB_FIREBASE_CONFIG : null;
-  return !!(cfg && cfg.apiKey && cfg.projectId && cfg.appId);
+  if (!cfg) return false;
+  return !!(
+    cfg.apiKey &&
+    cfg.authDomain &&
+    cfg.projectId &&
+    cfg.storageBucket &&
+    cfg.messagingSenderId &&
+    cfg.appId
+  );
+}
+
+function hubEnsureFirebaseServices() {
+  if (hubFirebaseReady) return true;
+  return hubInitFirebaseServices();
 }
 
 function hubSetSyncStatus(state, message) {
@@ -52,7 +65,8 @@ function hubProfileDocRef() {
 }
 
 function hubInitFirebaseServices() {
-  if (hubFirebaseReady || typeof firebase === 'undefined') return false;
+  if (hubFirebaseReady) return true;
+  if (typeof firebase === 'undefined') return false;
   if (!hubFirebaseConfigValid()) return false;
   try {
     if (!firebase.apps.length) {
@@ -221,6 +235,7 @@ if (typeof window !== 'undefined') {
   window.hubSetSyncStatus = hubSetSyncStatus;
   window.hubInitFirebaseServices = hubInitFirebaseServices;
   window.hubFirebaseConfigValid = hubFirebaseConfigValid;
+  window.hubEnsureFirebaseServices = hubEnsureFirebaseServices;
   window.hubGetFirebaseAuth = hubGetFirebaseAuth;
   window.hubProfileDocRef = hubProfileDocRef;
   window.hubSetCurrentUid = hubSetCurrentUid;
