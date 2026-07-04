@@ -109,6 +109,9 @@ body:not(.hub-auth-ready) > .menu {
   color: #fecdd3;
   font-size: 12px;
   line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  text-align: left;
 }
 
 .hubAccountCard {

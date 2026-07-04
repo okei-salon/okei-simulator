@@ -4,8 +4,14 @@ var hubCurrentProfile = null;
 var hubAuthListenerAttached = false;
 var hubAuthBusy = false;
 
-function hubIsMobileAuth() {
-  return /iPhone|iPad|iPod|Android/i.test(navigator.userAgent || '');
+function hubFormatAuthError(err, targetId) {
+  if (!err) {
+    hubSetAuthError('', targetId);
+    return;
+  }
+  let code = err.code ? String(err.code) : 'error/unknown';
+  let message = err.message ? String(err.message) : 'ログインに失敗しました。';
+  hubSetAuthError('[' + code + '] ' + message, targetId);
 }
 
 function hubShowAuthScreen(mode) {
@@ -199,6 +205,10 @@ function hubHandleSignedOut() {
 
 function hubHandleAuthUser(user) {
   if (!user || hubAuthBusy) return Promise.resolve();
+  let auth = typeof hubGetFirebaseAuth === 'function' ? hubGetFirebaseAuth() : null;
+  if (document.body.classList.contains('hub-auth-ready') && auth && auth.currentUser && auth.currentUser.uid === user.uid) {
+    return Promise.resolve();
+  }
   hubAuthBusy = true;
   hubSetAuthError('');
   hubSetCurrentUid(user.uid);
@@ -217,9 +227,8 @@ function hubHandleAuthUser(user) {
       });
     });
   }).catch(function (err) {
-    hubSetAuthError('ログイン処理に失敗しました。時間をおいて再度お試しください。');
+    hubFormatAuthError(err);
     hubShowAuthScreen('login');
-    throw err;
   }).finally(function () {
     hubAuthBusy = false;
   });
@@ -240,17 +249,10 @@ function hubLoginWithGoogle() {
     return Promise.resolve();
   }
   let provider = new firebase.auth.GoogleAuthProvider();
-  provider.setCustomParameters({ prompt: '' });
-  hubSetAuthError('');
-  if (hubIsMobileAuth()) {
-    return auth.signInWithRedirect(provider);
-  }
-  return auth.signInWithPopup(provider).catch(function (err) {
-    if (err && err.code === 'auth/popup-blocked') {
-      return auth.signInWithRedirect(provider);
-    }
-    hubSetAuthError('Googleログインに失敗しました。');
-    throw err;
+  provider.setCustomParameters({ prompt: 'select_account' });
+  hubSetAuthError('Googleログイン画面へ移動しています…');
+  return auth.signInWithRedirect(provider).catch(function (err) {
+    hubFormatAuthError(err);
   });
 }
 
@@ -328,8 +330,8 @@ function hubCompleteProfileSetup() {
     return typeof hubSyncHubData === 'function' ? hubSyncHubData() : Promise.resolve(false);
   }).then(function () {
     hubEnterApplication();
-  }).catch(function () {
-    hubSetAuthError('プロフィール保存に失敗しました。', 'hubAuthProfileError');
+  }).catch(function (err) {
+    hubFormatAuthError(err, 'hubAuthProfileError');
   });
 }
 
@@ -363,13 +365,22 @@ function hubInitAuth() {
   let auth = typeof hubGetFirebaseAuth === 'function' ? hubGetFirebaseAuth() : null;
   if (!auth) return;
 
-  auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(function () {});
-
-  auth.getRedirectResult().catch(function (err) {
-    if (err && err.code !== 'auth/no-auth-event') {
-      hubSetAuthError('Googleログインに失敗しました。');
-    }
+  auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(function (err) {
+    hubFormatAuthError(err);
   });
+
+  auth.getRedirectResult()
+    .then(function (result) {
+      if (result && result.user) {
+        return hubHandleAuthUser(result.user);
+      }
+      return null;
+    })
+    .catch(function (err) {
+      if (err && err.code !== 'auth/no-auth-event') {
+        hubFormatAuthError(err);
+      }
+    });
 
   if (hubAuthListenerAttached) return;
   hubAuthListenerAttached = true;
