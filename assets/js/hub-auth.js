@@ -30,6 +30,7 @@ function hubIsProfileGateVisible() {
 
 function hubProcessAuthState(user) {
   if (user) {
+    hubSetAuthError('');
     if (hubLastAuthUid === user.uid) {
       if (document.body.classList.contains('hub-auth-ready') || hubIsProfileGateVisible()) {
         return Promise.resolve();
@@ -38,9 +39,90 @@ function hubProcessAuthState(user) {
     hubLastAuthUid = user.uid;
     return hubHandleAuthUser(user);
   }
+  if (!hubAuthInitDone || hubAuthBusy) return Promise.resolve();
+  let auth = typeof hubGetFirebaseAuth === 'function' ? hubGetFirebaseAuth() : null;
+  if (auth && auth.currentUser) {
+    return hubProcessAuthState(auth.currentUser);
+  }
   hubLastAuthUid = '';
-  if (hubAuthBusy) return Promise.resolve();
   hubHandleSignedOut();
+}
+
+function hubSetAuthPersistence(auth) {
+  return auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(function () {
+    return auth.setPersistence(firebase.auth.Auth.Persistence.SESSION);
+  });
+}
+
+function hubWaitAuthReady(auth) {
+  if (typeof auth.authStateReady === 'function') {
+    return auth.authStateReady();
+  }
+  return new Promise(function (resolve) {
+    let unsub = auth.onAuthStateChanged(function () {
+      unsub();
+      resolve();
+    });
+  });
+}
+
+function hubResolveAuthUser(auth, redirectResult) {
+  if (redirectResult && redirectResult.user) return redirectResult.user;
+  if (auth.currentUser) return auth.currentUser;
+  return hubPendingAuthUser || null;
+}
+
+var hubPendingAuthUser = null;
+
+function hubOnAuthStateChanged(user) {
+  if (!hubAuthInitDone) {
+    if (user) hubPendingAuthUser = user;
+    return;
+  }
+  hubProcessAuthState(user);
+}
+
+function hubBootstrapAuth(auth) {
+  return hubSetAuthPersistence(auth)
+    .then(function () {
+      return auth.getRedirectResult();
+    })
+    .catch(function (err) {
+      if (err && err.code !== 'auth/no-auth-event') hubFormatAuthError(err);
+      return null;
+    })
+    .then(function (redirectResult) {
+      return hubWaitAuthReady(auth).then(function () {
+        return redirectResult;
+      });
+    })
+    .then(function (redirectResult) {
+      hubAuthInitDone = true;
+      return hubProcessAuthState(hubResolveAuthUser(auth, redirectResult));
+    })
+    .catch(function (err) {
+      hubAuthInitDone = true;
+      hubFormatAuthError(err);
+      let user = hubResolveAuthUser(auth, null);
+      if (user) return hubProcessAuthState(user);
+      hubHandleSignedOut();
+    });
+}
+
+function hubResumeAuthIfNeeded() {
+  if (!hubAuthInitDone) return;
+  let auth = typeof hubGetFirebaseAuth === 'function' ? hubGetFirebaseAuth() : null;
+  if (auth && auth.currentUser) hubProcessAuthState(auth.currentUser);
+}
+
+function hubBindIosAuthResume() {
+  if (typeof window === 'undefined') return;
+  window.addEventListener('pageshow', function () {
+    hubResumeAuthIfNeeded();
+  });
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'visible') hubResumeAuthIfNeeded();
+  });
 }
 
 function hubShowAuthScreen(mode) {
@@ -284,8 +366,10 @@ function hubLoginWithGoogle() {
   }
   let provider = new firebase.auth.GoogleAuthProvider();
   provider.setCustomParameters({ prompt: 'select_account' });
-  hubSetAuthError('Googleログイン画面へ移動しています…');
-  return auth.signInWithRedirect(provider).catch(function (err) {
+  return hubSetAuthPersistence(auth).then(function () {
+    hubSetAuthError('Googleログイン画面へ移動しています…');
+    return auth.signInWithRedirect(provider);
+  }).catch(function (err) {
     hubFormatAuthError(err);
   });
 }
@@ -385,12 +469,6 @@ function hubLogout() {
   }
 }
 
-function hubFinishAuthBootstrap(auth) {
-  hubAuthInitDone = true;
-  hubSetAuthError('');
-  return hubProcessAuthState(auth.currentUser);
-}
-
 function hubInitAuth() {
   hubShowAuthScreen('login');
   hubSetAuthError('ログイン状態を確認しています…');
@@ -408,32 +486,14 @@ function hubInitAuth() {
   let auth = typeof hubGetFirebaseAuth === 'function' ? hubGetFirebaseAuth() : null;
   if (!auth) return;
 
-  auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(function (err) {
-    hubFormatAuthError(err);
-  });
-
-  auth.getRedirectResult()
-    .then(function (result) {
-      if (result && result.user) {
-        hubLastAuthUid = result.user.uid;
-      }
-      return result;
-    })
-    .catch(function (err) {
-      if (err && err.code !== 'auth/no-auth-event') {
-        hubFormatAuthError(err);
-      }
-    })
-    .finally(function () {
-      hubFinishAuthBootstrap(auth);
+  if (!hubAuthListenerAttached) {
+    hubAuthListenerAttached = true;
+    auth.onAuthStateChanged(function (user) {
+      hubOnAuthStateChanged(user);
     });
+  }
 
-  if (hubAuthListenerAttached) return;
-  hubAuthListenerAttached = true;
-  auth.onAuthStateChanged(function (user) {
-    if (!hubAuthInitDone) return;
-    hubProcessAuthState(user);
-  });
+  hubBootstrapAuth(auth);
 }
 
 function hubBootApplication() {
@@ -480,8 +540,12 @@ if (typeof window !== 'undefined') {
   window.hubCopyUid = hubCopyUid;
   window.hubCurrentProfile = function () { return hubCurrentProfile; };
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', hubBindAuthUi);
+    document.addEventListener('DOMContentLoaded', function () {
+      hubBindAuthUi();
+      hubBindIosAuthResume();
+    });
   } else {
     hubBindAuthUi();
+    hubBindIosAuthResume();
   }
 }
