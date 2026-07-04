@@ -547,6 +547,10 @@ function getRevenueEntry(key) {
 }
 
 function persistHubSettings() {
+  if (typeof hubSaveToStorage === 'function') {
+    hubSaveToStorage();
+    return;
+  }
   if (typeof localStorage === 'undefined' || typeof settings === 'undefined') return;
   try {
     localStorage.setItem('oukei_hub_v15_data', JSON.stringify({

@@ -266,6 +266,10 @@ function pfCalcGoalProgress() {
 }
 
 function pfPersistSettings() {
+  if (typeof hubSaveToStorage === 'function') {
+    hubSaveToStorage();
+    return;
+  }
   if (typeof localStorage === 'undefined' || typeof settings === 'undefined') return;
   try {
     localStorage.setItem('oukei_hub_v15_data', JSON.stringify({
@@ -273,7 +277,7 @@ function pfPersistSettings() {
       currentData: typeof currentData !== 'undefined' ? currentData : [],
       settings: settings,
       scenarios: typeof scenarios !== 'undefined' ? scenarios : [],
-      rootId: typeof rootId !== 'undefined' ? rootId : 'm1',
+      rootId: typeof rootId !== 'undefined' ? rootId : '',
       rootAccountIds: typeof rootAccountIds !== 'undefined' ? rootAccountIds : []
     }));
   } catch (e) {}
