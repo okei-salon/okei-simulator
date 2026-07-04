@@ -1,10 +1,9 @@
-/* OUKEI HUB Local Storage — Ver2.0.5
- * 端末ごとに独立したデータ管理（Firebase / ログインなし）
- */
+/* OUKEI HUB Local Storage + Cloud Save Hooks — Ver2.0.5 */
 
 var HUB_STORAGE_KEY = 'oukei_hub_v15_data';
 var HUB_STORAGE_LEGACY_KEY = 'okei_v14_data';
 var HUB_DEMO_MODE_KEY = 'oukei_home_demo_mode';
+var hubLocalUpdatedAt = 0;
 
 function hubCreateDefaultSettings() {
   return {
@@ -21,7 +20,8 @@ function hubCreateDefaultSettings() {
     activityDays: 0,
     lastActivityDate: '',
     revenueLog: {},
-    salesLog: {}
+    salesLog: {},
+    manageDisplayAccounts: {}
   };
 }
 
@@ -32,7 +32,8 @@ function hubCreateEmptyData() {
     settings: hubCreateDefaultSettings(),
     scenarios: [],
     rootId: '',
-    rootAccountIds: []
+    rootAccountIds: [],
+    updatedAt: 0
   };
 }
 
@@ -64,14 +65,97 @@ function hubNormalizeLoadedData(raw) {
   let settings = Object.assign(hubCreateDefaultSettings(), raw.settings || {});
   if (!settings.revenueLog || typeof settings.revenueLog !== 'object') settings.revenueLog = {};
   if (!settings.salesLog || typeof settings.salesLog !== 'object') settings.salesLog = {};
+  if (!settings.manageDisplayAccounts || typeof settings.manageDisplayAccounts !== 'object') {
+    settings.manageDisplayAccounts = {};
+  }
   return {
     members: Array.isArray(raw.members) ? raw.members : base.members,
     currentData: Array.isArray(raw.currentData) ? raw.currentData : base.currentData,
     settings: settings,
     scenarios: Array.isArray(raw.scenarios) ? raw.scenarios : base.scenarios,
     rootId: typeof raw.rootId === 'string' ? raw.rootId : base.rootId,
-    rootAccountIds: Array.isArray(raw.rootAccountIds) ? raw.rootAccountIds : base.rootAccountIds
+    rootAccountIds: Array.isArray(raw.rootAccountIds) ? raw.rootAccountIds : base.rootAccountIds,
+    updatedAt: typeof raw.updatedAt === 'number' ? raw.updatedAt : 0
   };
+}
+
+function hubPackLocalData() {
+  return {
+    members: typeof members !== 'undefined' ? members : [],
+    currentData: typeof currentData !== 'undefined' ? currentData : [],
+    settings: typeof settings !== 'undefined' ? settings : hubCreateDefaultSettings(),
+    scenarios: typeof scenarios !== 'undefined' ? scenarios : [],
+    rootId: typeof rootId !== 'undefined' ? rootId : '',
+    rootAccountIds: typeof rootAccountIds !== 'undefined' ? rootAccountIds : [],
+    updatedAt: hubLocalUpdatedAt
+  };
+}
+
+function hubPackFirestorePayload(updatedAt) {
+  let local = hubPackLocalData();
+  let settingsCopy = Object.assign({}, local.settings);
+  let manageAccounts = settingsCopy.manageDisplayAccounts || {};
+  let revenueLog = settingsCopy.revenueLog || {};
+  let salesLog = settingsCopy.salesLog || {};
+  delete settingsCopy.manageDisplayAccounts;
+  delete settingsCopy.revenueLog;
+  delete settingsCopy.salesLog;
+  return {
+    orgChart: {
+      members: local.members,
+      currentData: local.currentData,
+      rootId: local.rootId,
+      rootAccountIds: local.rootAccountIds,
+      scenarios: local.scenarios
+    },
+    manageAccounts: manageAccounts,
+    revenue: {
+      revenueLog: revenueLog,
+      salesLog: salesLog
+    },
+    settings: settingsCopy,
+    updatedAt: typeof updatedAt === 'number' ? updatedAt : Date.now()
+  };
+}
+
+function hubUnpackFirestorePayload(doc) {
+  if (!doc || typeof doc !== 'object') return hubCreateEmptyData();
+  let org = doc.orgChart || {};
+  let mergedSettings = Object.assign(hubCreateDefaultSettings(), doc.settings || {});
+  mergedSettings.manageDisplayAccounts = doc.manageAccounts || {};
+  mergedSettings.revenueLog = (doc.revenue && doc.revenue.revenueLog) || {};
+  mergedSettings.salesLog = (doc.revenue && doc.revenue.salesLog) || {};
+  return hubNormalizeLoadedData({
+    members: org.members,
+    currentData: org.currentData,
+    rootId: org.rootId,
+    rootAccountIds: org.rootAccountIds,
+    scenarios: org.scenarios,
+    settings: mergedSettings,
+    updatedAt: typeof doc.updatedAt === 'number' ? doc.updatedAt : 0
+  });
+}
+
+function hubStableStringify(value) {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value);
+  if (Array.isArray(value)) {
+    return '[' + value.map(function (item) { return hubStableStringify(item); }).join(',') + ']';
+  }
+  return '{' + Object.keys(value).sort().map(function (key) {
+    return JSON.stringify(key) + ':' + hubStableStringify(value[key]);
+  }).join(',') + '}';
+}
+
+function hubComputeContentHash(data) {
+  let payload = data || hubPackLocalData();
+  let copy = JSON.parse(JSON.stringify(payload));
+  delete copy.updatedAt;
+  let str = hubStableStringify(copy);
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = ((hash << 5) - hash + str.charCodeAt(i)) | 0;
+  }
+  return String(hash);
 }
 
 function hubApplyData(data) {
@@ -92,6 +176,7 @@ function hubApplyData(data) {
   rootId = normalized.rootId || '';
   focusId = rootId || focusId || '';
   simMode = false;
+  hubLocalUpdatedAt = normalized.updatedAt || 0;
 }
 
 function hubLoadFromStorage() {
@@ -107,24 +192,27 @@ function hubLoadFromStorage() {
   }
 }
 
-function hubSaveToStorage() {
+function hubSaveToStorage(options) {
+  options = options || {};
   if (typeof localStorage === 'undefined' || typeof settings === 'undefined') return;
   try {
-    localStorage.setItem(HUB_STORAGE_KEY, JSON.stringify({
-      members: typeof members !== 'undefined' ? members : [],
-      currentData: typeof currentData !== 'undefined' ? currentData : [],
-      settings: settings,
-      scenarios: typeof scenarios !== 'undefined' ? scenarios : [],
-      rootId: typeof rootId !== 'undefined' ? rootId : '',
-      rootAccountIds: typeof rootAccountIds !== 'undefined' ? rootAccountIds : []
-    }));
+    let now = Date.now();
+    hubLocalUpdatedAt = now;
+    localStorage.setItem(HUB_STORAGE_KEY, JSON.stringify(Object.assign(hubPackLocalData(), { updatedAt: now })));
+    if (!options.localOnly && typeof hubScheduleCloudSave === 'function') {
+      hubScheduleCloudSave(options.immediate === true);
+    }
   } catch (e) {}
+}
+
+function hubSaveNow() {
+  hubSaveToStorage({ immediate: true });
 }
 
 function hubInitStorage() {
   let result = hubLoadFromStorage();
   hubApplyData(result.data);
-  if (result.isNew) hubSaveToStorage();
+  if (result.isNew) hubSaveToStorage({ localOnly: true });
   return result.isNew;
 }
 
@@ -136,7 +224,7 @@ function hubLoadDevOrgSeed() {
   if (typeof pfEnsureManageDisplayAccounts === 'function') pfEnsureManageDisplayAccounts();
   if (typeof ensurePerformanceLogs === 'function') ensurePerformanceLogs();
   settings.lastUpdate = new Date().toLocaleString();
-  hubSaveToStorage();
+  hubSaveNow();
   if (typeof render === 'function') render();
   if (typeof showToast === 'function') showToast('✅ サンプル組織図を読み込みました');
 }
@@ -174,7 +262,8 @@ function hubClearAllData() {
   if (typeof ensureRevenueLog === 'function') ensureRevenueLog();
   settings.lastLogin = new Date().toLocaleString();
   settings.lastUpdate = new Date().toLocaleString();
-  hubSaveToStorage();
+  hubSaveToStorage({ localOnly: true });
+  if (typeof hubDeleteCloudData === 'function') hubDeleteCloudData();
   if (typeof render === 'function') render();
   if (typeof showPage === 'function') showPage('home');
   if (typeof showToast === 'function') showToast('✅ 端末のデータを削除しました');
@@ -185,7 +274,12 @@ if (typeof window !== 'undefined') {
   window.hubCreateEmptyData = hubCreateEmptyData;
   window.hubApplyData = hubApplyData;
   window.hubLoadFromStorage = hubLoadFromStorage;
+  window.hubPackLocalData = hubPackLocalData;
+  window.hubPackFirestorePayload = hubPackFirestorePayload;
+  window.hubUnpackFirestorePayload = hubUnpackFirestorePayload;
+  window.hubComputeContentHash = hubComputeContentHash;
   window.hubSaveToStorage = hubSaveToStorage;
+  window.hubSaveNow = hubSaveNow;
   window.hubInitStorage = hubInitStorage;
   window.hubLoadDevOrgSeed = hubLoadDevOrgSeed;
   window.hubClearAllData = hubClearAllData;

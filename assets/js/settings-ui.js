@@ -438,6 +438,7 @@ function saveSettings() {
   settings.lastUpdate = new Date().toLocaleString();
   if (typeof markActivity === 'function') markActivity();
   if (typeof render === 'function') render();
+  if (typeof hubSaveNow === 'function') hubSaveNow();
   if (typeof showSaved === 'function') showSaved();
 }
 
