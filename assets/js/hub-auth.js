@@ -7,6 +7,65 @@ var hubAuthInitDone = false;
 var hubLastAuthUid = '';
 var hubPendingAuthUser = null;
 var hubRedirectResultUser = null;
+var hubAuthBootstrapFinished = false;
+var hubAuthDebug = {
+  onAuthStateChangedCalled: false,
+  onAuthStateUser: null,
+  redirectResult: 'pending',
+  currentUser: null,
+  step: 'init',
+  errorCode: '',
+  errorMessage: ''
+};
+
+function hubAuthDebugRender() {
+  let el = document.getElementById('hubAuthDebug');
+  if (!el) return;
+  let d = hubAuthDebug;
+  let lines = [
+    'onAuthStateChanged called: ' + (d.onAuthStateChangedCalled ? 'yes' : 'no'),
+    'user: ' + (d.onAuthStateUser ? 'exists (' + d.onAuthStateUser + ')' : 'null'),
+    'getRedirectResult: ' + d.redirectResult,
+    'auth.currentUser: ' + (d.currentUser ? d.currentUser : 'null'),
+    'step: ' + d.step
+  ];
+  if (d.errorCode) lines.push('error.code: ' + d.errorCode);
+  if (d.errorMessage) lines.push('error.message: ' + d.errorMessage);
+  el.textContent = lines.join('\n');
+}
+
+function hubAuthDebugSetError(err) {
+  if (!err) return;
+  let info = hubNormalizeError(err);
+  hubAuthDebug.errorCode = info.code;
+  hubAuthDebug.errorMessage = info.message;
+  hubAuthDebugRender();
+}
+
+function hubAuthDebugUpdateCurrentUser(auth) {
+  hubAuthDebug.currentUser = auth && auth.currentUser ? auth.currentUser.uid : 'null';
+  hubAuthDebugRender();
+}
+
+function hubPromiseTimeout(promise, ms, fallbackValue) {
+  return Promise.race([
+    promise,
+    new Promise(function (resolve) {
+      setTimeout(function () { resolve(fallbackValue); }, ms);
+    })
+  ]);
+}
+
+function hubIsAuthRedirectReturn() {
+  if (typeof location === 'undefined') return false;
+  let href = location.href || '';
+  return /authType=signInViaRedirect|\/__\/auth\/handler/.test(href);
+}
+
+function hubAuthBootstrapTimeoutMs() {
+  if (hubIsAuthRedirectReturn()) return 8000;
+  return hubIsIosSafari() ? 8000 : 6000;
+}
 
 function hubNormalizeError(err) {
   if (!err) return { code: 'error/unknown', message: 'ログインに失敗しました。' };
@@ -49,22 +108,9 @@ function hubProcessAuthState(user) {
   if (hubPendingAuthUser) {
     return hubProcessAuthState(hubPendingAuthUser);
   }
-  let deferMs = hubIsIosSafari() ? 500 : 150;
-  return new Promise(function (resolve) {
-    setTimeout(function () {
-      if (auth && auth.currentUser) {
-        resolve(hubProcessAuthState(auth.currentUser));
-        return;
-      }
-      if (hubPendingAuthUser) {
-        resolve(hubProcessAuthState(hubPendingAuthUser));
-        return;
-      }
-      hubLastAuthUid = '';
-      hubHandleSignedOut();
-      resolve();
-    }, deferMs);
-  });
+  hubLastAuthUid = '';
+  hubHandleSignedOut();
+  return Promise.resolve();
 }
 
 function hubIsIosSafari() {
@@ -94,18 +140,6 @@ function hubSetAuthPersistence(auth) {
   });
 }
 
-function hubWaitAuthReady(auth) {
-  if (typeof auth.authStateReady === 'function') {
-    return auth.authStateReady();
-  }
-  return new Promise(function (resolve) {
-    let unsub = auth.onAuthStateChanged(function () {
-      unsub();
-      resolve();
-    });
-  });
-}
-
 function hubResolveAuthUser(auth) {
   if (hubRedirectResultUser) return hubRedirectResultUser;
   if (auth && auth.currentUser) return auth.currentUser;
@@ -114,48 +148,62 @@ function hubResolveAuthUser(auth) {
 }
 
 
-function hubIsAuthRedirectReturn() {
-  if (typeof location === 'undefined') return false;
-  let href = location.href || '';
-  return /authType=signInViaRedirect|\/__\/auth\/handler/.test(href);
-}
-
-function hubWaitForSignedInUser(auth) {
+function hubWaitForSignedInUser(auth, maxWaitMs) {
   let immediate = hubResolveAuthUser(auth);
   if (immediate) return Promise.resolve(immediate);
 
-  let maxWaitMs = hubIsAuthRedirectReturn() ? 15000 : (hubIsIosSafari() ? 12000 : 5000);
-  let intervalMs = 250;
+  maxWaitMs = typeof maxWaitMs === 'number' ? maxWaitMs : 5000;
+  let intervalMs = 200;
   let elapsed = 0;
 
-  return hubWaitAuthReady(auth).then(function () {
-    return new Promise(function (resolve) {
-      function tick() {
-        let user = hubResolveAuthUser(auth);
-        if (user) {
-          resolve(user);
-          return;
-        }
-        elapsed += intervalMs;
-        if (elapsed >= maxWaitMs) {
-          resolve(null);
-          return;
-        }
-        setTimeout(tick, intervalMs);
+  return new Promise(function (resolve) {
+    function tick() {
+      hubAuthDebugUpdateCurrentUser(auth);
+      let user = hubResolveAuthUser(auth);
+      if (user) {
+        resolve(user);
+        return;
       }
-      tick();
-    });
+      elapsed += intervalMs;
+      if (elapsed >= maxWaitMs) {
+        resolve(null);
+        return;
+      }
+      setTimeout(tick, intervalMs);
+    }
+    tick();
   });
 }
 
+function hubFinishAuthBootstrap(auth, user) {
+  if (hubAuthBootstrapFinished) return Promise.resolve();
+  hubAuthBootstrapFinished = true;
+  hubAuthInitDone = true;
+  hubAuthDebug.step = user ? 'signed-in' : 'show-login';
+  hubAuthDebugUpdateCurrentUser(auth);
+  if (user) {
+    return hubProcessAuthState(user);
+  }
+  hubSetAuthError('');
+  hubShowAuthScreen('login');
+  return Promise.resolve();
+}
+
 function hubOnAuthStateChanged(user) {
+  hubAuthDebug.onAuthStateChangedCalled = true;
+  hubAuthDebug.onAuthStateUser = user ? user.uid : null;
+  hubAuthDebugRender();
+
   if (user) {
     hubPendingAuthUser = user;
     if (!hubAuthInitDone) return;
     hubProcessAuthState(user);
     return;
   }
-  if (!hubAuthInitDone || hubAuthBusy) return;
+
+  if (!hubAuthInitDone) return;
+
+  if (hubAuthBusy) return;
   let auth = typeof hubGetFirebaseAuth === 'function' ? hubGetFirebaseAuth() : null;
   if (auth && auth.currentUser) {
     hubProcessAuthState(auth.currentUser);
@@ -165,37 +213,55 @@ function hubOnAuthStateChanged(user) {
 }
 
 function hubBootstrapAuth(auth) {
+  hubAuthBootstrapFinished = false;
   hubRedirectResultUser = null;
+  hubAuthDebug.step = 'persistence';
+  hubAuthDebug.redirectResult = 'pending';
+  hubAuthDebug.errorCode = '';
+  hubAuthDebug.errorMessage = '';
+  hubAuthDebugRender();
+
+  let timeoutMs = hubAuthBootstrapTimeoutMs();
+  let bootstrapTimer = setTimeout(function () {
+    hubAuthDebug.step = 'timeout -> login';
+    hubAuthDebugRender();
+    hubFinishAuthBootstrap(auth, hubResolveAuthUser(auth));
+  }, timeoutMs);
+
+  function finish(user) {
+    clearTimeout(bootstrapTimer);
+    return hubFinishAuthBootstrap(auth, user);
+  }
 
   return hubSetAuthPersistence(auth)
     .then(function () {
-      return auth.getRedirectResult();
+      hubAuthDebug.step = 'getRedirectResult';
+      hubAuthDebugRender();
+      return hubPromiseTimeout(auth.getRedirectResult(), 5000, null);
+    })
+    .catch(function (err) {
+      if (err && err.code !== 'auth/no-auth-event') hubAuthDebugSetError(err);
+      return null;
     })
     .then(function (redirectResult) {
       if (redirectResult && redirectResult.user) {
         hubRedirectResultUser = redirectResult.user;
         hubPendingAuthUser = redirectResult.user;
+        hubAuthDebug.redirectResult = 'user exists (' + redirectResult.user.uid + ')';
+      } else {
+        hubAuthDebug.redirectResult = redirectResult ? 'empty' : 'null';
       }
-      return hubWaitForSignedInUser(auth);
-    })
-    .catch(function (err) {
-      if (err && err.code !== 'auth/no-auth-event') hubFormatAuthError(err);
-      return hubWaitForSignedInUser(auth);
+      hubAuthDebug.step = 'waiting user';
+      hubAuthDebugRender();
+      let remainMs = Math.max(1500, timeoutMs - 2000);
+      return hubWaitForSignedInUser(auth, remainMs);
     })
     .then(function (user) {
-      hubAuthInitDone = true;
-      if (user) {
-        return hubProcessAuthState(user);
-      }
-      hubSetAuthError('');
-      hubShowAuthScreen('login');
+      return finish(user || hubResolveAuthUser(auth));
     })
     .catch(function (err) {
-      hubAuthInitDone = true;
-      hubFormatAuthError(err);
-      let user = hubResolveAuthUser(auth);
-      if (user) return hubProcessAuthState(user);
-      hubShowAuthScreen('login');
+      hubAuthDebugSetError(err);
+      return finish(hubResolveAuthUser(auth));
     });
 }
 
@@ -209,8 +275,12 @@ function hubResumeAuthIfNeeded() {
   }
   if (document.body.classList.contains('hub-auth-ready')) return;
   hubShowAuthLoading('ログイン状態を再確認しています…');
-  hubWaitForSignedInUser(auth).then(function (user) {
-    if (user) hubProcessAuthState(user);
+  hubWaitForSignedInUser(auth, 5000).then(function (user) {
+    if (user) {
+      hubProcessAuthState(user);
+      return;
+    }
+    hubShowAuthScreen('login');
   });
 }
 
@@ -229,14 +299,17 @@ function hubShowAuthLoading(message) {
   let login = document.getElementById('hubAuthLogin');
   let profile = document.getElementById('hubAuthProfile');
   let loading = document.getElementById('hubAuthLoading');
+  let debug = document.getElementById('hubAuthDebug');
   if (!gate) return;
   gate.classList.remove('hidden');
   document.body.classList.remove('hub-auth-ready');
   if (login) login.classList.add('hidden');
   if (profile) profile.classList.add('hidden');
   if (loading) loading.classList.remove('hidden');
+  if (debug) debug.classList.remove('hidden');
   let text = document.getElementById('hubAuthLoadingText');
   if (text) text.textContent = message || 'ログイン状態を確認しています…';
+  hubAuthDebugRender();
 }
 
 function hubShowAuthScreen(mode) {
@@ -244,10 +317,12 @@ function hubShowAuthScreen(mode) {
   let login = document.getElementById('hubAuthLogin');
   let profile = document.getElementById('hubAuthProfile');
   let loading = document.getElementById('hubAuthLoading');
+  let debug = document.getElementById('hubAuthDebug');
   if (!gate) return;
   gate.classList.remove('hidden');
   document.body.classList.remove('hub-auth-ready');
   if (loading) loading.classList.add('hidden');
+  if (debug) debug.classList.remove('hidden');
   if (mode === 'profile') {
     if (login) login.classList.add('hidden');
     if (profile) profile.classList.remove('hidden');
@@ -261,7 +336,9 @@ function hubShowAuthScreen(mode) {
 
 function hubShowAppShell() {
   let gate = document.getElementById('hubAuthGate');
+  let debug = document.getElementById('hubAuthDebug');
   if (gate) gate.classList.add('hidden');
+  if (debug) debug.classList.add('hidden');
   document.body.classList.add('hub-auth-ready');
 }
 
@@ -588,6 +665,8 @@ function hubLogout() {
 
 function hubInitAuth() {
   hubShowAuthLoading('ログイン状態を確認しています…');
+  hubAuthDebug.step = 'init';
+  hubAuthDebugRender();
   hubSetAuthError('');
   if (typeof hubFirebaseConfigValid === 'function' && !hubFirebaseConfigValid()) {
     hubShowAuthScreen('login');
