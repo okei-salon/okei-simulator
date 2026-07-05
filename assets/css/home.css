@@ -2487,8 +2487,8 @@
 
   .ochanContainer {
     width: 110px;
-    --ochan-left: -10px;
-    --ochan-bottom: -38px;
+    --ochan-left: -29px;
+    --ochan-bottom: -17px;
   }
 
   .ochanAvatar {
