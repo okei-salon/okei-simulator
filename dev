@@ -1,0 +1,35 @@
+> firebase emulators:start --only hosting --project oukei-hub
+
+i  emulators: Starting emulators: hosting
+⚠  hosting: Port 5050 is not open on 0.0.0.0, could not start Hosting
+⚠  hosting: Port 5050 is not open on 0.0.0.0, could not start Hosting Emulator.
+⚠  hosting: To select a different host/port, specify that host/port i
+⚠  hosting: To select a different host/port, specify that host/port in a firebase.json config file:
+      {
+        // ...
+        "emulators": {
+          "hosting": {
+            "host": "HOST",
+            "port": "PORT"
+          }
+        }
+      }
+⚠  hub: emulator hub unable to start on port 4400, starting on 4402 i
+⚠  hub: emulator hub unable to start on port 4400, starting on 4402 instead.
+⚠  logging: Logging Emulator unable to start on port 4500, starting o
+⚠  logging: Logging Emulator unable to start on port 4500, starting on 4502 instead.
+i  emulators: Shutting down emulators.
+
+Error: Could g Emulator, port taken.
+
+lsof -ti:5050 | xargs kill -9
+
+lsof -ti:4400 | xargs kill -9
+lsof -ti:4500 | xargs kill -9
+npm run dev
+
+
+
+
+
+

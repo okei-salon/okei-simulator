@@ -25,24 +25,24 @@ var HOME_DEMO_DAILY_TOTALS = [
 ];
 
 var HOME_DEMO_RAM_ACCOUNTS = [
-  { id: 'demo_ram_kai', username: 'kai', investment: 40000 },
-  { id: 'demo_ram_kai2', username: 'kai2', investment: 12000 }
+  { id: 'demo_ram_a', username: 'Project A', investment: 40000 },
+  { id: 'demo_ram_b', username: 'Project B', investment: 12000 }
 ];
 
 var HOME_DEMO_ORCA_ACCOUNTS = [
-  { id: 'demo_orca_1', username: '甲斐①', investment: 5000 },
-  { id: 'demo_orca_2', username: '甲斐②', investment: 3000 }
+  { id: 'demo_orca_1', username: 'Demo ①', investment: 5000 },
+  { id: 'demo_orca_2', username: 'Demo ②', investment: 3000 }
 ];
 
 var HOME_DEMO_CARY_ACCOUNTS = [
-  { id: 'demo_cary_a', username: '甲斐A', investment: 2000 },
-  { id: 'demo_cary_b', username: '甲斐B', investment: 1500 }
+  { id: 'demo_cary_a', username: 'Demo A', investment: 2000 },
+  { id: 'demo_cary_b', username: 'Demo B', investment: 1500 }
 ];
 
 var HOME_DEMO_TODAY_ACCOUNTS = {
   ramAccounts: {
-    demo_ram_kai: { todayRevenue: 6, addInvestment: 0 },
-    demo_ram_kai2: { todayRevenue: 4, addInvestment: 0 }
+    demo_ram_a: { todayRevenue: 6, addInvestment: 0 },
+    demo_ram_b: { todayRevenue: 4, addInvestment: 0 }
   },
   orcaAccounts: {
     demo_orca_1: { yesterdayAiProfit: 8, todayAffiliateProfit: 2 },
@@ -156,11 +156,10 @@ function getHomeDemoMonthlyOverride(y, m, sAll) {
 
 function getHomeDemoEnabledProjects() {
   if (!isHomeDemoActive()) return null;
-  if (typeof pmGetEnabledProjects === 'function') return pmGetEnabledProjects();
   return [
-    { key: 'ram', name: 'RAM', dot: 'ram' },
-    { key: 'orca', name: 'ORCA', dot: 'orca' },
-    { key: 'cary', name: 'Cary Pact', dot: 'cary' }
+    { key: 'ram', name: 'Project A' },
+    { key: 'orca', name: 'Project B' },
+    { key: 'cary', name: 'OUKEI' }
   ];
 }
 

@@ -654,6 +654,7 @@
 
 .homeMonthlyCard .homeMonthlyChartBlock {
   margin-top: 2px;
+  margin-bottom: 18px;
 }
 
 .homeMonthlyCard .homeMonthlyChartHead {
@@ -682,6 +683,7 @@
   position: relative;
   min-height: 190px;
   overflow: visible;
+  padding-bottom: 4px;
 }
 
 .homeMonthlyCard .homeMonthlyChartTip {
@@ -784,20 +786,30 @@
 }
 
 .homeMonthlyCard .homeMonthlyProjSection {
-  margin-top: 12px;
+  margin-top: 18px;
+  padding-top: 2px;
+  clear: both;
 }
 
 .homeMonthlyCard .homeMonthlyProjTitle {
   font-size: 11px;
   font-weight: 800;
   color: #8fa8c5;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
+  line-height: 1.45;
+  position: relative;
+  z-index: 1;
 }
 
 .homeMonthlyCard .homeMonthlyProjGrid {
   display: grid;
   grid-template-columns: repeat(var(--monthly-proj-cols, 1), minmax(0, 1fr));
   gap: 8px;
+  align-items: stretch;
+}
+
+.homeMonthlyCard .homeMonthlyProjGrid[data-count="5"] .homeMonthlyProjCard {
+  min-height: 72px;
 }
 
 .homeMonthlyCard .homeMonthlyProjCard {
@@ -1456,6 +1468,7 @@
   display: grid;
   grid-template-columns: repeat(var(--proj-cols, 1), minmax(0, 1fr));
   gap: 8px;
+  align-items: stretch;
 }
 
 .homeProjCard {
@@ -2281,6 +2294,17 @@
   color: var(--text);
 }
 
+.homeSummaryProjLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.homeSummaryProjLabel .pjIconWrap {
+  flex-shrink: 0;
+}
+
 .homeProjDot {
   width: 10px;
   height: 10px;
@@ -2521,8 +2545,13 @@
   }
 
   .homeMonthlyCard .homeMonthlyProjGrid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(var(--monthly-proj-cols, 1), minmax(0, 1fr));
     gap: 8px;
+  }
+
+  .homeProjGrid,
+  .homeTodayCard .homeTodayProjGrid {
+    grid-template-columns: repeat(var(--proj-cols, var(--today-proj-cols, 1)), minmax(0, 1fr));
   }
 
   .homeTodayCard .homeTodaySummaryHead {

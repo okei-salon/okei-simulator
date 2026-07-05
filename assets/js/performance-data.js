@@ -1531,6 +1531,180 @@ function pdSalesEntryHasData(entry) {
   return !!(entry.accounts && Object.keys(entry.accounts).length);
 }
 
+function pdCollectAllProjectAccountIds(projectKey) {
+  let ids = {};
+  if (typeof pdGetProjectAccountIds === 'function') {
+    pdGetProjectAccountIds(projectKey).forEach(function (id) { ids[id] = true; });
+  }
+  if (typeof pdCollectRevenueAccountIds === 'function') {
+    Object.keys(pdCollectRevenueAccountIds(projectKey)).forEach(function (id) { ids[id] = true; });
+  }
+  if (typeof pdCollectSalesAccountIds === 'function') {
+    Object.keys(pdCollectSalesAccountIds(projectKey)).forEach(function (id) { ids[id] = true; });
+  }
+  return Object.keys(ids);
+}
+
+function pdStripProjectFromRevenueEntry(entry, projectKey) {
+  if (!entry) return false;
+  let touched = false;
+  if (projectKey === 'ram') {
+    if (entry.ramAccounts && Object.keys(entry.ramAccounts).length) {
+      delete entry.ramAccounts;
+      touched = true;
+    }
+    if (Number(entry.ram)) touched = true;
+    entry.ram = 0;
+  } else if (projectKey === 'orca') {
+    if (entry.orcaAccounts && Object.keys(entry.orcaAccounts).length) {
+      delete entry.orcaAccounts;
+      touched = true;
+    }
+    if (Number(entry.orca)) touched = true;
+    entry.orca = 0;
+  } else if (projectKey === 'cary') {
+    if (entry.caryAccounts && Object.keys(entry.caryAccounts).length) {
+      delete entry.caryAccounts;
+      touched = true;
+    }
+    if (Number(entry.cary)) touched = true;
+    entry.cary = 0;
+  } else {
+    if (entry[projectKey]) {
+      delete entry[projectKey];
+      touched = true;
+    }
+    if (entry.accounts) {
+      Object.keys(entry.accounts).forEach(function (id) {
+        let ae = entry.accounts[id];
+        if (ae && ae.projectKey === projectKey) {
+          delete entry.accounts[id];
+          touched = true;
+        }
+      });
+      if (Object.keys(entry.accounts).length === 0) delete entry.accounts;
+    }
+  }
+  if (projectKey === 'genesis' && Number(entry.genesis)) {
+    entry.genesis = 0;
+    touched = true;
+  }
+  return touched;
+}
+
+function pdStripProjectFromSalesEntry(entry, projectKey) {
+  if (!entry) return false;
+  let touched = false;
+  if (entry[projectKey]) {
+    delete entry[projectKey];
+    touched = true;
+  }
+  if (entry.accounts) {
+    Object.keys(entry.accounts).forEach(function (id) {
+      let ae = entry.accounts[id];
+      if (!ae) return;
+      let pk = ae.projectKey || 'other';
+      if (pk === projectKey) {
+        delete entry.accounts[id];
+        touched = true;
+      }
+    });
+    if (Object.keys(entry.accounts).length === 0) delete entry.accounts;
+  }
+  return touched;
+}
+
+function pdDeleteProjectData(projectKey) {
+  if (!projectKey) return false;
+  ensurePerformanceLogs();
+  let changed = false;
+
+  Object.keys(settings.revenueLog).forEach(function (dateKey) {
+    let entry = settings.revenueLog[dateKey];
+    if (!entry || !pdStripProjectFromRevenueEntry(entry, projectKey)) return;
+    changed = true;
+    entry = pdRecalculateRevenueEntry(entry, dateKey);
+    if (pdRevenueEntryHasData(entry)) {
+      settings.revenueLog[dateKey] = entry;
+    } else {
+      delete settings.revenueLog[dateKey];
+    }
+  });
+
+  Object.keys(settings.salesLog).forEach(function (dateKey) {
+    let entry = settings.salesLog[dateKey];
+    if (!entry || !pdStripProjectFromSalesEntry(entry, projectKey)) return;
+    changed = true;
+    entry = pdRecalculateSalesEntry(entry);
+    if (pdSalesEntryHasData(entry)) {
+      settings.salesLog[dateKey] = entry;
+    } else {
+      delete settings.salesLog[dateKey];
+    }
+  });
+
+  pdCollectAllProjectAccountIds(projectKey).forEach(function (accountId) {
+    if (settings.investmentHistory && settings.investmentHistory[accountId]) {
+      delete settings.investmentHistory[accountId];
+      changed = true;
+    }
+  });
+
+  if (settings.portfolioOperating && Array.isArray(settings.portfolioOperating.entries)) {
+    let before = settings.portfolioOperating.entries.length;
+    settings.portfolioOperating.entries = settings.portfolioOperating.entries.filter(function (e) {
+      return e.projectKey !== projectKey;
+    });
+    if (settings.portfolioOperating.entries.length !== before) changed = true;
+  }
+
+  if (settings.portfolioProfit && Array.isArray(settings.portfolioProfit.entries)) {
+    let before = settings.portfolioProfit.entries.length;
+    settings.portfolioProfit.entries = settings.portfolioProfit.entries.filter(function (e) {
+      return e.projectKey !== projectKey;
+    });
+    if (settings.portfolioProfit.entries.length !== before) changed = true;
+  }
+
+  if (settings.portfolioGoal && settings.portfolioGoal.rates &&
+      Object.prototype.hasOwnProperty.call(settings.portfolioGoal.rates, projectKey)) {
+    delete settings.portfolioGoal.rates[projectKey];
+    changed = true;
+  }
+
+  if (settings.manageDisplayAccounts && settings.manageDisplayAccounts[projectKey]) {
+    delete settings.manageDisplayAccounts[projectKey];
+    changed = true;
+  }
+
+  if (settings.performanceInputHiddenAccounts && settings.performanceInputHiddenAccounts[projectKey]) {
+    delete settings.performanceInputHiddenAccounts[projectKey];
+    changed = true;
+  }
+
+  if (projectKey === 'orca' && Array.isArray(settings.orcaInputAccounts) && settings.orcaInputAccounts.length) {
+    settings.orcaInputAccounts = [];
+    changed = true;
+  }
+  if (projectKey === 'cary' && Array.isArray(settings.caryInputAccounts) && settings.caryInputAccounts.length) {
+    settings.caryInputAccounts = [];
+    changed = true;
+  }
+  if (projectKey === 'ram' && settings.ramExcelAccountMap && typeof settings.ramExcelAccountMap === 'object') {
+    settings.ramExcelAccountMap = {};
+    changed = true;
+  }
+
+  if (changed) {
+    settings.lastUpdate = new Date().toLocaleString();
+    if (typeof markActivity === 'function') markActivity();
+    if (typeof markSettingsDirty === 'function') markSettingsDirty();
+    pdPersist();
+    pdNotifyPerformanceChanged({ type: 'deleteProject', projectKey: projectKey });
+  }
+  return changed;
+}
+
 function pdDeleteAccountPerformanceData(projectKey, accountId) {
   if (!projectKey || !accountId) return 0;
   ensurePerformanceLogs();
@@ -1658,6 +1832,7 @@ if (typeof window !== 'undefined') {
   window.pdFilterProjectsWithData = pdFilterProjectsWithData;
   window.pdHasAnyManageProjectData = pdHasAnyManageProjectData;
   window.pdDeleteAccountPerformanceData = pdDeleteAccountPerformanceData;
+  window.pdDeleteProjectData = pdDeleteProjectData;
   window.pdCollectRevenueAccountIds = pdCollectRevenueAccountIds;
   window.pdCollectSalesAccountIds = pdCollectSalesAccountIds;
   window.pdSaveRevenueAccountEntry = pdSaveRevenueAccountEntry;

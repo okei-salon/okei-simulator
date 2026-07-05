@@ -76,7 +76,8 @@ function pmRenderProjectSettingsList() {
   }).filter(Boolean);
 
   el.innerHTML = rows.map(function (p) {
-    return '<button type="button" class="pmProjectCard" onclick="pmOpenProjectEdit(\'' + p.key + '\')">' +
+    return '<div class="pmProjectCardWrap">' +
+      '<button type="button" class="pmProjectCard" onclick="pmOpenProjectEdit(\'' + p.key + '\')">' +
       '<div class="pmProjectCardGlow"></div>' +
       '<div class="pmProjectCardTop">' +
       pmRenderProjectIcon(p.key, 'pmProjectCardIcon', p) +
@@ -87,7 +88,9 @@ function pmRenderProjectSettingsList() {
       '<div class="pmProjectCardRows">' +
       '<div class="pmProjectCardRow"><span>開始日</span><b>' + pmEscape(p.startDate || '—') + '</b></div>' +
       '<div class="pmProjectCardRow"><span>資産計上率</span><b>' + Math.round(p.inclusionRate) + '%</b></div>' +
-      '</div></button>';
+      '</div></button>' +
+      '<button type="button" class="btn2 pmProjectDeleteBtn" onclick="pmOpenProjectDeleteConfirm(\'' + p.key + '\')">削除</button>' +
+      '</div>';
   }).join('');
 }
 
@@ -101,8 +104,7 @@ function pmOpenProjectEdit(key) {
       pmRenderProjectIcon(key, 'pmEditIcon', p) +
       '<label for="pmEditName">プロジェクト名</label>' +
       '<input id="pmEditName" type="text" maxlength="40" value="' + pmEscape(p.name || '') + '">' +
-      '<label for="pmEditIconKey">アイコン</label>' +
-      '<select id="pmEditIconKey">' + pmIconOptionsHtml(p.iconKey || 'custom') + '</select>' +
+      '<p class="help">アイコンはプロジェクト名の頭文字から自動生成されます。</p>' +
       '<label class="pmToggleRow"><span>表示</span>' +
       '<input type="checkbox" id="pmEditVisible" ' + (p.visible ? 'checked' : '') + '></label>' +
       '<label for="pmEditStartDate">開始日</label>' +
@@ -146,7 +148,6 @@ function pmApplyProjectEdit(key) {
   };
   if (pmIsOtherProject(p)) {
     let nameEl = document.getElementById('pmEditName');
-    let iconEl = document.getElementById('pmEditIconKey');
     let memoEl = document.getElementById('pmEditMemo');
     let name = nameEl ? nameEl.value.trim() : '';
     if (!name) {
@@ -154,11 +155,43 @@ function pmApplyProjectEdit(key) {
       return;
     }
     patch.name = name;
-    patch.iconKey = iconEl ? iconEl.value : 'custom';
+    patch.iconKey = 'custom';
     patch.memo = memoEl ? memoEl.value.trim() : '';
   }
   pmUpdateDraftProject(key, patch);
   closeModal();
+}
+
+function pmOpenProjectDeleteConfirm(key) {
+  if (!pmDraftState || !pmDraftState.projects[key]) return;
+  modalTitle.textContent = 'プロジェクト削除';
+  modalContent.innerHTML =
+    '<div class="lineBox">' +
+    '<p class="help" style="margin:0;line-height:1.65">このプロジェクトを削除しますか？<br>関連する収益・売上・実績・ポートフォリオデータも削除されます。</p>' +
+    '<div class="pmEditActions">' +
+    '<button type="button" class="btn2" onclick="closeModal()">キャンセル</button>' +
+    '<button type="button" onclick="pmExecuteDeleteProject(\'' + key + '\')">削除</button>' +
+    '</div></div>';
+  modalBg.style.display = 'flex';
+}
+
+function pmExecuteDeleteProject(key) {
+  if (!pmDraftState || !pmDraftState.projects[key]) {
+    closeModal();
+    return;
+  }
+  let name = pmDraftState.projects[key].name || key;
+  closeModal();
+  delete pmDraftState.projects[key];
+  pmDraftState.order = (pmDraftState.order || []).filter(function (k) { return k !== key; });
+  if (typeof pdDeleteProjectData === 'function') pdDeleteProjectData(key);
+  pmCommitProjectMaster(pmReadDraftState());
+  pmDraftSnapshot = pmSerializeMasterState(pmReadDraftState());
+  pmRenderProjectSettingsList();
+  pmUpdateProjectSaveUi();
+  if (typeof renderDynamicProjects === 'function') renderDynamicProjects();
+  if (typeof render === 'function') render();
+  if (typeof showToast === 'function') showToast('🗑 ' + name + ' を削除しました');
 }
 
 function pmOpenProjectAdd() {
@@ -198,8 +231,7 @@ function pmOpenOtherProjectAdd() {
     '<div class="pmAddForm">' +
     '<label for="pmOtherName">プロジェクト名</label>' +
     '<input id="pmOtherName" type="text" maxlength="40" placeholder="プロジェクト名">' +
-    '<label for="pmOtherIcon">アイコン</label>' +
-    '<select id="pmOtherIcon">' + pmIconOptionsHtml('custom') + '</select>' +
+    '<p class="help">アイコンはプロジェクト名の頭文字から自動生成されます。公式プロジェクトアイコンは選択できません。</p>' +
     '<label for="pmOtherStartDate">開始日</label>' +
     '<input id="pmOtherStartDate" type="text" placeholder="2024/01/20">' +
     '<label for="pmOtherInclusionRate">資産計上率</label>' +
@@ -222,7 +254,6 @@ function pmOpenOtherProjectAdd() {
 
 function pmConfirmOtherProjectAdd() {
   let nameEl = document.getElementById('pmOtherName');
-  let iconEl = document.getElementById('pmOtherIcon');
   let startEl = document.getElementById('pmOtherStartDate');
   let rateEl = document.getElementById('pmOtherInclusionRate');
   let visibleEl = document.getElementById('pmOtherVisible');
@@ -246,7 +277,7 @@ function pmConfirmOtherProjectAdd() {
     visible: !!(visibleEl && visibleEl.checked),
     registered: true,
     kind: 'other',
-    iconKey: iconEl ? iconEl.value : 'custom',
+    iconKey: 'custom',
     memo: memoEl ? memoEl.value.trim() : ''
   };
   if (pmDraftState.order.indexOf(key) === -1) {
@@ -338,7 +369,10 @@ function pmCommitProjectSettings() {
   pmHideProjectOverwriteConfirm();
   if (typeof showToast === 'function') showToast('✅ プロジェクト設定を保存しました');
   pmRenderProjectSettingsList();
+  if (typeof renderDynamicProjects === 'function') renderDynamicProjects();
   if (typeof renderPortfolio === 'function') renderPortfolio();
+  if (typeof renderRevenueManage === 'function') renderRevenueManage();
+  if (typeof renderSalesManage === 'function') renderSalesManage();
   if (typeof render === 'function') render();
 }
 

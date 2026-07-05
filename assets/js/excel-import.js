@@ -1,7 +1,9 @@
-/* OUKEI HUB Excel Import — Ver2.0.6 / build 20260705-v244
+/* OUKEI HUB Excel Import — Ver2.0.6 / build 20260705-v250
  * Past RAM revenue + sales migration from Excel → revenueLog / salesLog
  * Layout auto-detect: Pattern① separate 売上 sheet / Pattern② combined in 収益 sheet
  */
+
+var XI_FEATURE_ENABLED = false;
 
 var xiPendingImport = null;
 var xiPendingWorkbook = null;
@@ -669,7 +671,7 @@ function xiParseRamSheet(workbook, sheetName) {
   let dayCols = xiFindDayColumns(revenueRows, ym.year, ym.month);
   let blocks = xiFindAccountBlocks(revenueRows);
   if (!blocks.length) {
-    return { ok: false, error: 'kai1 / kai2 の行構成（リターン・報酬）が見つかりません。' };
+    return { ok: false, error: 'アカウント行（リターン・報酬）が見つかりません。Excelの行ラベルを確認してください。' };
   }
 
   let layout = xiDetectSheetLayout(workbook, sheetName, ym.year, ym.month);
@@ -679,7 +681,7 @@ function xiParseRamSheet(workbook, sheetName) {
     salesRows = xiSheetToRows(workbook, layout.salesSheetName);
     salesBlocks = xiFindSalesOnlyBlocks(salesRows);
     if (!salesBlocks.length) {
-      return { ok: false, error: '売上シートに kai1 / kai2（売上日利・売上合計）が見つかりません。' };
+      return { ok: false, error: '売上シートにアカウント行（売上日利・売上合計）が見つかりません。' };
     }
   } else if (layout.pattern === 2) {
     xiAttachSalesRowsToBlocks(blocks, revenueRows);
@@ -1338,7 +1340,7 @@ function xiExecuteImport() {
       !(firstParsed.hasSalesData && salesRecords.some(function (r) { return r.accountKey === k && r.accountId; }));
   });
   if (unmapped.length) {
-    alert('HUBアカウント（' + unmapped.join(', ') + '）が見つかりません。\n組織図のRAMアカウント（ユーザー名 kai1 / kai2）を確認してください。');
+    alert('HUBアカウント（' + unmapped.join(', ') + '）が見つかりません。\n組織図のRAMアカウント（ユーザー名）を確認してください。');
     return;
   }
 
@@ -1380,6 +1382,10 @@ function xiUndoImport() {
 }
 
 function openExcelImportPage() {
+  if (!XI_FEATURE_ENABLED) {
+    if (typeof showToast === 'function') showToast('Excelインポートは現在準備中です');
+    return;
+  }
   if (typeof showPage === 'function') showPage('excelImport');
 }
 

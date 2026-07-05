@@ -178,6 +178,10 @@ function pfFormatIsoDate(y, m, d) {
 }
 
 function pfGetProjectLabel(projectKey, projects) {
+  if (typeof pmGetProject === 'function') {
+    let mp = pmGetProject(projectKey);
+    if (mp && mp.name) return mp.name;
+  }
   let list = projects || [];
   let p = list.find(function (x) { return x.key === projectKey; });
   return p ? p.name : projectKey;

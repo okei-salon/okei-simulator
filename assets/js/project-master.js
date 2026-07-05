@@ -4,7 +4,7 @@ var PM_BUILTIN = {
   ram: { key: 'ram', name: 'RAM', startDate: '2024/01/20', inclusionRate: 100, visible: true, registered: true },
   orca: { key: 'orca', name: 'ORCA', startDate: '2024/04/15', inclusionRate: 100, visible: true, registered: true },
   cary: { key: 'cary', name: 'Cary Pact', startDate: '2024/03/10', inclusionRate: 0, visible: true, registered: true },
-  genesis: { key: 'genesis', name: 'GENESIS', startDate: '2023/11/20', inclusionRate: 100, visible: false, registered: false }
+  genesis: { key: 'genesis', name: 'Genesis', startDate: '2023/11/20', inclusionRate: 100, visible: false, registered: false }
 };
 
 var PM_VALID_CODES = {
@@ -18,9 +18,20 @@ var PM_VALID_CODES = {
 var PM_CODE_META = {
   orca: { name: 'ORCA', startDate: '2024/04/15' },
   cary: { name: 'Cary Pact', startDate: '2024/03/10' },
-  genesis: { name: 'GENESIS', startDate: '2023/11/20' },
+  genesis: { name: 'Genesis', startDate: '2023/11/20' },
   demo2026: { name: 'OUKEI 2026', startDate: '2026/01/01' }
 };
+
+var PM_OFFICIAL_ICON_KEYS = { ram: 1, orca: 1, genesis: 1, cary: 1 };
+
+function pmIsOfficialProjectName(name) {
+  return typeof pjIsOfficialProjectName === 'function' && pjIsOfficialProjectName(name);
+}
+
+function pmIsOfficialProjectKey(key) {
+  let p = typeof pmGetProject === 'function' ? pmGetProject(key) : null;
+  return pmIsOfficialProjectName(p && p.name);
+}
 
 function pmEscape(text) {
   return typeof escapeHtml === 'function' ? escapeHtml(text) : String(text);
@@ -120,11 +131,18 @@ function pmNormalizeProjects() {
     p.key = key;
     p.inclusionRate = Math.max(0, Math.min(100, Number(p.inclusionRate)));
     p.visible = !!p.visible;
-    p.registered = key === 'ram' ? true : !!p.registered;
+    p.registered = !!p.registered;
     if (!p.startDate) p.startDate = PM_BUILTIN[key] ? PM_BUILTIN[key].startDate : '—';
     if (!p.name) p.name = PM_BUILTIN[key] ? PM_BUILTIN[key].name : key;
     if (!PM_BUILTIN[key] && key !== 'demo2026' && !p.kind) p.kind = 'other';
-    if (!p.iconKey) p.iconKey = PM_BUILTIN[key] ? key : (p.kind === 'other' ? 'custom' : key);
+    if (typeof pjGetOfficialIconKeyByName === 'function') {
+      let official = pjGetOfficialIconKeyByName(p.name);
+      p.iconKey = official || 'custom';
+    } else if (pmIsOfficialProjectName(p.name)) {
+      p.iconKey = key;
+    } else {
+      p.iconKey = 'custom';
+    }
     if (typeof p.memo !== 'string') p.memo = p.memo ? String(p.memo) : '';
   });
   settings.projectMaster.order = settings.projectMaster.order.filter(function (key) {
@@ -150,6 +168,12 @@ function pmGetEnabledProjects() {
     .map(function (p) {
       return { key: p.key, name: p.name, dot: p.key };
     });
+}
+
+function pmGetManageProjectList() {
+  return pmGetRegisteredProjects().map(function (p) {
+    return { key: p.key, name: p.name };
+  });
 }
 
 function pmGetProject(key) {
@@ -219,8 +243,14 @@ function pmGetSavedMasterState() {
 
 function pmApplyMasterState(state) {
   pmEnsureProjectMaster();
+  let incomingKeys = Object.keys(state.projects || {});
   settings.projectMaster.order = (state.order || []).slice();
-  Object.keys(state.projects || {}).forEach(function (key) {
+  Object.keys(settings.projectMaster.projects).forEach(function (key) {
+    if (incomingKeys.indexOf(key) === -1) {
+      settings.projectMaster.projects[key].registered = false;
+    }
+  });
+  incomingKeys.forEach(function (key) {
     settings.projectMaster.projects[key] = Object.assign({}, state.projects[key], { key: key, registered: true });
   });
   pmNormalizeProjects();
@@ -239,16 +269,7 @@ function pmSlugProjectKey(name, projects) {
 }
 
 function pmIconOptionsHtml(selected) {
-  let opts = [
-    { value: 'custom', label: 'デフォルト' },
-    { value: 'ram', label: 'RAM' },
-    { value: 'orca', label: 'ORCA' },
-    { value: 'cary', label: 'Cary Pact' },
-    { value: 'genesis', label: 'GENESIS' }
-  ];
-  return opts.map(function (o) {
-    return '<option value="' + o.value + '"' + (selected === o.value ? ' selected' : '') + '>' + o.label + '</option>';
-  }).join('');
+  return '<option value="custom"' + (selected === 'custom' ? ' selected' : '') + '>頭文字アイコン（自動）</option>';
 }
 
 function pmValidateProjectCode(codeRaw) {
@@ -287,7 +308,7 @@ function pmRegisterProjectByCode(codeRaw) {
 
 function pmSyncLegacyFlags() {
   if (typeof settings === 'undefined') return;
-  settings.useRAM = true;
+  settings.useRAM = !!(pmGetProject('ram') && pmGetProject('ram').registered && pmGetProject('ram').visible);
   settings.useORCA = !!(pmGetProject('orca') && pmGetProject('orca').registered && pmGetProject('orca').visible);
   settings.useCARY = !!(pmGetProject('cary') && pmGetProject('cary').registered && pmGetProject('cary').visible);
   settings.customProjects = pmGetRegisteredProjects()
@@ -359,17 +380,11 @@ function pmCommitFxSettings(rate) {
 }
 
 function pmRenderProjectIcon(key, extraClass, project) {
-  if (typeof renderProjectIcon === 'function') {
-    return renderProjectIcon(key, extraClass, {
-      project: project,
-      iconKey: project && project.iconKey ? project.iconKey : key,
-      name: project && project.name ? project.name : ''
-    });
+  if (typeof pjRenderProjectIcon === 'function') {
+    return pjRenderProjectIcon(key, extraClass, project);
   }
-  let p = project;
-  if (!p && typeof pmGetProject === 'function') p = pmGetProject(key);
-  let iconKey = (p && p.iconKey) ? p.iconKey : key;
-  let cls = 'homeProjIcon homeProjIcon--' + iconKey;
-  if (extraClass) cls += ' ' + extraClass;
-  return '<span class="' + cls + '" aria-hidden="true"></span>';
+  if (typeof renderProjectIcon === 'function') {
+    return renderProjectIcon(key, extraClass, project ? { project: project } : undefined);
+  }
+  return '';
 }

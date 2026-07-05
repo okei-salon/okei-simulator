@@ -53,15 +53,29 @@ var HOME_ACTION_ICON_PENDING = '<span class="homeActionItemIcon" aria-hidden="tr
 var HOME_ACTION_ICON_DONE = '<span class="homeActionItemIcon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9 12l2 2 4-4"/></svg></span>';
 
 function getHomeActionProjects() {
-  let list = getEnabledHomeProjects().map(function (p) {
-    return { key: p.key, name: p.name, cls: p.dot || p.key };
+  return getEnabledHomeProjects().map(function (p) {
+    return { key: p.key, name: p.name, cls: homeProjectCls(p.key) };
   });
-  (settings.customProjects || []).forEach(function (p) {
-    let key = String(p.key || p.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-    if (!key || list.some(function (x) { return x.key === key; })) return;
-    list.push({ key: key, name: p.name || key, cls: 'custom' });
-  });
-  return list;
+}
+
+var HOME_BUILTIN_PROJECT_KEYS = { ram: 1, orca: 1, cary: 1, genesis: 1 };
+
+function homeProjectCls(key) {
+  return HOME_BUILTIN_PROJECT_KEYS[key] ? key : 'custom';
+}
+
+function homeProjectEntryFromMaster(p) {
+  return { key: p.key, name: p.name, cls: homeProjectCls(p.key) };
+}
+
+function homeResponsiveGridCols(count) {
+  count = Math.max(1, count || 1);
+  if (typeof window === 'undefined' || !window.matchMedia) return Math.min(count, 5);
+  let w = window.innerWidth || 0;
+  if (w <= 480) return count <= 1 ? 1 : Math.min(count, 2);
+  if (w <= 768) return Math.min(count, 3);
+  if (w <= 1024) return Math.min(count, 4);
+  return Math.min(count, 5);
 }
 
 function isHomeProjectEnteredToday(entry, projectKey) {
@@ -84,15 +98,6 @@ var REVENUE_PROJECT_META = {
 
 function getRevenueProjectMeta(projectKey) {
   return REVENUE_PROJECT_META[projectKey] || { desc: '収益入力', ready: false };
-}
-
-function renderHomeProjIcon(projectKey, extraClass) {
-  if (typeof renderProjectIcon === 'function') {
-    return renderProjectIcon(projectKey, extraClass);
-  }
-  let cls = 'homeProjIcon homeProjIcon--' + projectKey;
-  if (extraClass) cls += ' ' + extraClass;
-  return '<span class="' + cls + '" aria-hidden="true"></span>';
 }
 
 function countProjectEnteredAccounts(projectKey, entry) {
@@ -660,16 +665,16 @@ function calcMonthInputRate() {
 function renderProjectGrid(containerId, projects, getAmount, totalHint) {
   let el = document.getElementById(containerId);
   if (!el) return;
-  let n = Math.max(projects.length, 1);
+  let n = homeResponsiveGridCols(projects.length);
   el.style.setProperty('--proj-cols', n);
-  el.setAttribute('data-count', n);
+  el.setAttribute('data-count', projects.length);
   let amounts = projects.map(function (p) { return getAmount(p); });
   let total = typeof totalHint === 'number' ? totalHint : amounts.reduce(function (s, v) { return s + v; }, 0);
   el.innerHTML = projects.map(function (p, i) {
     let amt = amounts[i];
     let pct = total > 0 ? Math.round((amt / total) * 1000) / 10 : 0;
     return '<div class="homeProjCard homeProjCard--' + p.dot + '">' +
-      '<div class="homeProjCardTop">' + renderHomeProjIcon(p.dot || p.key, 'homeProjCardIcon') +
+      '<div class="homeProjCardTop">' + renderHomeProjIcon(p.key, 'homeProjCardIcon') +
       '<span class="homeProjCardName">' + p.name + '</span></div>' +
       '<span class="homeProjCardAmt">' + money(amt) + '</span>' +
       '<span class="homeProjCardPct">' + pct + '%</span>' +
@@ -694,18 +699,31 @@ function updateHomeInputStats() {
   }
 }
 
+function sumEntryRegisteredTotal(entry, dateKey) {
+  if (!entry) return 0;
+  let total = 0;
+  getHomeProjectRegistry().forEach(function (p) {
+    let amt = getHomeTodayProjectAmount(p.key, entry, dateKey);
+    if (amt != null && amt > 0) total += amt;
+  });
+  return total;
+}
+
 function sumMonthRevenueLog(y, m) {
   ensureRevenueLog();
   let daysInMonth = new Date(y, m + 1, 0).getDate();
   let out = { total: 0, hasLog: false };
   for (let d = 1; d <= daysInMonth; d++) {
-    let entry = getRevenueEntry(revenueDateKey(y, m, d));
+    let dateKey = revenueDateKey(y, m, d);
+    let entry = getRevenueEntry(dateKey);
     if (!entry) continue;
+    let dayTotal = sumEntryRegisteredTotal(entry, dateKey);
+    if (dayTotal <= 0) continue;
     out.hasLog = true;
-    out.total += entry.total || 0;
-    Object.keys(entry).forEach(function (k) {
-      if (k === 'total' || k === 'savedAt') return;
-      out[k] = (out[k] || 0) + (Number(entry[k]) || 0);
+    out.total += dayTotal;
+    getHomeProjectRegistry().forEach(function (p) {
+      let amt = getHomeTodayProjectAmount(p.key, entry, dateKey);
+      if (amt != null && amt > 0) out[p.key] = (out[p.key] || 0) + amt;
     });
   }
   return out;
@@ -728,9 +746,11 @@ function formatPerformanceAmount(n) {
   return money(n);
 }
 
-function formatCalDayAmount(entry) {
+function formatCalDayAmount(entry, dateKey) {
   if (!entry) return typeof pdEmptyMark === 'function' ? pdEmptyMark() : '−';
-  return money(entry.total || 0);
+  let total = dateKey ? sumEntryRegisteredTotal(entry, dateKey) : (Number(entry.total) || 0);
+  if (!total) return typeof pdEmptyMark === 'function' ? pdEmptyMark() : '−';
+  return money(total);
 }
 
 function renderHomeCalendar() {
@@ -759,9 +779,9 @@ function renderHomeCalendar() {
     if (entry) cls.push('isFilled');
     else cls.push('isEmpty');
     let amtCls = entry ? 'homeCalDayAmt' : 'homeCalDayAmt isDash';
-    cells += '<button type="button" class="' + cls.join(' ') + '" onclick="showRevenueDayDetail(\'' + key + '\')" aria-label="' + (m + 1) + '月' + d + '日 ' + formatCalDayAmount(entry) + '">' +
+    cells += '<button type="button" class="' + cls.join(' ') + '" onclick="showRevenueDayDetail(\'' + key + '\')" aria-label="' + (m + 1) + '月' + d + '日 ' + formatCalDayAmount(entry, key) + '">' +
       '<span class="homeCalDayNum">' + d + '</span>' +
-      '<span class="' + amtCls + '">' + formatCalDayAmount(entry) + '</span></button>';
+      '<span class="' + amtCls + '">' + formatCalDayAmount(entry, key) + '</span></button>';
   }
 
   homeCalendar.innerHTML =
@@ -829,21 +849,21 @@ function chartXLabels(daysInMonth, monthNum) {
   return marks.map(function (d) { return { d: d, label: monthNum + '/' + d }; });
 }
 
-var HOME_PROJECT_REGISTRY = [
-  { key: 'ram', name: 'RAM', cls: 'ram' },
-  { key: 'orca', name: 'ORCA', cls: 'orca' },
-  { key: 'genesis', name: 'Genesis', cls: 'genesis' },
-  { key: 'cary', name: 'Cary Pact', cls: 'cary' }
-];
-
 function getHomeProjectRegistry() {
-  let list = HOME_PROJECT_REGISTRY.slice();
-  (settings.customProjects || []).forEach(function (p) {
-    let key = String(p.key || p.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-    if (!key || list.some(function (x) { return x.key === key; })) return;
-    list.push({ key: key, name: p.name || key, cls: 'custom' });
-  });
-  return list;
+  if (typeof getHomeDemoEnabledProjects === 'function') {
+    let demo = getHomeDemoEnabledProjects();
+    if (demo) {
+      return demo.map(function (p) {
+        return homeProjectEntryFromMaster({ key: p.key, name: p.name });
+      });
+    }
+  }
+  if (typeof pmGetEnabledProjects === 'function') {
+    return pmGetEnabledProjects().map(function (p) {
+      return homeProjectEntryFromMaster(p);
+    });
+  }
+  return [];
 }
 
 function getHomeMonthlyRevenueContext(sAll) {
@@ -863,20 +883,6 @@ function getHomeMonthlyRevenueContext(sAll) {
 function getHomeMonthlyProjectRows(ctx) {
   if (!ctx) return [];
   let registry = getHomeProjectRegistry();
-
-  if (ctx.monthLog.hasLog) {
-    Object.keys(ctx.monthLog).forEach(function (k) {
-      if (k === 'total' || k === 'hasLog') return;
-      if (registry.some(function (p) { return p.key === k; })) return;
-      if ((ctx.monthLog[k] || 0) <= 0) return;
-      registry.push({
-        key: k,
-        name: k.charAt(0).toUpperCase() + k.slice(1),
-        cls: 'custom'
-      });
-    });
-  }
-
   let entry = ctx.monthLog.hasLog ? ctx.monthLog : null;
   return registry.map(function (p) {
     let amt = entry ? (entry[p.key] || 0) : null;
@@ -1114,7 +1120,7 @@ function renderHomeMonthlyProjGrid(sAll) {
   if (!ctx) return;
 
   let rows = getHomeMonthlyProjectRows(ctx);
-  let cols = Math.max(rows.length, 1);
+  let cols = homeResponsiveGridCols(rows.length);
   el.style.setProperty('--monthly-proj-cols', cols);
   el.setAttribute('data-count', rows.length);
 
@@ -1128,7 +1134,7 @@ function renderHomeMonthlyProjGrid(sAll) {
     return '<div class="homeMonthlyProjCard homeMonthlyProjCard--' + p.cls + '">' +
       '<div class="homeMonthlyProjCardHead">' +
       '<span class="homeMonthlyProjCardName"><span class="homeMonthlyProjDot">' +
-      renderHomeProjIcon(p.cls || p.key, 'homeMonthlyProjIcon') + '</span>' + p.name + '</span>' +
+      renderHomeProjIcon(p.key, 'homeMonthlyProjIcon') + '</span>' + p.name + '</span>' +
       '<span class="homeMonthlyProjCardPct">' + row.pct + '%</span></div>' +
       '<span class="homeMonthlyProjCardAmt">' + money(row.amt) + '</span>' +
       '<div class="homeMonthlyProjCardBar"><div class="homeMonthlyProjCardBarFill" style="width:' + row.pct + '%"></div></div>' +
@@ -1157,12 +1163,9 @@ function homeTodayEntryHasRevenue(entry, dateKey) {
   if (typeof pdProjectDayHasRevenue === 'function') {
     return getHomeProjectRegistry().some(function (p) {
       return pdProjectDayHasRevenue(entry, p.key, dateKey);
-    }) || Object.keys(entry).some(function (k) {
-      if (k === 'total' || k === 'savedAt' || k === 'accounts' || k.slice(-8) === 'Accounts') return false;
-      return Number(entry[k]) > 0;
     });
   }
-  return (Number(entry.total) || 0) > 0;
+  return sumEntryRegisteredTotal(entry, dateKey) > 0;
 }
 
 function resolveHomeTodayEntry(dateKey) {
@@ -1170,11 +1173,7 @@ function resolveHomeTodayEntry(dateKey) {
   if (!entry || !homeTodayEntryHasRevenue(entry, dateKey)) {
     return { entry: null, total: null };
   }
-  if (typeof pdRecalculateRevenueEntry === 'function') {
-    let calc = pdRecalculateRevenueEntry(JSON.parse(JSON.stringify(entry)), dateKey);
-    return { entry: entry, total: calc.total };
-  }
-  return { entry: entry, total: Number(entry.total) || 0 };
+  return { entry: entry, total: sumEntryRegisteredTotal(entry, dateKey) };
 }
 
 function getHomeTodayProjectRows(ctx) {
@@ -1182,19 +1181,6 @@ function getHomeTodayProjectRows(ctx) {
   let registry = getHomeProjectRegistry();
   let entry = ctx.todayEntry;
   let dateKey = typeof todayKey === 'function' ? todayKey() : '';
-
-  if (entry) {
-    Object.keys(entry).forEach(function (k) {
-      if (k === 'total' || k === 'savedAt' || k === 'accounts' || k.slice(-8) === 'Accounts') return;
-      if (registry.some(function (p) { return p.key === k; })) return;
-      if ((Number(entry[k]) || 0) <= 0) return;
-      registry.push({
-        key: k,
-        name: k.charAt(0).toUpperCase() + k.slice(1),
-        cls: 'custom'
-      });
-    });
-  }
 
   return registry.map(function (p) {
     let amt = entry ? getHomeTodayProjectAmount(p.key, entry, dateKey) : null;
@@ -1313,7 +1299,7 @@ function bindHomeTodayDonutHover(wrap, rows) {
 function renderHomeTodayProjGrid(rows) {
   let el = document.getElementById('homeDailyProjGrid');
   if (!el) return;
-  let cols = Math.max(rows.length, 1);
+  let cols = homeResponsiveGridCols(rows.length);
   el.style.setProperty('--today-proj-cols', cols);
   el.setAttribute('data-count', rows.length);
 
@@ -1327,7 +1313,7 @@ function renderHomeTodayProjGrid(rows) {
     return '<div class="homeTodayProjCard homeTodayProjCard--' + p.cls + '">' +
       '<div class="homeTodayProjCardHead">' +
       '<span class="homeTodayProjCardName"><span class="homeTodayProjMark">' +
-      renderHomeProjIcon(p.cls || p.key, 'homeTodayProjIcon') + '</span>' + p.name + '</span>' +
+      renderHomeProjIcon(p.key, 'homeTodayProjIcon') + '</span>' + p.name + '</span>' +
       '<span class="homeTodayProjCardPct">' + row.pct + '%</span></div>' +
       '<span class="homeTodayProjCardAmt">' + money(row.amt) + '</span>' +
       '<div class="homeTodayProjCardBar"><div class="homeTodayProjCardBarFill" style="width:' + row.pct + '%"></div></div>' +
@@ -1344,15 +1330,10 @@ function updateHomeTodaySection(sAll) {
   let todayEntry = todayResolved.entry;
   let todayTotal = todayResolved.total;
   let yesterdayEntry = getRevenueEntry(yesterdayKey());
-  let yesterdayTotal = yesterdayEntry ? (yesterdayEntry.total || 0) : null;
-  if (yesterdayEntry && typeof pdRecalculateRevenueEntry === 'function' &&
-      typeof homeTodayEntryHasRevenue === 'function' &&
-      homeTodayEntryHasRevenue(yesterdayEntry, yesterdayKey())) {
-    yesterdayTotal = pdRecalculateRevenueEntry(
-      JSON.parse(JSON.stringify(yesterdayEntry)),
-      yesterdayKey()
-    ).total;
-  }
+  let yKey = yesterdayKey();
+  let yesterdayTotal = (yesterdayEntry && homeTodayEntryHasRevenue(yesterdayEntry, yKey))
+    ? sumEntryRegisteredTotal(yesterdayEntry, yKey)
+    : null;
 
   let dailyEl = document.getElementById('homeDaily');
   let yenEl = document.getElementById('homeDailyYen');
@@ -1402,8 +1383,19 @@ function showRevenueDayDetail(key) {
   if (!entry) {
     modalContent.innerHTML = '<div class="lineBox"><b>未入力</b><p class="help">この日付の実績はまだ記録されていません。</p></div>';
   } else {
+    let dayTotal = sumEntryRegisteredTotal(entry, key);
+    let projectRows = getHomeProjectRegistry().map(function (p) {
+      let amt = getHomeTodayProjectAmount(p.key, entry, key);
+      return { proj: p, amt: amt || 0 };
+    }).filter(function (row) { return row.amt > 0; });
+    let projectHtml = projectRows.map(function (row) {
+      return '<div class="homeSummaryRow"><span class="homeSummaryProjLabel">' +
+        renderHomeProjIcon(row.proj.key, 'homeSummaryProjIcon') +
+        '<span>' + escapeHtml(row.proj.name) + '</span></span><b>' + money(row.amt) + '</b></div>';
+    }).join('');
     let ramDetail = '';
-    if (entry.ramAccounts && typeof getRamInputAccounts === 'function') {
+    if (entry.ramAccounts && typeof getRamInputAccounts === 'function' &&
+      getHomeProjectRegistry().some(function (p) { return p.key === 'ram'; })) {
       let rows = getRamInputAccounts().map(function (acc) {
         let ae = entry.ramAccounts[acc.id];
         if (!ae) return '';
@@ -1415,13 +1407,8 @@ function showRevenueDayDetail(key) {
       if (rows) ramDetail = '<div class="lineBox" style="margin-top:10px"><b>RAM アカウント別</b><div class="homeSummaryList">' + rows + '</div></div>';
     }
     modalContent.innerHTML =
-      '<div class="lineBox"><b>合計</b><div class="amount">' + money(entry.total) + '</div><div class="help">' + yen(entry.total) + '</div></div>' +
-      '<div class="homeSummaryList" style="margin-top:10px">' +
-      '<div class="homeSummaryRow"><span><span class="homeProjDot ram"></span>RAM</span><b>' + money(entry.ram || 0) + '</b></div>' +
-      '<div class="homeSummaryRow"><span><span class="homeProjDot orca"></span>ORCA</span><b>' + money(entry.orca || 0) + '</b></div>' +
-      '<div class="homeSummaryRow"><span><span class="homeProjDot genesis"></span>Genesis</span><b>' + money(entry.genesis || 0) + '</b></div>' +
-      '<div class="homeSummaryRow"><span><span class="homeProjDot cary"></span>Cary Pact</span><b>' + money(entry.cary || 0) + '</b></div>' +
-      '</div>' +
+      '<div class="lineBox"><b>合計</b><div class="amount">' + money(dayTotal) + '</div><div class="help">' + yen(dayTotal) + '</div></div>' +
+      (projectHtml ? '<div class="homeSummaryList" style="margin-top:10px">' + projectHtml + '</div>' : '') +
       ramDetail +
       (entry.savedAt ? '<p class="help" style="margin-top:10px">記録：' + entry.savedAt + '</p>' : '');
   }
@@ -1581,7 +1568,7 @@ function openRamAddAccountForm() {
   modalTitle.textContent = 'RAM アカウント追加';
   modalContent.innerHTML =
     '<p class="help">ユーザー名・投資額・本日収益を入力して登録します。</p>' +
-    '<label>ユーザー名</label><input id="ramNewUsername" type="text" placeholder="例：kai1">' +
+    '<label>ユーザー名</label><input id="ramNewUsername" type="text" placeholder="例：account1">' +
     '<label>投資額（USD）</label><input id="ramNewInvestment" type="number" step="1" min="0" placeholder="例：40000">' +
     '<label>本日収益（USD）</label><input id="ramNewTodayRev" type="number" step="0.01" min="0" placeholder="例：10">' +
     '<div class="ramInputFooterStack">' +
@@ -2009,7 +1996,7 @@ function openOrcaAddAccountForm() {
   modalTitle.textContent = 'ORCA アカウント追加';
   modalContent.innerHTML =
     '<p class="help">ユーザー名・投資額・昨日AI利益・本日AF収益を入力して登録します。</p>' +
-    '<label>ユーザー名</label><input id="orcaNewUsername" type="text" placeholder="例：kai1">' +
+    '<label>ユーザー名</label><input id="orcaNewUsername" type="text" placeholder="例：account1">' +
     '<label>投資額（USD）</label><input id="orcaNewInvestment" type="number" step="1" min="0" placeholder="例：5000">' +
     '<label>昨日AI利益（USD）</label><input id="orcaNewYesterdayAi" type="number" step="0.01" min="0" placeholder="例：8">' +
     '<label>本日AF収益（USD）</label><input id="orcaNewTodayAff" type="number" step="0.01" min="0" placeholder="例：2">' +

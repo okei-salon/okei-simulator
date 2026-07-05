@@ -1,0 +1,34 @@
+[debug] [2026-07-05T14:55:05.328Z] ----------------------------------------------------------------------
+[debug] [2026-07-05T14:55:05.329Z] Command:       /usr/local/bin/node /Users/kaiyasuhiro/Documents/GitHub/okei-simulator/node_modules/.bin/firebase emulators:start --only hosting --project oukei-hub
+[debug] [2026-07-05T14:55:05.329Z] CLI Version:   13.35.1
+[debug] [2026-07-05T14:55:05.329Z] Platform:      darwin
+[debug] [2026-07-05T14:55:05.329Z] Node Version:  v24.18.0
+[debug] [2026-07-05T14:55:05.329Z] Time:          Sun Jul 05 2026 23:55:05 GMT+0900 (Japan Standard Time)
+[debug] [2026-07-05T14:55:05.330Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-07-05T14:55:05.428Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-07-05T14:55:05.428Z] > authorizing via signed-in user (oukei.hub@gmail.com)
+[info] i  emulators: Starting emulators: hosting {"metadata":{"emulator":{"name":"hub"},"message":"Starting emulators: hosting"}}
+[warn] ⚠  hosting: Port 5050 is not open on 0.0.0.0, could not start Hosting Emulator. {"metadata":{"emulator":{"name":"hosting"},"message":"Port 5050 is not open on 0.0.0.0, could not start Hosting Emulator."}}
+[warn] ⚠  hosting: To select a different host/port, specify that host/port in a firebase.json config file:
+      {
+        // ...
+        "emulators": {
+          "hosting": {
+            "host": "HOST",
+            "port": "PORT"
+          }
+        }
+      } {"metadata":{"emulator":{"name":"hosting"},"message":"To select a different host/port, specify that host/port in a firebase.json config file:\n      {\n        // ...\n        \"emulators\": {\n          \"hosting\": {\n            \"host\": \"\u001b[33mHOST\u001b[39m\",\n            \"port\": \"\u001b[33mPORT\u001b[39m\"\n          }\n        }\n      }"}}
+[warn] ⚠  hub: emulator hub unable to start on port 4400, starting on 4401 instead. {"metadata":{"emulator":{"name":"hub"},"message":"emulator hub unable to start on port 4400, starting on 4401 instead."}}
+[warn] ⚠  logging: Logging Emulator unable to start on port 4500, starting on 4501 instead. {"metadata":{"emulator":{"name":"logging"},"message":"Logging Emulator unable to start on port 4500, starting on 4501 instead."}}
+[debug] [2026-07-05T14:55:05.740Z] [logging] Logging Emulator only supports listening on one address (127.0.0.1). Not listening on ::1
+[debug] [2026-07-05T14:55:05.744Z] Could not find VSCode notification endpoint: FetchError: request to http://localhost:40001/vscode/notify failed, reason: . If you are not running the Firebase Data Connect VSCode extension, this is expected and not an issue.
+[info] i  emulators: Shutting down emulators. {"metadata":{"emulator":{"name":"hub"},"message":"Shutting down emulators."}}
+[debug] [2026-07-05T14:55:05.748Z] Could not find VSCode notification endpoint: FetchError: request to http://localhost:40001/vscode/notify failed, reason: . If you are not running the Firebase Data Connect VSCode extension, this is expected and not an issue.
+[debug] [2026-07-05T14:55:10.755Z] Error: Timed out.
+    at Timeout._onTimeout (/Users/kaiyasuhiro/Documents/GitHub/okei-simulator/node_modules/firebase-tools/lib/utils.js:269:49)
+    at listOnTimeout (node:internal/timers:605:17)
+    at process.processTimers (node:internal/timers:541:7)
+[error] 
+[error] Error: An unexpected error has occurred.

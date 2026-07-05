@@ -18,18 +18,27 @@ var RM_ACCOUNT_DETAIL_DEFS = {
 };
 
 var RM_PROJECTS = [
-  { key: 'ram', name: 'RAM', iconKey: 'ram' },
-  { key: 'orca', name: 'ORCA', iconKey: 'orca' },
-  { key: 'cary', name: 'Cary Pact', iconKey: 'cary' },
-  { key: 'genesis', name: 'GENESIS', iconKey: 'genesis' },
-  { key: 'other', name: 'その他', iconKey: 'custom' }
+  { key: 'ram', name: 'RAM' },
+  { key: 'orca', name: 'ORCA' },
+  { key: 'cary', name: 'Cary Pact' },
+  { key: 'genesis', name: 'Genesis' },
+  { key: 'other', name: 'その他' }
 ];
 
-function rmGetActiveProjects() {
-  if (typeof pdFilterProjectsWithData === 'function') {
-    return pdFilterProjectsWithData(RM_PROJECTS);
+function rmGetManageProjectSource() {
+  if (typeof pmGetManageProjectList === 'function') {
+    let list = pmGetManageProjectList();
+    if (list.length) return list;
   }
-  return RM_PROJECTS;
+  return RM_PROJECTS.filter(function (p) { return p.key !== 'other'; });
+}
+
+function rmGetActiveProjects() {
+  let list = rmGetManageProjectSource();
+  if (typeof pdFilterProjectsWithData === 'function') {
+    return pdFilterProjectsWithData(list);
+  }
+  return list;
 }
 
 function rmSyncProjectFilterOptions() {
@@ -70,60 +79,60 @@ var RM_DEMO_PROJECT_RATIOS = {
 
 var RM_DEMO_ACCOUNTS = {
   ram: [
-    { id: 'demo_ram_1', username: '甲斐1' },
-    { id: 'demo_ram_2', username: '甲斐2' },
-    { id: 'demo_ram_3', username: '甲斐3' }
+    { id: 'demo_ram_1', username: 'Project A-1' },
+    { id: 'demo_ram_2', username: 'Project A-2' },
+    { id: 'demo_ram_3', username: 'Project A-3' }
   ],
   orca: [
-    { id: 'demo_orca_1', username: '甲斐①' },
-    { id: 'demo_orca_2', username: '甲斐②' }
+    { id: 'demo_orca_1', username: 'Project B-1' },
+    { id: 'demo_orca_2', username: 'Project B-2' }
   ],
   cary: [
-    { id: 'demo_cary_1', username: '甲斐A' },
-    { id: 'demo_cary_2', username: '甲斐B' },
-    { id: 'demo_cary_3', username: '山森C' }
+    { id: 'demo_cary_1', username: 'OUKEI-1' },
+    { id: 'demo_cary_2', username: 'OUKEI-2' },
+    { id: 'demo_cary_3', username: 'OUKEI-3' }
   ],
   genesis: [
-    { id: 'demo_genesis_1', username: 'GENESIS-A' },
-    { id: 'demo_genesis_2', username: 'GENESIS-B' },
-    { id: 'demo_genesis_3', username: 'GENESIS-C' }
+    { id: 'demo_genesis_1', username: 'Demo G-1' },
+    { id: 'demo_genesis_2', username: 'Demo G-2' },
+    { id: 'demo_genesis_3', username: 'Demo G-3' }
   ],
   other: [
-    { id: 'demo_other_1', username: '副業A' },
-    { id: 'demo_other_2', username: '副業B' },
-    { id: 'demo_other_3', username: 'その他C' }
+    { id: 'demo_other_1', username: 'Demo X-1' },
+    { id: 'demo_other_2', username: 'Demo X-2' },
+    { id: 'demo_other_3', username: 'Demo X-3' }
   ]
 };
 
 var RM_DEMO_ACCOUNT_TREE = {
   ram: [
-    { id: 'demo_ram_1', name: '甲斐1', parentId: null, depth: 0 },
-    { id: 'demo_ram_2', name: '甲斐2', parentId: 'demo_ram_1', depth: 1 },
-    { id: 'demo_ram_3', name: '山森1', parentId: null, depth: 0 },
-    { id: 'demo_ram_4', name: '山森2', parentId: 'demo_ram_3', depth: 1 },
-    { id: 'demo_ram_5', name: '旺慶', parentId: null, depth: 0 },
-    { id: 'demo_ram_6', name: '旺慶2', parentId: 'demo_ram_5', depth: 1 }
+    { id: 'demo_ram_1', name: 'Project A-1', parentId: null, depth: 0 },
+    { id: 'demo_ram_2', name: 'Project A-2', parentId: 'demo_ram_1', depth: 1 },
+    { id: 'demo_ram_3', name: 'Project B-1', parentId: null, depth: 0 },
+    { id: 'demo_ram_4', name: 'Project B-2', parentId: 'demo_ram_3', depth: 1 },
+    { id: 'demo_ram_5', name: 'OUKEI-1', parentId: null, depth: 0 },
+    { id: 'demo_ram_6', name: 'OUKEI-2', parentId: 'demo_ram_5', depth: 1 }
   ],
   orca: [
-    { id: 'demo_orca_1', name: '甲斐①', parentId: null, depth: 0 },
-    { id: 'demo_orca_2', name: '甲斐②', parentId: 'demo_orca_1', depth: 1 },
-    { id: 'demo_orca_3', name: '山森1', parentId: null, depth: 0 },
-    { id: 'demo_orca_4', name: '山森2', parentId: 'demo_orca_3', depth: 1 }
+    { id: 'demo_orca_1', name: 'Project B-1', parentId: null, depth: 0 },
+    { id: 'demo_orca_2', name: 'Project B-2', parentId: 'demo_orca_1', depth: 1 },
+    { id: 'demo_orca_3', name: 'OUKEI-1', parentId: null, depth: 0 },
+    { id: 'demo_orca_4', name: 'OUKEI-2', parentId: 'demo_orca_3', depth: 1 }
   ],
   cary: [
-    { id: 'demo_cary_1', name: '甲斐A', parentId: null, depth: 0 },
-    { id: 'demo_cary_2', name: '甲斐B', parentId: 'demo_cary_1', depth: 1 },
-    { id: 'demo_cary_3', name: '山森C', parentId: null, depth: 0 }
+    { id: 'demo_cary_1', name: 'OUKEI-1', parentId: null, depth: 0 },
+    { id: 'demo_cary_2', name: 'OUKEI-2', parentId: 'demo_cary_1', depth: 1 },
+    { id: 'demo_cary_3', name: 'Demo C-1', parentId: null, depth: 0 }
   ],
   genesis: [
-    { id: 'demo_genesis_1', name: 'GENESIS-A', parentId: null, depth: 0 },
-    { id: 'demo_genesis_2', name: 'GENESIS-B', parentId: 'demo_genesis_1', depth: 1 },
-    { id: 'demo_genesis_3', name: 'GENESIS-C', parentId: null, depth: 0 }
+    { id: 'demo_genesis_1', name: 'Demo G-1', parentId: null, depth: 0 },
+    { id: 'demo_genesis_2', name: 'Demo G-2', parentId: 'demo_genesis_1', depth: 1 },
+    { id: 'demo_genesis_3', name: 'Demo G-3', parentId: null, depth: 0 }
   ],
   other: [
-    { id: 'demo_other_1', name: '副業A', parentId: null, depth: 0 },
-    { id: 'demo_other_2', name: '副業B', parentId: 'demo_other_1', depth: 1 },
-    { id: 'demo_other_3', name: 'その他C', parentId: null, depth: 0 }
+    { id: 'demo_other_1', name: 'Demo X-1', parentId: null, depth: 0 },
+    { id: 'demo_other_2', name: 'Demo X-2', parentId: 'demo_other_1', depth: 1 },
+    { id: 'demo_other_3', name: 'Demo X-3', parentId: null, depth: 0 }
   ]
 };
 
@@ -701,26 +710,25 @@ function rmGetRowDayAmount(row, y, m, d) {
 function rmGetTableRows() {
   if (rmFilter === 'all') {
     return rmGetActiveProjects().map(function (p) {
-      return { key: p.key, name: p.name, iconKey: p.iconKey, isTotal: false };
-    }).concat([{ key: 'total', name: '合計', iconKey: '', isTotal: true }]);
+      return { key: p.key, name: p.name, projectKey: p.key, isTotal: false };
+    }).concat([{ key: 'total', name: '合計', isTotal: true }]);
   }
 
   let accounts = rmGetProjectAccountRows(rmFilter);
   if (!accounts.length) {
-    return [{ key: 'empty', name: '（表示アカウントなし）', iconKey: rmFilter, isEmpty: true }];
+    return [{ key: 'empty', name: '（表示アカウントなし）', projectKey: rmFilter, isEmpty: true }];
   }
   return accounts.map(function (acc) {
     return {
       key: acc.id,
       name: acc.name,
-      iconKey: rmFilter,
       projectKey: rmFilter,
       isAccount: true,
       depth: acc.depth || 0,
       parentId: acc.parentId,
       seriesIndex: acc.seriesIndex || 0
     };
-  }).concat([{ key: 'total', name: '合計', iconKey: '', isTotal: true }]);
+  }).concat([{ key: 'total', name: '合計', isTotal: true }]);
 }
 
 function rmSupportsAccountDetail(projectKey) {
@@ -1062,10 +1070,10 @@ function rmPctChange(current, prev) {
   return Math.round(((current - prev) / prev) * 1000) / 10;
 }
 
-function rmRenderProjectIcon(iconKey, extraClass) {
-  if (typeof pmRenderProjectIcon === 'function') return pmRenderProjectIcon(iconKey, extraClass);
-  if (typeof renderHomeProjIcon === 'function') return renderHomeProjIcon(iconKey, extraClass);
-  return '<span class="homeProjIcon homeProjIcon--' + iconKey + ' ' + (extraClass || '') + '"></span>';
+function rmRenderProjectIcon(projectKey, extraClass) {
+  if (typeof pjRenderProjectIcon === 'function') return pjRenderProjectIcon(projectKey, extraClass);
+  if (typeof renderProjectIcon === 'function') return renderProjectIcon(projectKey, extraClass);
+  return '';
 }
 
 function rmRenderAccountHeadLabel(row, expanded) {
@@ -1128,7 +1136,7 @@ function rmRenderDailyTable() {
       trCls = ' class="rmTotalRow"';
       label = '<span class="rmRowLabel"><b>' + rmEscape(row.name) + '</b></span>';
     } else {
-      label = '<span class="rmRowLabel">' + (row.iconKey ? rmRenderProjectIcon(row.iconKey, 'rmRowIcon') : '') + rmEscape(row.name) + '</span>';
+      label = '<span class="rmRowLabel">' + (row.projectKey ? rmRenderProjectIcon(row.projectKey, 'rmRowIcon') : '') + rmEscape(row.name) + '</span>';
     }
 
     for (let d = 1; d <= days; d++) {
@@ -1417,7 +1425,7 @@ function rmRenderProjectStats() {
       rmGetActiveProjects().map(function (p) {
         let stats = rmGetProjectStats(p.key);
         return '<div class="rmStatTableRow">' +
-          '<div class="rmStatTableCol rmStatTableCol--project">' + rmRenderProjectIcon(p.iconKey, 'rmRowIcon') + rmEscape(p.name) + '</div>' +
+          '<div class="rmStatTableCol rmStatTableCol--project">' + rmRenderProjectIcon(p.key, 'rmRowIcon') + rmEscape(p.name) + '</div>' +
           '<div class="rmStatTableCol rmStatTableCol--metric">' +
           '<span class="rmStatAmt">' + rmFormatStatAmount(stats.bestDayAmount, stats.bestDayLabel) + '</span>' +
           '<span class="rmStatDate">' + rmEscape(stats.bestDayLabel) + '</span></div>' +

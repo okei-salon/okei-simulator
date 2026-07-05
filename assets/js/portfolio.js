@@ -12,7 +12,7 @@ var PF_STANDARD_PROJECTS = [
   { key: 'ram', name: 'RAM' },
   { key: 'orca', name: 'ORCA' },
   { key: 'cary', name: 'Cary Pact' },
-  { key: 'genesis', name: 'GENESIS' }
+  { key: 'genesis', name: 'Genesis' }
 ];
 
 var PF_MOCK_PROJECTS = {
@@ -35,10 +35,10 @@ var PF_MOCK_PROJECTS = {
 };
 
 var PF_MOCK_ALLOC = [
-  { key: 'ram', name: 'RAM', color: PF_COLORS.ram, pct: 45.2 },
-  { key: 'orca', name: 'ORCA', color: PF_COLORS.orca, pct: 22.6 },
-  { key: 'cary', name: 'Cary Pact', color: PF_COLORS.cary, pct: 18.8 },
-  { key: 'genesis', name: 'GENESIS', color: PF_COLORS.genesis, pct: 9.5 },
+  { key: 'ram', name: 'Project A', color: PF_COLORS.ram, pct: 45.2 },
+  { key: 'orca', name: 'Project B', color: PF_COLORS.orca, pct: 22.6 },
+  { key: 'cary', name: 'OUKEI', color: PF_COLORS.cary, pct: 18.8 },
+  { key: 'genesis', name: 'Sample G', color: PF_COLORS.genesis, pct: 9.5 },
   { key: 'other', name: 'その他', color: PF_COLORS.other, pct: 3.8 }
 ];
 
@@ -723,9 +723,11 @@ var PF_MOCK_SUMMARY_DATA = {
 };
 
 function pfRenderProjectCard(row) {
-  let icon = typeof renderHomeProjIcon === 'function'
-    ? renderHomeProjIcon(row.key, 'pfProjectCardIcon')
-    : '<span class="pfProjectCardIcon"></span>';
+  let icon = typeof pjRenderProjectIcon === 'function'
+    ? pjRenderProjectIcon(row.key, 'pfProjectCardIcon')
+    : (typeof renderHomeProjIcon === 'function'
+      ? renderHomeProjIcon(row.key, 'pfProjectCardIcon')
+      : '<span class="pfProjectCardIcon"></span>');
   return '<article class="pfProjectCard pfProjectCard--' + row.key + '">' +
     '<div class="pfProjectCardGlow"></div>' +
     '<div class="pfProjectCardTop">' +
@@ -751,7 +753,12 @@ function pfRenderProjectCards() {
   let el = document.getElementById('pfProjectGrid');
   if (!el) return;
   let rows = pfGetEnabledProjectRows();
-  el.style.setProperty('--pf-cols', String(Math.max(rows.length, 1)));
+  el.style.setProperty('--pf-cols', String(
+    typeof homeResponsiveGridCols === 'function'
+      ? homeResponsiveGridCols(rows.length)
+      : Math.min(Math.max(rows.length, 1), 5)
+  ));
+  el.setAttribute('data-count', rows.length);
   if (!rows.length) {
     el.innerHTML = '<div class="pfEmptyCard"><p>表示ONのプロジェクトがありません。</p></div>';
     el.classList.add('isEmpty');
