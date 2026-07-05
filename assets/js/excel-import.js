@@ -1,4 +1,4 @@
-/* OUKEI HUB Excel Import — Ver2.0.5 / build 20260705-v243
+/* OUKEI HUB Excel Import — Ver2.0.6 / build 20260705-v244
  * Past RAM revenue + sales migration from Excel → revenueLog / salesLog
  * Layout auto-detect: Pattern① separate 売上 sheet / Pattern② combined in 収益 sheet
  */
@@ -271,28 +271,90 @@ function xiFindSalesOnlyBlocks(rows) {
   return blocks;
 }
 
+function xiBlockSegmentStart(block) {
+  if (!block) return 0;
+  if (block.totalRow >= 0) return block.totalRow;
+  if (block.opRow >= 0) return block.opRow;
+  if (block.salesDailyRow >= 0) return block.salesDailyRow;
+  return 0;
+}
+
 function xiAttachSalesRowsToBlocks(blocks, rows) {
+  let usedPairs = {};
   blocks.forEach(function (block, idx) {
     block.salesDailyRow = -1;
     block.salesTotalRow = -1;
     let start = block.revRow + 1;
-    let end = idx + 1 < blocks.length && blocks[idx + 1].totalRow >= 0
-      ? blocks[idx + 1].totalRow
-      : Math.min(start + 14, rows.length);
+    let end = rows.length;
+    for (let k = idx + 1; k < blocks.length; k++) {
+      let boundary = xiBlockSegmentStart(blocks[k]);
+      if (boundary > start) {
+        end = boundary;
+        break;
+      }
+    }
+    end = Math.min(end, start + 20);
     for (let j = start; j < end; j++) {
       let sub = xiNormalizeLabel(xiCellLabel(rows[j]));
-      if (xiIsSalesDailyLabel(sub)) block.salesDailyRow = j;
-      if (xiIsSalesTotalLabel(sub)) block.salesTotalRow = j;
+      if (block.salesDailyRow < 0 && xiIsSalesDailyLabel(sub)) {
+        block.salesDailyRow = j;
+      } else if (block.salesTotalRow < 0 && block.salesDailyRow >= 0 && j > block.salesDailyRow && xiIsSalesTotalLabel(sub)) {
+        block.salesTotalRow = j;
+      }
+    }
+    if (block.salesDailyRow >= 0 && block.salesTotalRow >= 0) {
+      let pairKey = block.salesDailyRow + ':' + block.salesTotalRow;
+      if (usedPairs[pairKey]) {
+        block.salesDailyRow = -1;
+        block.salesTotalRow = -1;
+      } else {
+        usedPairs[pairKey] = block.accountKey;
+      }
     }
   });
 }
 
-function xiResolveHubAccountForKey(accountKey) {
+function xiBuildDistinctRamAccountIdMap() {
+  let used = {};
+  let map = {};
+  XI_RAM_ACCOUNTS.forEach(function (key) {
+    let id = null;
+    if (typeof pdResolveRamAccountIdByExcelKey === 'function') {
+      id = pdResolveRamAccountIdByExcelKey(key, used);
+    }
+    if (id && used[id]) id = null;
+    if (id) used[id] = true;
+    map[key] = id;
+  });
+  return map;
+}
+
+function xiResolveHubAccountForKey(accountKey, accountIdMap) {
+  if (accountIdMap && accountIdMap[accountKey]) return accountIdMap[accountKey];
   if (typeof pdResolveRamAccountIdByExcelKey === 'function') {
     let id = pdResolveRamAccountIdByExcelKey(accountKey);
     if (id) return id;
   }
   return null;
+}
+
+function xiDeduplicateSalesImportRecords(records) {
+  let seen = {};
+  return (records || []).slice().sort(function (a, b) {
+    return XI_RAM_ACCOUNTS.indexOf(a.accountKey) - XI_RAM_ACCOUNTS.indexOf(b.accountKey);
+  }).filter(function (rec) {
+    if (rec._salesDailyRow == null || rec._salesTotalRow == null) return true;
+    if (rec._salesDailyRow < 0 || rec._salesTotalRow < 0) return true;
+    let key = rec.dateKey + ':' + rec._salesDailyRow + ':' + rec._salesTotalRow;
+    if (seen[key]) return false;
+    seen[key] = rec.accountKey;
+    return true;
+  }).map(function (rec) {
+    let copy = Object.assign({}, rec);
+    delete copy._salesDailyRow;
+    delete copy._salesTotalRow;
+    return copy;
+  });
 }
 
 function xiGetHubAccountDisplay(accountId) {
@@ -313,8 +375,9 @@ function xiBuildAccountStatsFromRecords(records) {
     if (!stats[key]) return;
     stats[key].days += 1;
   });
+  let accountIdMap = xiBuildDistinctRamAccountIdMap();
   XI_RAM_ACCOUNTS.forEach(function (key) {
-    let accountId = xiResolveHubAccountForKey(key);
+    let accountId = accountIdMap[key] || null;
     stats[key].accountId = accountId;
     stats[key].mapped = !!accountId;
     stats[key].hubLabel = accountId ? xiGetHubAccountDisplay(accountId) : '';
@@ -335,8 +398,9 @@ function xiBuildSalesStatsFromRecords(records) {
 }
 
 function xiApplyAccountIdsToRecords(records) {
+  let accountIdMap = xiBuildDistinctRamAccountIdMap();
   return (records || []).map(function (rec) {
-    let accountId = rec.accountId || xiResolveHubAccountForKey(rec.accountKey);
+    let accountId = rec.accountId || xiResolveHubAccountForKey(rec.accountKey, accountIdMap);
     return Object.assign({}, rec, { accountId: accountId });
   });
 }
@@ -516,11 +580,13 @@ function xiBuildSalesRecords(blocks, rows, dayCols, year, month) {
         accountKey: block.accountKey,
         accountId: accountId,
         todaySales: daily != null ? daily : 0,
-        totalSales: total
+        totalSales: total,
+        _salesDailyRow: block.salesDailyRow,
+        _salesTotalRow: block.salesTotalRow
       });
     });
   });
-  return xiApplyAccountIdsToRecords(records);
+  return xiApplyAccountIdsToRecords(xiDeduplicateSalesImportRecords(records));
 }
 
 function xiMonthHasSalesInWorkbook(workbook, year, month, revenueSheetName) {

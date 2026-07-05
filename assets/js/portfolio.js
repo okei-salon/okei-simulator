@@ -1,4 +1,4 @@
-/* OUKEI HUB Portfolio UI — Ver2.0.7 / Phase2 operating settings */
+/* OUKEI HUB Portfolio UI — Ver2.0.6 */
 
 var PF_COLORS = {
   ram: '#f97316',
@@ -1488,6 +1488,28 @@ function pfBuildAllocationRows() {
     });
 }
 
+function pfFitDonutCenterText(rootEl) {
+  if (!rootEl) return;
+  let center = rootEl.querySelector('.pfDonutCenter');
+  if (!center) return;
+  let usdEl = center.querySelector('b');
+  let yenEl = center.querySelector('small');
+  if (usdEl) usdEl.style.fontSize = '';
+  if (yenEl) yenEl.style.fontSize = '';
+  let usdSize = 20;
+  let yenSize = 10;
+  if (usdEl) usdEl.style.fontSize = usdSize + 'px';
+  if (yenEl) yenEl.style.fontSize = yenSize + 'px';
+  for (let i = 0; i < 24; i++) {
+    if (center.scrollHeight <= center.clientHeight + 1 && center.scrollWidth <= center.clientWidth + 1) break;
+    if (usdSize > 11) usdSize -= 1;
+    if (yenSize > 8) yenSize -= 1;
+    if (usdEl) usdEl.style.fontSize = usdSize + 'px';
+    if (yenEl) yenEl.style.fontSize = yenSize + 'px';
+    if (usdSize <= 11 && yenSize <= 8) break;
+  }
+}
+
 function pfRenderAllocation() {
   let el = document.getElementById('pfAllocationChart');
   if (!el) return;
@@ -1523,6 +1545,7 @@ function pfRenderAllocation() {
     '<div class="pfDonutHole"></div></div>' +
     '<div class="pfDonutCenter"><span>運用額</span><b>' + pfDisplayUsd(operatingTotal, operatingTotal > 0) + '</b><small>(' + (operatingTotal > 0 ? pfYenRef(operatingTotal) : pfEmptyMark()) + ')</small></div></div>' +
     '<div class="pfLegendList">' + legend + '</div></div>';
+  pfFitDonutCenterText(el);
 }
 
 function pfRenderStackedBars() {

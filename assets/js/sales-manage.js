@@ -1,4 +1,4 @@
-/* OUKEI HUB Sales Management — Ver1.9.5 */
+/* OUKEI HUB Sales Management — Ver2.0.6 */
 
 /*
  * settings.salesLog[dateKey] structure (future Excel / 実績入力):
@@ -816,6 +816,14 @@ function smRenderDailyTable() {
   }
 }
 
+function smEstimateAxisPadLeft(labels) {
+  let maxLen = 0;
+  (labels || []).forEach(function (label) {
+    maxLen = Math.max(maxLen, String(label || '').length);
+  });
+  return Math.max(52, Math.ceil(maxLen * 6.5) + 10);
+}
+
 function smRenderCompareChart() {
   let el = document.getElementById('smCompareChart');
   if (!el) return;
@@ -832,13 +840,17 @@ function smRenderCompareChart() {
     let axisMax = typeof niceChartAxisMax === 'function' ? niceChartAxisMax(dataMax) : Math.max(dataMax, 1800);
     let cc = { current: '#60a5fa', prev: '#64748b', label: '#7f97b3', grid: 'rgba(80,110,150,.25)', dotStroke: '#0b182b' };
 
-    let w = 520;
-    let h = 168;
-    let padLeft = 42;
+    let ticks = typeof chartAxisTicks === 'function' ? chartAxisTicks(axisMax, 5) : [0, axisMax / 2, axisMax];
+    let tickLabels = ticks.map(function (t) {
+      return typeof formatAxisDollar === 'function' ? formatAxisDollar(t) : smMoney(t);
+    });
     let padRight = 16;
+    let plotW = 462;
+    let padLeft = smEstimateAxisPadLeft(tickLabels);
+    let w = padLeft + plotW + padRight;
+    let h = 168;
     let padTop = 10;
     let padBottom = 20;
-    let plotW = w - padLeft - padRight;
     let plotH = h - padTop - padBottom;
 
     function plotY(val) {
@@ -866,12 +878,11 @@ function smRenderCompareChart() {
       return '<polyline points="' + seg.join(' ') + '" fill="none" stroke="' + cc.current + '" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></polyline>';
     }).join('');
 
-    let ticks = typeof chartAxisTicks === 'function' ? chartAxisTicks(axisMax, 5) : [0, axisMax / 2, axisMax];
-    let grid = ticks.map(function (t) {
+    let grid = ticks.map(function (t, idx) {
       let yPos = plotY(t);
-      let label = typeof formatAxisDollar === 'function' ? formatAxisDollar(t) : smMoney(t);
+      let label = tickLabels[idx];
       return '<line x1="' + padLeft + '" y1="' + yPos.toFixed(1) + '" x2="' + (w - padRight) + '" y2="' + yPos.toFixed(1) + '" stroke="' + cc.grid + '" stroke-width="1"></line>' +
-        '<text x="' + (padLeft - 6) + '" y="' + (yPos + 3.5).toFixed(1) + '" text-anchor="end" fill="' + cc.label + '" font-size="10" font-weight="700">' + label + '</text>';
+        '<text class="rmCompareYLabel" x="' + (padLeft - 8) + '" y="' + (yPos + 3.5).toFixed(1) + '" text-anchor="end" fill="' + cc.label + '" font-size="10" font-weight="700">' + label + '</text>';
     }).join('');
 
     let xSvg = SM_CHART_X_DAYS.filter(function (d) { return d <= days; }).map(function (d) {

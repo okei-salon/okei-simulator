@@ -279,6 +279,7 @@ function pdCollectSalesAccountIds(projectKey) {
 }
 
 var PD_PROJECT_KEYS = ['ram', 'orca', 'cary', 'genesis', 'other'];
+var PD_RAM_EXCEL_KEYS = ['kai1', 'kai2'];
 var PD_SCHEMA_VERSION = 1;
 
 function ensurePerformanceLogs() {
@@ -294,6 +295,12 @@ function ensurePerformanceLogs() {
   }
   if (!settings.performanceMeta || typeof settings.performanceMeta !== 'object') {
     settings.performanceMeta = { schemaVersion: PD_SCHEMA_VERSION };
+  }
+  if (settings.performanceMeta.salesImportDedupeFixVersion !== 2) {
+    settings.performanceMeta.salesImportDedupeFixVersion = 2;
+    if (pdRepairRamSalesImportDuplicates()) {
+      pdPersist();
+    }
   }
 }
 
@@ -756,6 +763,12 @@ function pdImportRamSalesRecords(records) {
   Object.keys(byDate).sort().forEach(function (dateKey) {
     let entry = pdGetSalesEntryRaw(dateKey) || {};
     entry.accounts = entry.accounts || {};
+    Object.keys(entry.accounts).forEach(function (id) {
+      let ae = entry.accounts[id];
+      if (ae && ae.projectKey === 'ram' && ae.salesSource === 'import') {
+        delete entry.accounts[id];
+      }
+    });
     byDate[dateKey].forEach(function (rec) {
       entry.accounts[rec.accountId] = {
         projectKey: 'ram',
@@ -765,6 +778,7 @@ function pdImportRamSalesRecords(records) {
       };
       imported += 1;
     });
+    entry = pdDedupeImportedRamSalesAccounts(entry);
     entry = pdRecalculateSalesEntry(entry);
     pdWriteSalesEntry(dateKey, entry);
   });
@@ -932,15 +946,19 @@ function pdImportOrcaRevenueRecords(records) {
   return { imported: imported, dates: Object.keys(byDate).length };
 }
 
-function pdResolveRamAccountIdByExcelKey(excelKey) {
+function pdResolveRamAccountIdByExcelKey(excelKey, usedIds) {
   if (!excelKey) return null;
   let key = String(excelKey).trim();
   if (key.normalize) key = key.normalize('NFKC');
   key = key.replace(/^@/, '').toLowerCase();
 
+  function isUsed(id) {
+    return !!(id && usedIds && usedIds[id]);
+  }
+
   if (typeof settings !== 'undefined' && settings.ramExcelAccountMap) {
     let mapped = settings.ramExcelAccountMap[key] || settings.ramExcelAccountMap[excelKey];
-    if (mapped) return mapped;
+    if (mapped && !isUsed(mapped)) return mapped;
   }
 
   function normalizeToken(field) {
@@ -969,6 +987,7 @@ function pdResolveRamAccountIdByExcelKey(excelKey) {
     let accounts = getRamInputAccounts();
     for (let i = 0; i < accounts.length; i++) {
       let acc = accounts[i];
+      if (isUsed(acc.id)) continue;
       let token = normalizeToken(acc.username);
       if (key === 'kai1' && (token === 'kai1' || token === '甲斐1' || token === '甲斐' || token === 'kai')) {
         return acc.id;
@@ -983,6 +1002,7 @@ function pdResolveRamAccountIdByExcelKey(excelKey) {
   if (typeof getRootIdsForSummary === 'function' && typeof members !== 'undefined') {
     let ids = getRootIdsForSummary();
     for (let i = 0; i < ids.length; i++) {
+      if (isUsed(ids[i])) continue;
       let m = members.find(function (x) { return x.id === ids[i]; });
       if (m && matchesExcelKey(m)) return m.id;
     }
@@ -990,11 +1010,81 @@ function pdResolveRamAccountIdByExcelKey(excelKey) {
 
   if (typeof members !== 'undefined') {
     for (let j = 0; j < members.length; j++) {
+      if (isUsed(members[j].id)) continue;
       if (matchesExcelKey(members[j])) return members[j].id;
     }
   }
 
   return null;
+}
+
+function pdRamAccountExcelKeyPriority(accountId) {
+  if (!accountId) return 99;
+  if (typeof settings !== 'undefined' && settings.ramExcelAccountMap) {
+    let keys = Object.keys(settings.ramExcelAccountMap);
+    for (let i = 0; i < keys.length; i++) {
+      if (settings.ramExcelAccountMap[keys[i]] === accountId) {
+        let idx = PD_RAM_EXCEL_KEYS.indexOf(keys[i]);
+        return idx >= 0 ? idx : 50 + i;
+      }
+    }
+  }
+  for (let k = 0; k < PD_RAM_EXCEL_KEYS.length; k++) {
+    if (pdResolveRamAccountIdByExcelKey(PD_RAM_EXCEL_KEYS[k]) === accountId) return k;
+  }
+  return 99;
+}
+
+function pdDedupeImportedRamSalesAccounts(entry) {
+  entry = entry || {};
+  if (!entry.accounts) return entry;
+  let importIds = Object.keys(entry.accounts).filter(function (id) {
+    let ae = entry.accounts[id];
+    return ae && ae.projectKey === 'ram' && ae.salesSource === 'import';
+  });
+  if (importIds.length <= 1) return entry;
+
+  let groups = {};
+  importIds.forEach(function (id) {
+    let ae = entry.accounts[id];
+    let fp = String(pdRound(ae.todaySales)) + '|' + String(ae.totalSales == null ? '' : pdRound(ae.totalSales));
+    if (!groups[fp]) groups[fp] = [];
+    groups[fp].push(id);
+  });
+
+  Object.keys(groups).forEach(function (fp) {
+    let ids = groups[fp];
+    if (ids.length <= 1) return;
+    ids.sort(function (a, b) {
+      return pdRamAccountExcelKeyPriority(a) - pdRamAccountExcelKeyPriority(b);
+    });
+    for (let i = 1; i < ids.length; i++) {
+      delete entry.accounts[ids[i]];
+    }
+  });
+  return entry;
+}
+
+function pdRepairRamSalesImportDuplicates() {
+  if (typeof settings === 'undefined' || !settings.salesLog || typeof settings.salesLog !== 'object') {
+    return false;
+  }
+  let changed = false;
+  Object.keys(settings.salesLog).forEach(function (dateKey) {
+    let entry = settings.salesLog[dateKey];
+    if (!entry || !entry.accounts) return;
+    let before = JSON.stringify(entry.accounts);
+    entry = pdDedupeImportedRamSalesAccounts(JSON.parse(JSON.stringify(entry)));
+    entry = pdRecalculateSalesEntry(entry);
+    if (JSON.stringify(entry.accounts) !== before) {
+      settings.salesLog[dateKey] = entry;
+      changed = true;
+    }
+  });
+  if (changed) {
+    settings.lastUpdate = new Date().toLocaleString();
+  }
+  return changed;
 }
 
 function pdGetRevenueEntryRaw(dateKey) {

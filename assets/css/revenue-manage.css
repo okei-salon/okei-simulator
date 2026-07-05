@@ -588,18 +588,25 @@ td.pfEditableCell {
 
 .rmCompareChart {
   min-height: 168px;
+  overflow: visible;
+}
+
+.salesManagePage .rmChartPanel {
+  overflow: visible;
 }
 
 .rmCompareChartInner {
   position: relative;
   width: 100%;
   min-height: 168px;
+  overflow: visible;
 }
 
 .rmCompareSvg {
   width: 100%;
   height: 168px;
   display: block;
+  overflow: visible;
 }
 
 .rmCompareGrid {
