@@ -300,6 +300,44 @@ function pfFilterManageAccounts(projectKey, accounts, options) {
   });
 }
 
+function pfLookupManageAccountName(projectKey, accountId) {
+  if (!accountId) return '';
+  if (projectKey === 'ram') {
+    if (typeof members !== 'undefined') {
+      let m = members.find(function (x) { return x.id === accountId; });
+      if (m) {
+        let un = (m.username || m.name || '').replace(/^@/, '').trim();
+        if (un) return un;
+      }
+    }
+    if (typeof getRamInputAccounts === 'function') {
+      let acc = getRamInputAccounts().find(function (a) { return a.id === accountId; });
+      if (acc && acc.username) return String(acc.username).replace(/^@/, '').trim();
+    }
+    if (typeof settings !== 'undefined' && settings.ramExcelAccountMap) {
+      let keys = Object.keys(settings.ramExcelAccountMap);
+      for (let i = 0; i < keys.length; i++) {
+        if (settings.ramExcelAccountMap[keys[i]] === accountId) return keys[i];
+      }
+    }
+  }
+  if (projectKey === 'orca' && typeof settings !== 'undefined' && Array.isArray(settings.orcaInputAccounts)) {
+    let o = settings.orcaInputAccounts.find(function (x) { return x.id === accountId; });
+    if (o) {
+      let un = (o.username || o.name || '').replace(/^@/, '').trim();
+      if (un) return un;
+    }
+  }
+  if (projectKey === 'cary' && typeof settings !== 'undefined' && Array.isArray(settings.caryInputAccounts)) {
+    let c = settings.caryInputAccounts.find(function (x) { return x.id === accountId; });
+    if (c) {
+      let un = (c.username || c.name || '').replace(/^@/, '').trim();
+      if (un) return un;
+    }
+  }
+  return '';
+}
+
 function pfResolveManageAccounts(projectKey, liveAccounts, demoAccounts) {
   let annotate = function (list) {
     return pfNormalizeRamSeriesColors(projectKey, pfAnnotateAccountSeries(list));
@@ -319,14 +357,24 @@ function pfResolveManageAccounts(projectKey, liveAccounts, demoAccounts) {
     pdCollectRevenueAccountIds(projectKey).forEach(function (id) {
       if (seen[id]) return;
       seen[id] = true;
-      merged.push({ id: id, name: id, parentId: null, depth: 0 });
+      merged.push({
+        id: id,
+        name: pfLookupManageAccountName(projectKey, id) || id,
+        parentId: null,
+        depth: 0
+      });
     });
   }
   if (typeof pdCollectSalesAccountIds === 'function') {
     pdCollectSalesAccountIds(projectKey).forEach(function (id) {
       if (seen[id]) return;
       seen[id] = true;
-      merged.push({ id: id, name: id, parentId: null, depth: 0 });
+      merged.push({
+        id: id,
+        name: pfLookupManageAccountName(projectKey, id) || id,
+        parentId: null,
+        depth: 0
+      });
     });
   }
   merged = pfFilterManageAccounts(projectKey, merged);
@@ -356,6 +404,8 @@ function pfRegisterManageDisplayFromEntry(projectKey, accountId) {
 function pfGetManageAccountDisplayName(projectKey, accountId, defaultName) {
   let bucket = pfGetManageDisplayBucket(projectKey);
   if (bucket.labels && bucket.labels[accountId]) return bucket.labels[accountId];
+  let resolved = pfLookupManageAccountName(projectKey, accountId);
+  if (resolved) return resolved;
   return defaultName || accountId;
 }
 

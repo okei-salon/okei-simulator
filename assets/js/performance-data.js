@@ -772,14 +772,91 @@ function pdImportRamSalesRecords(records) {
   return { imported: imported, dates: Object.keys(byDate).length };
 }
 
+function pdClearRamExcelImportMonth(year, month) {
+  ensurePerformanceLogs();
+  let daysInMonth = new Date(year, month + 1, 0).getDate();
+  let removedRevenue = 0;
+  let removedSales = 0;
+
+  for (let d = 1; d <= daysInMonth; d++) {
+    let dateKey = typeof revenueDateKey === 'function'
+      ? revenueDateKey(year, month, d)
+      : year + '-' + String(month + 1).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+
+    let entry = settings.revenueLog[dateKey];
+    if (entry) {
+      let touched = false;
+      if (entry.ramAccounts) {
+        Object.keys(entry.ramAccounts).forEach(function (id) {
+          let ae = entry.ramAccounts[id];
+          if (ae && ae.operationSource === 'import') {
+            delete entry.ramAccounts[id];
+            touched = true;
+            removedRevenue += 1;
+          }
+        });
+      }
+      if (entry.accounts) {
+        Object.keys(entry.accounts).forEach(function (id) {
+          let ae = entry.accounts[id];
+          if (ae && ae.projectKey === 'ram' && ae.operationSource === 'import') {
+            delete entry.accounts[id];
+            touched = true;
+          }
+        });
+      }
+      if (touched) {
+        entry = pdRecalculateRevenueEntry(entry, dateKey);
+        if (pdRevenueEntryHasData(entry)) {
+          settings.revenueLog[dateKey] = entry;
+        } else {
+          delete settings.revenueLog[dateKey];
+        }
+      }
+    }
+
+    let salesEntry = settings.salesLog[dateKey];
+    if (salesEntry && salesEntry.accounts) {
+      let salesTouched = false;
+      Object.keys(salesEntry.accounts).forEach(function (id) {
+        let ae = salesEntry.accounts[id];
+        if (ae && ae.projectKey === 'ram' && ae.salesSource === 'import') {
+          delete salesEntry.accounts[id];
+          salesTouched = true;
+          removedSales += 1;
+        }
+      });
+      if (salesTouched) {
+        salesEntry = pdRecalculateSalesEntry(salesEntry);
+        if (pdSalesEntryHasData(salesEntry)) {
+          settings.salesLog[dateKey] = salesEntry;
+        } else {
+          delete settings.salesLog[dateKey];
+        }
+      }
+    }
+  }
+
+  if (removedRevenue || removedSales) {
+    pdPersist();
+    pdNotifyPerformanceChanged({ type: 'clear-import-month', year: year, month: month });
+  }
+  return { removedRevenue: removedRevenue, removedSales: removedSales };
+}
+
 function pdImportRamExcelMonth(revenueRecords, salesRecords, meta) {
   meta = meta || {};
+  if (meta.forceReimport && meta.year != null && meta.month != null) {
+    pdClearRamExcelImportMonth(meta.year, meta.month);
+  }
   let revResult = { imported: 0, dates: 0 };
   let salesResult = { imported: 0, dates: 0 };
-  if (!meta.revenueDone && revenueRecords && revenueRecords.length) {
+  let skipRev = !meta.forceReimport && meta.revenueDone;
+  let skipSales = !meta.forceReimport && meta.salesDone;
+  if (!skipRev && revenueRecords && revenueRecords.length) {
     revResult = pdImportRamRevenueRecords(revenueRecords);
   }
-  if (!meta.salesDone && salesRecords && salesRecords.length) {
+  if (!skipSales && salesRecords && salesRecords.length) {
     salesResult = pdImportRamSalesRecords(salesRecords);
   }
   if (meta.year != null && meta.month != null) {
@@ -1488,6 +1565,7 @@ if (typeof window !== 'undefined') {
   window.pdImportRamRevenueRecordsWithMeta = pdImportRamRevenueRecordsWithMeta;
   window.pdImportRamSalesRecords = pdImportRamSalesRecords;
   window.pdImportRamExcelMonth = pdImportRamExcelMonth;
+  window.pdClearRamExcelImportMonth = pdClearRamExcelImportMonth;
   window.pdImportOrcaRevenueRecords = pdImportOrcaRevenueRecords;
   window.pdResolveRamAccountIdByExcelKey = pdResolveRamAccountIdByExcelKey;
   window.pdSumProjectDayRevenue = pdSumProjectDayRevenue;

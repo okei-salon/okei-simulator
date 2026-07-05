@@ -13,7 +13,7 @@ var hubAuthBusy = false;
 var hubAuthInitDone = false;
 var hubAuthBootstrapStarted = false;
 var hubLastAuthUid = '';
-var HUB_AUTH_JS_VERSION = 'v240';
+var HUB_AUTH_JS_VERSION = 'v243';
 var HUB_AUTH_DEBUG_STORAGE_KEY = 'oukei_hub_auth_debug';
 var hubAuthDebug = {
   jsVersion: HUB_AUTH_JS_VERSION,

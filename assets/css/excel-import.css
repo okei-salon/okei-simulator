@@ -155,6 +155,71 @@
   color: #fde68a;
 }
 
+.xiDetectRow.xiDetectClickable {
+  cursor: pointer;
+}
+
+.xiDetectRow.xiDetectClickable:hover {
+  background: rgba(59, 130, 246, 0.08);
+}
+
+.xiDetectRow.xiDetectSelected {
+  background: rgba(59, 130, 246, 0.14);
+  outline: 1px solid rgba(96, 165, 250, 0.45);
+  border-radius: 8px;
+}
+
+.xiDetectAction {
+  display: block;
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 700;
+  color: #93c5fd;
+  margin-top: 2px;
+}
+
+.xiDetectPickHelp {
+  color: #bfdbfe;
+  margin-bottom: 8px;
+}
+
+.xiDetectRow.xiDetectPending b .xiDetectAction,
+.xiDetectRow.xiDetectPending .xiDetectAction {
+  color: #fde68a;
+}
+
+.xiOverwriteConfirm {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(2, 8, 23, 0.72);
+}
+
+.xiOverwriteConfirm.hidden {
+  display: none;
+}
+
+.xiOverwriteDialog {
+  width: min(420px, 100%);
+  border-color: rgba(251, 191, 36, 0.35);
+}
+
+.xiOverwriteConfirmText {
+  margin: 0 0 16px;
+  line-height: 1.6;
+  white-space: pre-line;
+}
+
+.xiOverwriteActions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
 .xiSuccess {
   border-color: rgba(34, 197, 94, 0.45);
   background: rgba(34, 197, 94, 0.08);
