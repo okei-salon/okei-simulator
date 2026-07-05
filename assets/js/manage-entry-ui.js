@@ -6,6 +6,7 @@ var pfManageContextMenuEl = null;
 var pfManageContextPressTimer = null;
 var pfManageContextMeta = null;
 var pfManageContextHandlers = null;
+var pfDisplayHideConfirmPending = null;
 
 var PF_SERIES_COLORS = ['#ef4444', '#3b82f6', '#22c55e', '#f59e0b', '#a855f7', '#ec4899', '#14b8a6'];
 
@@ -200,6 +201,7 @@ function pfBindEditableAmountClicks(table, openHandler) {
 }
 
 var PF_MANAGE_PROJECT_KEYS = ['ram', 'orca', 'cary', 'genesis', 'other'];
+var PF_PERFORMANCE_INPUT_PROJECT_KEYS = ['ram', 'orca', 'cary'];
 
 function pfEscapeHtml(text) {
   if (typeof escapeHtml === 'function') return escapeHtml(text);
@@ -234,6 +236,111 @@ function pfEnsureManageDisplayAccounts() {
 
 function pfPersistManageDisplayAccounts() {
   pfEnsureManageDisplayAccounts();
+  if (typeof markSettingsDirty === 'function') markSettingsDirty();
+  if (typeof persistHubSettings === 'function') persistHubSettings();
+}
+
+function pfEnsurePerformanceInputHiddenAccounts() {
+  if (typeof settings === 'undefined') return;
+  if (!settings.performanceInputHiddenAccounts || typeof settings.performanceInputHiddenAccounts !== 'object') {
+    settings.performanceInputHiddenAccounts = {};
+  }
+  PF_PERFORMANCE_INPUT_PROJECT_KEYS.forEach(function (key) {
+    if (!Array.isArray(settings.performanceInputHiddenAccounts[key])) {
+      settings.performanceInputHiddenAccounts[key] = [];
+    }
+  });
+}
+
+function pfNormalizeHiddenIdList(raw) {
+  if (!raw) return [];
+  if (Array.isArray(raw)) {
+    return raw.filter(function (id) { return typeof id === 'string' && id; });
+  }
+  if (typeof raw === 'object') {
+    return Object.keys(raw).filter(function (id) {
+      let val = raw[id];
+      return val === false || val === 0 || val === 'false';
+    });
+  }
+  return [];
+}
+
+function pfMigrateDisplaySettingsCompat() {
+  if (typeof settings === 'undefined') return;
+  pfEnsureManageDisplayAccounts();
+  pfEnsurePerformanceInputHiddenAccounts();
+  PF_PERFORMANCE_INPUT_PROJECT_KEYS.forEach(function (key) {
+    settings.performanceInputHiddenAccounts[key] =
+      pfNormalizeHiddenIdList(settings.performanceInputHiddenAccounts[key]);
+  });
+  PF_MANAGE_PROJECT_KEYS.forEach(function (key) {
+    let bucket = settings.manageDisplayAccounts[key];
+    if (!bucket) return;
+    bucket.removed = pfNormalizeHiddenIdList(bucket.removed);
+    if (!Array.isArray(bucket.orgAdded)) bucket.orgAdded = [];
+  });
+}
+
+function pfIsPerformanceInputAccountHidden(projectKey, accountId) {
+  if (!projectKey || !accountId) return false;
+  pfEnsurePerformanceInputHiddenAccounts();
+  let list = settings.performanceInputHiddenAccounts[projectKey];
+  if (!Array.isArray(list)) return false;
+  return list.indexOf(accountId) >= 0;
+}
+
+function pfIsPerformanceInputAccountVisible(projectKey, accountId) {
+  return !pfIsPerformanceInputAccountHidden(projectKey, accountId);
+}
+
+function pfIsRevenueManageAccountVisible(projectKey, accountId) {
+  if (!projectKey || !accountId) return true;
+  pfEnsureManageDisplayAccounts();
+  let bucket = pfGetManageDisplayBucket(projectKey);
+  let removed = Array.isArray(bucket.removed) ? bucket.removed : [];
+  return removed.indexOf(accountId) < 0;
+}
+
+function pfSetPerformanceInputAccountVisible(projectKey, accountId, visible) {
+  if (!projectKey || !accountId) return;
+  if (visible) {
+    pfRestorePerformanceInputAccount(projectKey, accountId);
+    return;
+  }
+  pfEnsurePerformanceInputHiddenAccounts();
+  let list = settings.performanceInputHiddenAccounts[projectKey];
+  if (list.indexOf(accountId) < 0) list.push(accountId);
+  pfPersistPerformanceInputHiddenAccounts();
+}
+
+function pfSetRevenueManageAccountVisible(projectKey, accountId, visible) {
+  if (!projectKey || !accountId) return;
+  let bucket = pfGetManageDisplayBucket(projectKey);
+  if (visible) {
+    bucket.removed = bucket.removed.filter(function (id) { return id !== accountId; });
+  } else if (bucket.removed.indexOf(accountId) < 0) {
+    bucket.removed.push(accountId);
+  }
+  pfPersistManageDisplayAccounts();
+}
+
+function pfHidePerformanceInputAccount(projectKey, accountId) {
+  pfSetPerformanceInputAccountVisible(projectKey, accountId, false);
+}
+
+function pfRestorePerformanceInputAccount(projectKey, accountId) {
+  if (!projectKey || !accountId) return;
+  pfEnsurePerformanceInputHiddenAccounts();
+  settings.performanceInputHiddenAccounts[projectKey] =
+    (settings.performanceInputHiddenAccounts[projectKey] || []).filter(function (id) {
+      return id !== accountId;
+    });
+  pfPersistPerformanceInputHiddenAccounts();
+}
+
+function pfPersistPerformanceInputHiddenAccounts() {
+  pfEnsurePerformanceInputHiddenAccounts();
   if (typeof markSettingsDirty === 'function') markSettingsDirty();
   if (typeof persistHubSettings === 'function') persistHubSettings();
 }
@@ -280,13 +387,38 @@ function pfHasManageSalesEntryData(projectKey, accountId) {
   });
 }
 
+function pfGetPerformanceInputRegisteredAccountIds(projectKey) {
+  if (projectKey === 'ram' && typeof getRamAllRootAccounts === 'function') {
+    return getRamAllRootAccounts().map(function (a) { return a.id; });
+  }
+  if (projectKey === 'orca' && typeof getOrcaInputAccounts === 'function') {
+    return getOrcaInputAccounts().map(function (a) { return a.id; });
+  }
+  if (projectKey === 'cary' && typeof getCaryInputAccounts === 'function') {
+    return getCaryInputAccounts().map(function (a) { return a.id; });
+  }
+  return [];
+}
+
+function pfIsPerformanceInputRegisteredAccount(projectKey, accountId) {
+  if (!projectKey || !accountId) return false;
+  return pfGetPerformanceInputRegisteredAccountIds(projectKey).indexOf(accountId) >= 0;
+}
+
 function pfIsManageAccountVisible(projectKey, accountId) {
-  let bucket = pfGetManageDisplayBucket(projectKey);
-  if (bucket.removed.indexOf(accountId) >= 0) return false;
-  if (bucket.orgAdded.indexOf(accountId) >= 0) return true;
-  if (pfHasManageRevenueEntryData(projectKey, accountId)) return true;
-  if (pfHasManageSalesEntryData(projectKey, accountId)) return true;
-  return false;
+  if (!pfIsRevenueManageAccountVisible(projectKey, accountId)) return false;
+  if (projectKey === 'ram' || projectKey === 'orca' || projectKey === 'cary') {
+    return pfIsPerformanceInputRegisteredAccount(projectKey, accountId);
+  }
+  return true;
+}
+
+function pfFilterToPerformanceInputRegistered(projectKey, accounts) {
+  let registered = pfGetPerformanceInputRegisteredAccountIds(projectKey);
+  if (!registered.length) return accounts || [];
+  let set = {};
+  registered.forEach(function (id) { set[id] = true; });
+  return (accounts || []).filter(function (a) { return set[a.id]; });
 }
 
 function pfFilterManageAccounts(projectKey, accounts, options) {
@@ -309,6 +441,10 @@ function pfLookupManageAccountName(projectKey, accountId) {
         let un = (m.username || m.name || '').replace(/^@/, '').trim();
         if (un) return un;
       }
+    }
+    if (typeof getRamAllRootAccounts === 'function') {
+      let acc = getRamAllRootAccounts().find(function (a) { return a.id === accountId; });
+      if (acc && acc.username) return String(acc.username).replace(/^@/, '').trim();
     }
     if (typeof getRamInputAccounts === 'function') {
       let acc = getRamInputAccounts().find(function (a) { return a.id === accountId; });
@@ -350,11 +486,13 @@ function pfResolveManageAccounts(projectKey, liveAccounts, demoAccounts) {
       )
     );
   }
-  let merged = (liveAccounts || []).slice();
+  let merged = pfFilterToPerformanceInputRegistered(projectKey, liveAccounts || []);
   let seen = {};
   merged.forEach(function (a) { seen[a.id] = true; });
+  let registeredOnly = projectKey === 'ram' || projectKey === 'orca' || projectKey === 'cary';
   if (typeof pdCollectRevenueAccountIds === 'function') {
     pdCollectRevenueAccountIds(projectKey).forEach(function (id) {
+      if (registeredOnly && !pfIsPerformanceInputRegisteredAccount(projectKey, id)) return;
       if (seen[id]) return;
       seen[id] = true;
       merged.push({
@@ -367,6 +505,7 @@ function pfResolveManageAccounts(projectKey, liveAccounts, demoAccounts) {
   }
   if (typeof pdCollectSalesAccountIds === 'function') {
     pdCollectSalesAccountIds(projectKey).forEach(function (id) {
+      if (registeredOnly && !pfIsPerformanceInputRegisteredAccount(projectKey, id)) return;
       if (seen[id]) return;
       seen[id] = true;
       merged.push({
@@ -384,9 +523,9 @@ function pfResolveManageAccounts(projectKey, liveAccounts, demoAccounts) {
 
 function pfAddManageDisplayFromOrg(projectKey, accountId) {
   if (!projectKey || !accountId) return;
+  pfSetRevenueManageAccountVisible(projectKey, accountId, true);
   let bucket = pfGetManageDisplayBucket(projectKey);
   if (bucket.orgAdded.indexOf(accountId) < 0) bucket.orgAdded.push(accountId);
-  bucket.removed = bucket.removed.filter(function (id) { return id !== accountId; });
   pfPersistManageDisplayAccounts();
 }
 
@@ -563,14 +702,19 @@ function pfConfirmManageDeleteData(projectKey, accountId, accountName, onDeleted
     let confirmBtn = document.getElementById('pfManageDeleteDataConfirmBtn');
     if (confirmBtn) {
       confirmBtn.onclick = function () {
+        let deleted = 0;
         if (typeof pdDeleteAccountPerformanceData === 'function') {
-          pdDeleteAccountPerformanceData(projectKey, accountId);
+          deleted = pdDeleteAccountPerformanceData(projectKey, accountId);
         }
         pfCloseEntryModal();
-        if (typeof showToast === 'function') {
-          showToast('✅ 実績データを削除しました');
+        if (deleted > 0) {
+          if (typeof showToast === 'function') {
+            showToast('✅ 実績データを削除しました');
+          }
+          if (typeof onDeleted === 'function') onDeleted();
+        } else if (typeof showToast === 'function') {
+          showToast('削除対象の実績データがありませんでした');
         }
-        if (typeof onDeleted === 'function') onDeleted();
       };
     }
   }
@@ -609,6 +753,114 @@ function pfConfirmManageRemove(projectKey, accountId, accountName, onRemoved) {
   if (typeof modalBg !== 'undefined') modalBg.style.display = 'flex';
 }
 
+function pfRenderRamInputDisplaySettingsPanel(accountId) {
+  let idAttr = pfEscapeAttr(accountId);
+  let perfVisible = pfIsPerformanceInputAccountVisible('ram', accountId);
+  let revVisible = pfIsRevenueManageAccountVisible('ram', accountId);
+  return '<div class="ramInputDisplayPanel" id="ramDisplayPanel_' + idAttr + '">' +
+    '<p class="help ramInputDisplayHelp">組織図・集計・保存データには影響しません。</p>' +
+    '<label class="pfDisplayCheck">' +
+    '<input type="checkbox" id="pfPerfInput_' + idAttr + '" ' + (perfVisible ? 'checked' : '') +
+    ' onchange="pfHandlePerformanceInputDisplayToggle(\'' + idAttr + '\', this)">' +
+    '<span>実績入力に表示</span></label>' +
+    '<label class="pfDisplayCheck">' +
+    '<input type="checkbox" id="pfRevManage_' + idAttr + '" ' + (revVisible ? 'checked' : '') +
+    ' onchange="pfHandleRevenueManageDisplayToggle(\'' + idAttr + '\', this)">' +
+    '<span>収益管理に表示</span></label>' +
+    '</div>';
+}
+
+function pfSyncAccountDisplayCheckboxes(accountId) {
+  let perfEl = document.getElementById('pfPerfInput_' + accountId);
+  let revEl = document.getElementById('pfRevManage_' + accountId);
+  if (perfEl) perfEl.checked = pfIsPerformanceInputAccountVisible('ram', accountId);
+  if (revEl) revEl.checked = pfIsRevenueManageAccountVisible('ram', accountId);
+}
+
+function pfRefreshViewsAfterDisplayChange() {
+  if (typeof renderHome === 'function') renderHome();
+  if (typeof updateHomeDashboard === 'function' && typeof allOrgSummary === 'function') {
+    updateHomeDashboard(allOrgSummary());
+  }
+  if (typeof revenueManagePage !== 'undefined' &&
+      !revenueManagePage.classList.contains('hidden') &&
+      typeof renderRevenueManage === 'function') {
+    renderRevenueManage();
+  }
+  if (typeof modalContent !== 'undefined' &&
+      modalContent.querySelector('.ramInputList') &&
+      typeof openRamRevenueInput === 'function') {
+    openRamRevenueInput();
+  }
+}
+
+function pfShowDisplayHideConfirm(kind, accountId, onConfirm) {
+  pfCancelDisplayHideConfirm();
+  if (typeof modalContent === 'undefined') return;
+  let message = kind === 'performanceInput'
+    ? 'このアカウントを実績入力から非表示にしますか？<br><br>※組織図・集計・保存データは削除されません。'
+    : 'このアカウントを収益管理から非表示にしますか？<br><br>※組織図・集計・保存データは削除されません。';
+  modalContent.insertAdjacentHTML('beforeend',
+    '<div class="ramInputConfirm pfDisplayHideConfirm" id="pfDisplayHideConfirm">' +
+    '<p class="ramInputConfirmText">' + message + '</p>' +
+    '<div class="ramInputFooterStack pfDisplayHideConfirmActions">' +
+    '<button type="button" class="btn2 ramInputBtnAdd" onclick="pfCancelDisplayHideConfirm()">キャンセル</button>' +
+    '<button type="button" class="ramInputBtnSave" onclick="pfConfirmDisplayHide()">非表示にする</button>' +
+    '</div></div>');
+  pfDisplayHideConfirmPending = { kind: kind, accountId: accountId, onConfirm: onConfirm };
+  let confirmEl = document.getElementById('pfDisplayHideConfirm');
+  if (confirmEl && confirmEl.scrollIntoView) {
+    confirmEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+}
+
+function pfCancelDisplayHideConfirm() {
+  pfDisplayHideConfirmPending = null;
+  let el = document.getElementById('pfDisplayHideConfirm');
+  if (el) el.remove();
+}
+
+function pfConfirmDisplayHide() {
+  if (!pfDisplayHideConfirmPending) return;
+  let pending = pfDisplayHideConfirmPending;
+  pfCancelDisplayHideConfirm();
+  if (typeof pending.onConfirm === 'function') pending.onConfirm();
+}
+
+function pfHandlePerformanceInputDisplayToggle(accountId, inputEl) {
+  if (!accountId || !inputEl) return;
+  if (inputEl.checked) {
+    pfSetPerformanceInputAccountVisible('ram', accountId, true);
+    pfRefreshViewsAfterDisplayChange();
+    if (typeof showToast === 'function') showToast('✅ 実績入力に表示しました');
+    return;
+  }
+  inputEl.checked = true;
+  pfShowDisplayHideConfirm('performanceInput', accountId, function () {
+    pfSetPerformanceInputAccountVisible('ram', accountId, false);
+    pfSyncAccountDisplayCheckboxes(accountId);
+    pfRefreshViewsAfterDisplayChange();
+    if (typeof showToast === 'function') showToast('✅ 実績入力から非表示にしました');
+  });
+}
+
+function pfHandleRevenueManageDisplayToggle(accountId, inputEl) {
+  if (!accountId || !inputEl) return;
+  if (inputEl.checked) {
+    pfSetRevenueManageAccountVisible('ram', accountId, true);
+    pfRefreshViewsAfterDisplayChange();
+    if (typeof showToast === 'function') showToast('✅ 収益管理に表示しました');
+    return;
+  }
+  inputEl.checked = true;
+  pfShowDisplayHideConfirm('revenueManage', accountId, function () {
+    pfSetRevenueManageAccountVisible('ram', accountId, false);
+    pfSyncAccountDisplayCheckboxes(accountId);
+    pfRefreshViewsAfterDisplayChange();
+    if (typeof showToast === 'function') showToast('✅ 収益管理から非表示にしました');
+  });
+}
+
 function pfAddManageDisplayFromOrgUi(projectKey, accountId) {
   pfAddManageDisplayFromOrg(projectKey, accountId);
   let label = accountId;
@@ -632,4 +884,18 @@ function pfAddManageDisplayFromOrgUi(projectKey, accountId) {
 if (typeof window !== 'undefined') {
   window.pfAddManageDisplayFromOrgUi = pfAddManageDisplayFromOrgUi;
   window.pfEnsureManageDisplayAccounts = pfEnsureManageDisplayAccounts;
+  window.pfEnsurePerformanceInputHiddenAccounts = pfEnsurePerformanceInputHiddenAccounts;
+  window.pfIsPerformanceInputAccountHidden = pfIsPerformanceInputAccountHidden;
+  window.pfIsPerformanceInputAccountVisible = pfIsPerformanceInputAccountVisible;
+  window.pfIsRevenueManageAccountVisible = pfIsRevenueManageAccountVisible;
+  window.pfHidePerformanceInputAccount = pfHidePerformanceInputAccount;
+  window.pfRestorePerformanceInputAccount = pfRestorePerformanceInputAccount;
+  window.pfSetPerformanceInputAccountVisible = pfSetPerformanceInputAccountVisible;
+  window.pfSetRevenueManageAccountVisible = pfSetRevenueManageAccountVisible;
+  window.pfMigrateDisplaySettingsCompat = pfMigrateDisplaySettingsCompat;
+  window.pfRenderRamInputDisplaySettingsPanel = pfRenderRamInputDisplaySettingsPanel;
+  window.pfHandlePerformanceInputDisplayToggle = pfHandlePerformanceInputDisplayToggle;
+  window.pfHandleRevenueManageDisplayToggle = pfHandleRevenueManageDisplayToggle;
+  window.pfCancelDisplayHideConfirm = pfCancelDisplayHideConfirm;
+  window.pfConfirmDisplayHide = pfConfirmDisplayHide;
 }

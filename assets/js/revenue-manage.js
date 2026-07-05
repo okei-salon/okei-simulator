@@ -128,24 +128,15 @@ var RM_DEMO_ACCOUNT_TREE = {
 };
 
 function rmGetLiveRamAccountTree() {
-  if (typeof getRamInputAccounts !== 'function' || typeof members === 'undefined') return [];
-  let roots = getRamInputAccounts();
-  if (!roots.length) return [];
-  let out = [];
-  let seen = {};
-  function addMember(id, depth) {
-    if (seen[id]) return;
-    seen[id] = true;
-    let m = members.find(function (x) { return x.id === id; });
-    if (!m) return;
-    let name = typeof displayName === 'function' ? displayName(m) : (m.name || m.username || '未入力');
-    out.push({ id: id, name: name, parentId: m.parent || null, depth: depth });
-    members.filter(function (x) { return x.parent === id; }).forEach(function (child) {
-      addMember(child.id, depth + 1);
-    });
-  }
-  roots.forEach(function (r) { addMember(r.id, 0); });
-  return out;
+  if (typeof getRamAllRootAccounts !== 'function') return [];
+  return getRamAllRootAccounts().map(function (acc) {
+    return {
+      id: acc.id,
+      name: acc.username,
+      parentId: null,
+      depth: 0
+    };
+  });
 }
 
 function rmEmptyMark() {
@@ -600,6 +591,7 @@ function rmGetScopeSuffix() {
 }
 
 function rmGetAccountsForProject(projectKey) {
+  if (projectKey === 'ram' && typeof getRamAllRootAccounts === 'function') return getRamAllRootAccounts();
   if (projectKey === 'ram' && typeof getRamInputAccounts === 'function') return getRamInputAccounts();
   if (projectKey === 'orca' && typeof getOrcaInputAccounts === 'function') return getOrcaInputAccounts();
   if (projectKey === 'cary' && typeof getCaryInputAccounts === 'function') return getCaryInputAccounts();

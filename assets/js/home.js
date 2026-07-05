@@ -172,7 +172,7 @@ function renderInputStatusBadge(isEntered) {
   return '<span class="ramInputStatus ramInputStatus--pending">未入力</span>';
 }
 
-function getRamInputAccounts() {
+function getRamAllRootAccounts() {
   if (typeof getHomeDemoRamAccounts === 'function') {
     let demo = getHomeDemoRamAccounts();
     if (demo) return demo;
@@ -188,6 +188,15 @@ function getRamInputAccounts() {
       investment: Number(m.investment) || 0
     };
   }).filter(Boolean);
+}
+
+function getRamInputAccounts() {
+  return getRamAllRootAccounts().filter(function (acc) {
+    if (typeof pfIsPerformanceInputAccountHidden === 'function') {
+      return !pfIsPerformanceInputAccountHidden('ram', acc.id);
+    }
+    return true;
+  });
 }
 
 function getDailyRateDecimal(investment) {
@@ -443,6 +452,43 @@ function renderRamInputProgress(existing) {
     '</div>';
 }
 
+function isRamDisplaySettingsEnabled() {
+  if (typeof getHomeDemoRamAccounts === 'function' && getHomeDemoRamAccounts()) return false;
+  return true;
+}
+
+function toggleRamAccountDisplaySettings(accountId) {
+  if (!accountId || !isRamDisplaySettingsEnabled()) return;
+  let panelId = 'ramDisplayPanel_' + accountId;
+  let existing = document.getElementById(panelId);
+  if (existing) {
+    existing.remove();
+    return;
+  }
+  document.querySelectorAll('.ramInputDisplayPanel').forEach(function (el) { el.remove(); });
+  if (typeof pfCancelDisplayHideConfirm === 'function') pfCancelDisplayHideConfirm();
+  let card = document.querySelector('.ramInputAccount[data-acc="' + accountId + '"]');
+  if (!card || typeof pfRenderRamInputDisplaySettingsPanel !== 'function') return;
+  let head = card.querySelector('.ramInputAccountHead');
+  if (head) {
+    head.insertAdjacentHTML('afterend', pfRenderRamInputDisplaySettingsPanel(accountId));
+    let panel = document.getElementById(panelId);
+    if (panel && panel.scrollIntoView) {
+      panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }
+}
+
+function renderRamInputAccountHead(existing, accountId) {
+  let html = '<div class="ramInputAccountHeadCol">' +
+    renderRamAccountStatusBadge(existing, accountId);
+  if (isRamDisplaySettingsEnabled()) {
+    html += '<button type="button" class="btn2 ramInputDisplayBtn" onclick="toggleRamAccountDisplaySettings(\'' + accountId + '\')">表示設定</button>';
+  }
+  html += '</div>';
+  return html;
+}
+
 function renderRamInputAccountCard(acc, existing) {
   let accEntry = getRamAccountEntry(existing, acc.id);
   let dateKey = todayKey();
@@ -455,7 +501,9 @@ function renderRamInputAccountCard(acc, existing) {
     ? pdGetOperatingUsdAsOf(acc.id, 'ram', dateKey)
     : calcRamEffectiveInvestment(acc.investment, addInv);
   return '<section class="ramInputAccount" data-acc="' + acc.id + '">' +
-    '<div class="ramInputAccountHead">' + renderRamAccountStatusBadge(existing, acc.id) + '</div>' +
+    '<div class="ramInputAccountHead">' +
+    renderRamInputAccountHead(existing, acc.id) +
+    '</div>' +
     '<div class="ramInputRows">' +
     '<div class="ramInputRow ramInputRow--readonly"><span class="ramInputLabel">ユーザー名</span><span class="ramInputVal">' + escapeHtml(acc.username) + '</span></div>' +
     '<div class="ramInputRow ramInputRow--readonly"><span class="ramInputLabel">現在運用額</span><span class="ramInputVal" id="ramInv_' + acc.id + '">' + num(effectiveInv) + 'ドル</span></div>' +
@@ -1432,6 +1480,7 @@ function selectRevenueProject(projectKey) {
 
 function openRamRevenueInput() {
   ramSavePending = null;
+  if (typeof pfCancelDisplayHideConfirm === 'function') pfCancelDisplayHideConfirm();
   let accounts = getRamInputAccounts();
   modalTitle.textContent = 'RAM 実績入力';
 

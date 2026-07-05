@@ -23,7 +23,8 @@ function hubCreateDefaultSettings() {
     lastActivityDate: '',
     revenueLog: {},
     salesLog: {},
-    manageDisplayAccounts: {}
+    manageDisplayAccounts: {},
+    performanceInputHiddenAccounts: {}
   };
 }
 
@@ -114,7 +115,10 @@ function hubNormalizeLoadedData(raw) {
   if (!settings.manageDisplayAccounts || typeof settings.manageDisplayAccounts !== 'object') {
     settings.manageDisplayAccounts = {};
   }
-  return {
+  if (!settings.performanceInputHiddenAccounts || typeof settings.performanceInputHiddenAccounts !== 'object') {
+    settings.performanceInputHiddenAccounts = {};
+  }
+  let normalized = {
     members: Array.isArray(raw.members) ? raw.members : base.members,
     currentData: Array.isArray(raw.currentData) ? raw.currentData : base.currentData,
     settings: settings,
@@ -123,6 +127,7 @@ function hubNormalizeLoadedData(raw) {
     rootAccountIds: Array.isArray(raw.rootAccountIds) ? raw.rootAccountIds : base.rootAccountIds,
     updatedAt: typeof raw.updatedAt === 'number' ? raw.updatedAt : 0
   };
+  return normalized;
 }
 
 function hubPackLocalData() {
@@ -223,6 +228,9 @@ function hubApplyData(data) {
   focusId = rootId || focusId || '';
   simMode = false;
   hubLocalUpdatedAt = normalized.updatedAt || 0;
+  if (typeof pfEnsureManageDisplayAccounts === 'function') pfEnsureManageDisplayAccounts();
+  if (typeof pfEnsurePerformanceInputHiddenAccounts === 'function') pfEnsurePerformanceInputHiddenAccounts();
+  if (typeof pfMigrateDisplaySettingsCompat === 'function') pfMigrateDisplaySettingsCompat();
 }
 
 function hubLoadFromStorage() {

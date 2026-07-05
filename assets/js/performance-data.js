@@ -1566,9 +1566,24 @@ function pdDeleteAccountPerformanceData(projectKey, accountId) {
     removed += 1;
   });
 
+  if (settings.investmentHistory && settings.investmentHistory[accountId]) {
+    delete settings.investmentHistory[accountId];
+    removed += 1;
+  }
+
+  if (projectKey === 'ram' && settings.ramExcelAccountMap && typeof settings.ramExcelAccountMap === 'object') {
+    Object.keys(settings.ramExcelAccountMap).forEach(function (key) {
+      if (settings.ramExcelAccountMap[key] === accountId) {
+        delete settings.ramExcelAccountMap[key];
+        removed += 1;
+      }
+    });
+  }
+
   if (removed > 0) {
     settings.lastUpdate = new Date().toLocaleString();
     if (typeof markActivity === 'function') markActivity();
+    if (typeof markSettingsDirty === 'function') markSettingsDirty();
     pdPersist();
     pdNotifyPerformanceChanged({ type: 'delete', projectKey: projectKey, accountId: accountId });
   }

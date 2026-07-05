@@ -280,6 +280,8 @@ function hubPrepareApplicationData() {
   if (!settings.revenueLog || typeof settings.revenueLog !== 'object') settings.revenueLog = {};
   if (typeof ensurePerformanceLogs === 'function') ensurePerformanceLogs();
   if (typeof pfEnsureManageDisplayAccounts === 'function') pfEnsureManageDisplayAccounts();
+  if (typeof pfEnsurePerformanceInputHiddenAccounts === 'function') pfEnsurePerformanceInputHiddenAccounts();
+  if (typeof pfMigrateDisplaySettingsCompat === 'function') pfMigrateDisplaySettingsCompat();
   settings.lastLogin = new Date().toLocaleString();
   if (typeof pmEnsureProjectMaster === 'function') pmEnsureProjectMaster();
   if (typeof pmEnsureFxSettings === 'function') pmEnsureFxSettings();
