@@ -1,0 +1,28 @@
+{
+  "version": 2,
+  "description": "OUKEI HUB official O-chan — Basic Motion Set Ver.1 (20 poses, 512x512 PNG)",
+  "canvas": { "width": 512, "height": 512, "padding": 36 },
+  "fallback": "../main/ochan.png",
+  "poses": {
+    "01_normal": "normal.png",
+    "02_smile": "02_smile.png",
+    "03_laugh": "03_laugh.png",
+    "04_wink": "04_wink.png",
+    "05_cheer": "05_cheer.png",
+    "06_point": "06_point.png",
+    "07_thumbsup": "07_thumbsup.png",
+    "08_fist": "08_fist.png",
+    "09_think": "09_think.png",
+    "10_idea": "10_idea.png",
+    "11_clap": "11_clap.png",
+    "12_celebrate": "12_celebrate.png",
+    "13_heart": "13_heart.png",
+    "14_cry": "14_cry.png",
+    "15_sad": "15_sad.png",
+    "16_panic": "16_panic.png",
+    "17_surprised": "17_surprised.png",
+    "18_sparkle": "18_sparkle.png",
+    "19_bow": "19_bow.png",
+    "20_wave": "20_wave.png"
+  }
+}

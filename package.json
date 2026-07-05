@@ -2,6 +2,9 @@
   "name": "oukei-hub",
   "private": true,
   "scripts": {
+    "dev": "firebase emulators:start --only hosting --project oukei-hub",
+    "start": "npm run dev",
+    "serve": "npm run dev",
     "deploy": "firebase deploy",
     "deploy:hosting": "firebase deploy --only hosting",
     "deploy:rules": "firebase deploy --only firestore:rules"

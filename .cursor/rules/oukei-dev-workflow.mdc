@@ -1,0 +1,26 @@
+---
+description: OUKEI HUB 開発フロー — ローカル確認優先、デプロイは承認後のみ
+alwaysApply: true
+---
+
+# OUKEI HUB 開発フロー
+
+## ローカル確認
+
+- 修正後は **http://localhost:5050** で動作確認する（`npm run dev`）
+- 計算ロジック以外の UI 確認も localhost で行う
+- Safari キャッシュが気になる場合は「開発 → キャッシュを空にする」後にスーパーリロード
+
+## デプロイ禁止（開発中）
+
+- ユーザーが明示的に承認するまで **`firebase deploy` / `npm run deploy:hosting` を実行しない**
+- 公開 URL（oukei-hub.web.app）は完成版・リリース時のみ更新
+
+## Git
+
+- Commit / Push はユーザーが「OK」「Commit して」等と明示したときのみ行う
+
+## ローカル Google ログイン
+
+- localhost / 127.0.0.1 では `signInWithPopup` を使用（hub-auth.js）
+- 本番 Hosting では `signInWithRedirect` のまま
