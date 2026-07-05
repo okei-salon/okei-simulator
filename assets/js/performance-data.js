@@ -1225,12 +1225,22 @@ function pdWriteSalesEntry(dateKey, entry) {
   pdPersist();
 }
 
+function pdReadManualOperationRevenue(data) {
+  if (!data || data.operationRevenue === null || data.operationRevenue === undefined || data.operationRevenue === '') {
+    return null;
+  }
+  let n = Number(data.operationRevenue);
+  if (isNaN(n)) return null;
+  return pdRound(n);
+}
+
 function pdSaveRevenueAccountEntry(dateKey, projectKey, accountId, data) {
   if (!dateKey || !projectKey || !accountId) return null;
   let entry = pdGetRevenueEntryRaw(dateKey) || {};
   data = data || {};
   let rev = data.todayRevenue != null ? pdRound(data.todayRevenue) : null;
-  let op = pdCalcDailyOperation(accountId, projectKey, dateKey);
+  let manualOp = pdReadManualOperationRevenue(data);
+  let op = manualOp != null ? manualOp : pdCalcDailyOperation(accountId, projectKey, dateKey);
 
   entry.accounts = entry.accounts || {};
   entry.accounts[accountId] = {
@@ -1250,11 +1260,19 @@ function pdSaveRevenueAccountEntry(dateKey, projectKey, accountId, data) {
         pdRemoveInvestmentRecord(accountId, projectKey, dateKey, 'additional');
       }
     }
-    op = pdCalcDailyOperation(accountId, projectKey, dateKey);
+    op = manualOp != null ? manualOp : pdCalcDailyOperation(accountId, projectKey, dateKey);
     entry.ramAccounts[accountId] = {
       todayRevenue: rev,
       operationRevenue: op,
       addInvestment: addInvestment
+    };
+    if (manualOp != null) {
+      entry.ramAccounts[accountId].operationSource = 'manual';
+    }
+    entry.accounts[accountId] = {
+      projectKey: projectKey,
+      todayRevenue: rev,
+      operationRevenue: op
     };
   } else if (projectKey === 'orca') {
     entry.orcaAccounts = entry.orcaAccounts || {};

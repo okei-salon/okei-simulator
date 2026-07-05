@@ -343,6 +343,12 @@ function rmSaveOrcaRevenueEntry() {
   }
 }
 
+function rmReadEntryNumber(el) {
+  if (!el || el.value === '') return null;
+  let n = Number(el.value);
+  return isNaN(n) ? null : n;
+}
+
 function rmSaveRevenueEntry() {
   let dateEl = document.getElementById('rmEntryDate');
   let projectKeyEl = document.getElementById('rmEntryProjectKey');
@@ -360,8 +366,11 @@ function rmSaveRevenueEntry() {
   pfRegisterManageDisplayFromEntry(projectKey, accountId);
 
   if (typeof pdSaveRevenueAccountEntry === 'function') {
+    let opValue = rmReadEntryNumber(opEl);
+    let revValue = rmReadEntryNumber(revEl);
     pdSaveRevenueAccountEntry(dateKey, projectKey, accountId, {
-      todayRevenue: Number(revEl && revEl.value) || 0
+      todayRevenue: revValue != null ? revValue : 0,
+      operationRevenue: opValue
     });
   }
 
