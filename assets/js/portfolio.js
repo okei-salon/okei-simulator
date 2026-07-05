@@ -1,4 +1,4 @@
-/* OUKEI HUB Portfolio UI — Ver1.9.4 */
+/* OUKEI HUB Portfolio UI — Ver2.0.7 / Phase2 operating settings */
 
 var PF_COLORS = {
   ram: '#f97316',
@@ -54,6 +54,10 @@ var PF_MOCK_STACKED = [
 var PF_STACK_ORDER = ['ram', 'orca', 'cary', 'genesis', 'other'];
 
 var pfGoalEditSnapshot = '';
+var pfOperatingEditId = null;
+var pfOperatingFormMode = 'project';
+var pfProfitEditId = null;
+var pfProfitFormAllocation = 'flat';
 
 function pfRecoveryFillPct(rate) {
   return Math.max(0, Math.min(100, (rate / 200) * 100));
@@ -158,14 +162,312 @@ function pfGetSavedGoalState() {
   };
 }
 
+function pfEnsurePortfolioOperating() {
+  if (typeof settings === 'undefined') return;
+  if (!settings.portfolioOperating || typeof settings.portfolioOperating !== 'object') {
+    settings.portfolioOperating = { displayMode: 'project', entries: [] };
+  }
+  if (!Array.isArray(settings.portfolioOperating.entries)) {
+    settings.portfolioOperating.entries = [];
+  }
+  if (settings.portfolioOperating.displayMode !== 'project' &&
+      settings.portfolioOperating.displayMode !== 'account') {
+    settings.portfolioOperating.displayMode = 'project';
+  }
+}
+
+function pfGenerateOperatingEntryId() {
+  return 'po_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
+}
+
+function pfGetOperatingAsOfDateKey() {
+  if (typeof todayKey === 'function') return todayKey();
+  let d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' +
+    String(d.getDate()).padStart(2, '0');
+}
+
+function pfNormalizeOperatingDateKey(val) {
+  if (!val) return '';
+  return String(val).trim();
+}
+
+function pfGetPortfolioOperatingEntries() {
+  pfEnsurePortfolioOperating();
+  return settings.portfolioOperating.entries.slice();
+}
+
+function pfFindPortfolioOperatingEntry(id) {
+  if (!id) return null;
+  return pfGetPortfolioOperatingEntries().find(function (e) { return e.id === id; }) || null;
+}
+
+function pfGetLatestOperatingEntryForProject(projectKey, dateKey, inputMode) {
+  pfEnsurePortfolioOperating();
+  let best = null;
+  settings.portfolioOperating.entries.forEach(function (e) {
+    if (e.inputMode !== inputMode || e.projectKey !== projectKey) return;
+    if (e.effectiveDate > dateKey) return;
+    if (!best || e.effectiveDate > best.effectiveDate) best = e;
+  });
+  return best;
+}
+
+function pfGetLatestOperatingEntryForAccount(accountId, projectKey, dateKey) {
+  pfEnsurePortfolioOperating();
+  let best = null;
+  settings.portfolioOperating.entries.forEach(function (e) {
+    if (e.inputMode !== 'account' || e.projectKey !== projectKey || e.accountId !== accountId) return;
+    if (e.effectiveDate > dateKey) return;
+    if (!best || e.effectiveDate > best.effectiveDate) best = e;
+  });
+  return best;
+}
+
+function pfGetProjectAccounts(projectKey) {
+  if (projectKey === 'ram' && typeof getRamInputAccounts === 'function') {
+    return getRamInputAccounts().map(function (a) {
+      return { id: a.id, name: (a.username || a.id).replace(/^@/, '') };
+    });
+  }
+  if (projectKey === 'orca' && typeof getOrcaInputAccounts === 'function') {
+    return getOrcaInputAccounts().map(function (a) {
+      return { id: a.id, name: (a.username || a.id).replace(/^@/, '') };
+    });
+  }
+  if (projectKey === 'cary' && typeof getCaryInputAccounts === 'function') {
+    return getCaryInputAccounts().map(function (a) {
+      return { id: a.id, name: (a.username || a.id).replace(/^@/, '') };
+    });
+  }
+  return [];
+}
+
+function pfGetPortfolioViewMonth() {
+  let perf = typeof pdGetPortfolioSummary === 'function' ? pdGetPortfolioSummary() : null;
+  if (perf && perf.viewYear != null && perf.viewMonth != null) {
+    return { y: perf.viewYear, m: perf.viewMonth };
+  }
+  if (typeof hubGetViewMonth === 'function') {
+    let v = hubGetViewMonth();
+    if (v) return { y: v.y, m: v.m };
+  }
+  let ref = typeof getHomeReferenceDate === 'function' ? getHomeReferenceDate() : new Date();
+  return { y: ref.getFullYear(), m: ref.getMonth() };
+}
+
+function pfGetYieldProjectionDays(viewY, viewM) {
+  let ref = typeof getHomeReferenceDate === 'function' ? getHomeReferenceDate() : new Date();
+  let daysInMonth = new Date(viewY, viewM + 1, 0).getDate();
+  let viewingCurrentMonth = (viewY === ref.getFullYear() && viewM === ref.getMonth());
+  let elapsedDays = viewingCurrentMonth ? ref.getDate() : daysInMonth;
+  if (elapsedDays < 1) elapsedDays = 1;
+  return { elapsedDays: elapsedDays, daysInMonth: daysInMonth };
+}
+
+function pfFormatPredictedMonthlyYield(monthlyRevenue, operatingUsd, viewY, viewM) {
+  if (!operatingUsd || operatingUsd <= 0) return '--';
+  let rev = Number(monthlyRevenue) || 0;
+  let ctx = pfGetYieldProjectionDays(viewY, viewM);
+  let projected = (rev / ctx.elapsedDays) * ctx.daysInMonth;
+  let pct = Math.round((projected / operatingUsd) * 1000) / 10;
+  return pct + '%';
+}
+
+function pfGetProfitAllocationEndMonth() {
+  if (typeof hubGetViewMonth === 'function') {
+    let v = hubGetViewMonth();
+    if (v) return { y: v.y, m: v.m };
+  }
+  let ref = typeof getHomeReferenceDate === 'function' ? getHomeReferenceDate() : new Date();
+  return { y: ref.getFullYear(), m: ref.getMonth() };
+}
+
+function pfMonthKey(y, m) {
+  return y + '-' + String(m + 1).padStart(2, '0');
+}
+
+function pfParseMonthKey(key) {
+  let parts = String(key || '').split('-');
+  if (parts.length !== 2) return null;
+  return { y: Number(parts[0]), m: Number(parts[1]) - 1 };
+}
+
+function pfIterateMonthRange(startMonthKey, endY, endM) {
+  let start = pfParseMonthKey(startMonthKey);
+  if (!start) return [];
+  let out = [];
+  let y = start.y;
+  let m = start.m;
+  while (y < endY || (y === endY && m <= endM)) {
+    out.push({ y: y, m: m, key: pfMonthKey(y, m) });
+    m += 1;
+    if (m > 11) { m = 0; y += 1; }
+  }
+  return out;
+}
+
+function pfEnsurePortfolioProfit() {
+  if (typeof settings === 'undefined') return;
+  if (!settings.portfolioProfit || typeof settings.portfolioProfit !== 'object') {
+    settings.portfolioProfit = { entries: [] };
+  }
+  if (!Array.isArray(settings.portfolioProfit.entries)) {
+    settings.portfolioProfit.entries = [];
+  }
+}
+
+function pfGenerateProfitEntryId() {
+  return 'pp_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
+}
+
+function pfGetPortfolioProfitEntries() {
+  pfEnsurePortfolioProfit();
+  return settings.portfolioProfit.entries.slice();
+}
+
+function pfFindPortfolioProfitEntry(id) {
+  if (!id) return null;
+  return pfGetPortfolioProfitEntries().find(function (e) { return e.id === id; }) || null;
+}
+
+function pfSumPortfolioProfitTotals() {
+  return pfGetPortfolioProfitEntries().reduce(function (sum, e) {
+    return sum + (Number(e.totalUsd) || 0);
+  }, 0);
+}
+
+function pfHasPortfolioProfitEntries() {
+  return pfGetPortfolioProfitEntries().length > 0;
+}
+
+function pfAllocateProfitEntry(entry, endY, endM) {
+  let months = pfIterateMonthRange(entry.startMonth, endY, endM);
+  let out = {};
+  if (!months.length) return out;
+  if (entry.allocation === 'manual' && entry.manualMonths) {
+    months.forEach(function (mo) {
+      out[mo.key] = Math.round((Number(entry.manualMonths[mo.key]) || 0) * 100) / 100;
+    });
+    return out;
+  }
+  let total = Number(entry.totalUsd) || 0;
+  let n = months.length;
+  if (entry.allocation === 'growth') {
+    let weightSum = (n * (n + 1)) / 2;
+    months.forEach(function (mo, i) {
+      out[mo.key] = Math.round((total * (i + 1) / weightSum) * 100) / 100;
+    });
+    return out;
+  }
+  let each = Math.round((total / n) * 100) / 100;
+  months.forEach(function (mo) {
+    out[mo.key] = each;
+  });
+  return out;
+}
+
+function pfGetPortfolioProfitOverlayForMonthKey(monthKey) {
+  pfEnsurePortfolioProfit();
+  let end = pfGetProfitAllocationEndMonth();
+  let overlay = { total: 0 };
+  PF_STACK_ORDER.forEach(function (k) { overlay[k] = 0; });
+  settings.portfolioProfit.entries.forEach(function (entry) {
+    if (!entry || !entry.startMonth) return;
+    let dist = pfAllocateProfitEntry(entry, end.y, end.m);
+    let amt = dist[monthKey] || 0;
+    if (amt <= 0) return;
+    let pk = entry.projectKey || 'other';
+    if (overlay[pk] == null) overlay[pk] = 0;
+    overlay[pk] += amt;
+    overlay.total += amt;
+  });
+  overlay.total = Math.round(overlay.total * 100) / 100;
+  return overlay;
+}
+
+function pfResolveStackedMonthKeys(endY, endM, count) {
+  let keys = [];
+  let y = endY;
+  let m = endM;
+  for (let i = 0; i < count; i++) {
+    keys.unshift({ y: y, m: m, key: pfMonthKey(y, m) });
+    m -= 1;
+    if (m < 0) { m = 11; y -= 1; }
+  }
+  return keys;
+}
+
+function pfMergeMonthWithProfitOverlay(monthData, monthKey) {
+  let merged = Object.assign({}, monthData);
+  let overlay = pfGetPortfolioProfitOverlayForMonthKey(monthKey);
+  PF_STACK_ORDER.forEach(function (k) {
+    let add = Number(overlay[k]) || 0;
+    if (add <= 0) return;
+    merged[k] = Math.round(((Number(merged[k]) || 0) + add) * 100) / 100;
+  });
+  merged.total = Math.round(PF_STACK_ORDER.reduce(function (s, k) {
+    return s + (Number(merged[k]) || 0);
+  }, 0) * 100) / 100;
+  merged.hasLog = merged.hasLog || overlay.total > 0;
+  return merged;
+}
+
+function pfGetDisplayedTotalProfitUsd() {
+  let base = 0;
+  if (typeof pdSumAllTimeRevenue === 'function') {
+    base = pdSumAllTimeRevenue().total;
+  } else {
+    base = pfSumEnabledProfitUsd();
+  }
+  return Math.round((base + pfSumPortfolioProfitTotals()) * 100) / 100;
+}
+
+function pfGetLegacyOperatingUsd(projectKey, dateKey) {
+  if (typeof pdGetProjectOperatingUsd === 'function') {
+    return pdGetProjectOperatingUsd(projectKey, dateKey);
+  }
+  return 0;
+}
+
+function pfGetLegacyAccountOperatingUsd(accountId, projectKey, dateKey) {
+  if (typeof pdGetOperatingUsdAsOf === 'function') {
+    return pdGetOperatingUsdAsOf(accountId, projectKey, dateKey);
+  }
+  return 0;
+}
+
+function pfResolvePortfolioOperatingUsd(projectKey, dateKey) {
+  if (pfIsDemoMode()) return pfGetProjectMock(projectKey).operatingUsd;
+  dateKey = dateKey || pfGetOperatingAsOfDateKey();
+  pfEnsurePortfolioOperating();
+  let mode = settings.portfolioOperating.displayMode || 'project';
+
+  if (mode === 'project') {
+    let entry = pfGetLatestOperatingEntryForProject(projectKey, dateKey, 'project');
+    if (entry) return Math.max(0, Number(entry.amountUsd) || 0);
+    return pfGetLegacyOperatingUsd(projectKey, dateKey);
+  }
+
+  let accounts = pfGetProjectAccounts(projectKey);
+  if (!accounts.length) {
+    let entry = pfGetLatestOperatingEntryForProject(projectKey, dateKey, 'project');
+    if (entry) return Math.max(0, Number(entry.amountUsd) || 0);
+    return pfGetLegacyOperatingUsd(projectKey, dateKey);
+  }
+  return accounts.reduce(function (sum, acc) {
+    let entry = pfGetLatestOperatingEntryForAccount(acc.id, projectKey, dateKey);
+    if (entry) return sum + Math.max(0, Number(entry.amountUsd) || 0);
+    return sum + pfGetLegacyAccountOperatingUsd(acc.id, projectKey, dateKey);
+  }, 0);
+}
+
 function pfSerializeGoalState(state) {
   return JSON.stringify(state);
 }
 
 function pfGetLiveOperatingUsd(projectKey) {
-  if (typeof pdGetProjectOperatingUsd !== 'function') return 0;
-  let dateKey = typeof todayKey === 'function' ? todayKey() : '';
-  return pdGetProjectOperatingUsd(projectKey, dateKey);
+  return pfResolvePortfolioOperatingUsd(projectKey, pfGetOperatingAsOfDateKey());
 }
 
 function pfGetActiveProjects() {
@@ -193,14 +495,25 @@ function pfGetEnabledProjectRows() {
   let list = pfGetActiveProjects();
   let cumulative = typeof pdSumAllTimeRevenue === 'function' ? pdSumAllTimeRevenue() : null;
   let hasRevenueLog = cumulative && cumulative.total > 0;
+  let perf = pfGetPerformanceSummary();
+  let viewMonth = perf
+    ? { y: perf.viewYear, m: perf.viewMonth }
+    : pfGetPortfolioViewMonth();
+  let mockMonth = PF_MOCK_STACKED.length ? PF_MOCK_STACKED[PF_MOCK_STACKED.length - 1] : null;
   return list.map(function (p) {
     let mock = pfGetProjectMock(p.key);
     let operatingUsd = pfIsDemoMode() ? mock.operatingUsd : pfGetLiveOperatingUsd(p.key);
     let profitUsd = 0;
-    if (cumulative && cumulative.byProject[p.key] > 0) {
-      profitUsd = cumulative.byProject[p.key];
-    } else if (pfIsDemoMode()) {
+    if (pfIsDemoMode()) {
       profitUsd = mock.profitUsd;
+    } else {
+      profitUsd = pfGetDisplayedProjectProfitUsd(p.key);
+    }
+    let monthRev = 0;
+    if (perf && perf.monthRevenueByProject && perf.monthRevenueByProject[p.key] != null) {
+      monthRev = Number(perf.monthRevenueByProject[p.key]) || 0;
+    } else if (pfIsDemoMode() && mockMonth) {
+      monthRev = Number(mockMonth[p.key]) || 0;
     }
     let recovery = operatingUsd > 0
       ? Math.round((profitUsd / operatingUsd) * 1000) / 10
@@ -213,6 +526,7 @@ function pfGetEnabledProjectRows() {
       operating: pfDisplayUsd(operatingUsd, operatingUsd > 0),
       profit: pfDisplayUsd(profitUsd, profitUsd > 0 || hasRevenueLog),
       profitUsd: profitUsd,
+      monthYield: pfFormatPredictedMonthlyYield(monthRev, operatingUsd, viewMonth.y, viewMonth.m),
       recovery: recovery,
       recoveryDisplay: pfDisplayPct(recovery, operatingUsd > 0 && profitUsd > 0),
       fill: pfRecoveryFillPct(recovery),
@@ -309,42 +623,46 @@ function pfRenderSummaryCards() {
   pfEnsurePortfolioGoalSettings();
 
   let operatingTotal = pfSumEnabledOperatingUsd();
-  let profitTotal = pfSumEnabledProfitUsd();
+  let profitTotal = pfGetDisplayedTotalProfitUsd();
   let perf = pfGetPerformanceSummary();
   let hasRevenueLog = perf && perf.hasRevenueLog;
-  if (hasRevenueLog && typeof pdSumAllTimeRevenue === 'function') {
-    let cumulative = pdSumAllTimeRevenue();
-    profitTotal = cumulative.total;
+  let hasProfitOverlay = pfHasPortfolioProfitEntries();
+  if (!hasRevenueLog && !pfIsDemoMode() && !hasProfitOverlay) {
+    profitTotal = pfSumEnabledProfitUsd();
   }
   let hasOperating = operatingTotal > 0;
   let hasProfit = profitTotal > 0;
-  let recoveryPct = hasOperating
-    ? (Math.round((profitTotal / operatingTotal) * 1000) / 10)
-    : 0;
   let profitRatio = hasOperating
     ? (Math.round((profitTotal / operatingTotal) * 1000) / 10) + '%'
     : '0%';
   let goal = pfCalcGoalProgress();
 
-  let monthly = { value: pfEmptyMark(), sub: '', trend: '' };
-  let daily = { value: pfEmptyMark(), sub: '', trend: '' };
+  let viewMonth = perf
+    ? { y: perf.viewYear, m: perf.viewMonth }
+    : pfGetPortfolioViewMonth();
+
+  let monthly = { value: pfEmptyMark(), sub: '', trend: '', yieldPct: '--' };
   if (pfIsDemoMode() && !hasRevenueLog) {
-    monthly = PF_MOCK_SUMMARY_DATA.monthly;
-    daily = PF_MOCK_SUMMARY_DATA.daily;
+    monthly = Object.assign({}, PF_MOCK_SUMMARY_DATA.monthly, {
+      yieldPct: pfFormatPredictedMonthlyYield(
+        12840,
+        operatingTotal > 0 ? operatingTotal : 115000,
+        viewMonth.y,
+        viewMonth.m
+      )
+    });
   }
   if (hasRevenueLog) {
-    let todayHasEntry = perf.viewingCurrentMonth && perf.dailyRevenue != null &&
-      typeof getRevenueEntry === 'function' && typeof todayKey === 'function' &&
-      !!getRevenueEntry(todayKey());
     monthly = {
       value: pfDisplayUsd(perf.monthlyRevenue, perf.monthlyRevenue > 0 || hasRevenueLog),
       sub: perf.monthlyRevenue > 0 ? pfYenRef(perf.monthlyRevenue) : pfEmptyMark(),
-      trend: perf.monthlyRevenueTrend
-    };
-    daily = {
-      value: todayHasEntry ? pfMoneyUsd(perf.dailyRevenue || 0) : pfEmptyMark(),
-      sub: todayHasEntry && perf.dailyRevenue > 0 ? pfYenRef(perf.dailyRevenue) : pfEmptyMark(),
-      trend: perf.dailyRevenueTrend
+      trend: perf.monthlyRevenueTrend,
+      yieldPct: pfFormatPredictedMonthlyYield(
+        perf.monthlyRevenue,
+        operatingTotal,
+        perf.viewYear,
+        perf.viewMonth
+      )
     };
   }
 
@@ -352,6 +670,9 @@ function pfRenderSummaryCards() {
     let attrs = 'class="pfSummaryCard pfSummaryCard--' + opts.accent + (opts.clickable ? ' isClickable' : '') + '"';
     if (opts.click) attrs += ' role="button" tabindex="0" onclick="' + opts.click + '" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){' + opts.click + ';event.preventDefault()}"';
     let foot = '';
+    if (opts.yieldPct) {
+      foot += '<div class="pfSummaryYield"><span>予測月利</span><b>' + opts.yieldPct + '</b></div>';
+    }
     if (opts.trend) {
       foot += '<div class="pfSummaryTrend pfSummaryTrend--up">' +
         opts.trendLabel + ' <b>' + opts.trend + '</b>' +
@@ -367,44 +688,38 @@ function pfRenderSummaryCards() {
       foot + '</article>';
   }
 
+  el.className = 'pfSummaryGrid pfSummaryGrid--quad';
   el.innerHTML =
     cardHtml({
       accent: 'invest', icon: 'wallet', label: '運用額',
       value: pfDisplayUsd(operatingTotal, hasOperating), sub: hasOperating ? pfYenRef(operatingTotal) : pfEmptyMark(),
-      clickable: true, click: 'pfOpenOperatingBreakdown()'
+      clickable: true, click: 'pfOpenOperatingSettings()'
     }) +
     cardHtml({
       accent: 'profit', icon: 'coins', label: '総利益',
-      value: pfDisplayUsd(profitTotal, hasProfit || hasRevenueLog), sub: (hasProfit || hasRevenueLog) ? pfYenRef(profitTotal) : pfEmptyMark(),
-      trend: hasOperating ? profitRatio : pfEmptyMark(), trendLabel: '運用額比', trendArrow: false
-    }) +
-    cardHtml({
-      accent: 'recovery', icon: 'chart', label: '達成率',
-      value: pfDisplayPct(recoveryPct, hasOperating && hasProfit), sub: '総利益 ÷ 運用額'
+      value: pfDisplayUsd(profitTotal, hasProfit || hasRevenueLog || hasProfitOverlay),
+      sub: (hasProfit || hasRevenueLog || hasProfitOverlay) ? pfYenRef(profitTotal) : pfEmptyMark(),
+      trend: hasOperating ? profitRatio : pfEmptyMark(), trendLabel: '運用額比', trendArrow: false,
+      clickable: true, click: 'pfOpenProfitSettings()'
     }) +
     cardHtml({
       accent: 'monthly', icon: 'calendar', label: '月間収益',
       value: monthly.value, sub: monthly.sub,
+      yieldPct: monthly.yieldPct,
       trend: monthly.trend, trendLabel: '前月比'
-    }) +
-    cardHtml({
-      accent: 'daily', icon: 'clock', label: '日間収益',
-      value: daily.value, sub: daily.sub,
-      trend: daily.trend, trendLabel: '前日比'
     }) +
     '<article class="pfSummaryCard pfSummaryCard--goal isClickable" role="button" tabindex="0" onclick="pfOpenGoalSettings()" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){pfOpenGoalSettings();event.preventDefault()}">' +
     '<div class="pfSummaryCardGlow"></div>' +
     pfSummaryIcon('target') +
     '<div class="pfSummaryLabel">資産目標</div>' +
     '<div class="pfSummaryValue pfSummaryValue--goal">' + pfFormatYen(goal.goalYen) + '</div>' +
-    '<div class="pfGoalMeta"><span>達成率</span><b>' + goal.pct + '%</b></div>' +
+    '<div class="pfGoalMeta"><span>進捗</span><b>' + goal.pct + '%</b></div>' +
     '<div class="pfGoalBar"><div class="pfGoalBarFill" style="width:' + Math.min(100, goal.pct) + '%"></div></div>' +
     '<div class="pfGoalRemain">あと ' + pfFormatYen(goal.remain) + '</div></article>';
 }
 
 var PF_MOCK_SUMMARY_DATA = {
-  monthly: { value: '$12,840', sub: '(¥1,999,200)', trend: '+8.2%' },
-  daily: { value: '$428', sub: '(¥66,730)', trend: '+5.1%' }
+  monthly: { value: '$12,840', sub: '(¥1,999,200)', trend: '+8.2%' }
 };
 
 function pfRenderProjectCard(row) {
@@ -421,6 +736,7 @@ function pfRenderProjectCard(row) {
     '<div class="pfProjectMetrics">' +
     '<div class="pfProjectMetric"><span class="pfProjectMetricLabel">運用額</span><span class="pfProjectMetricVal">' + row.operating + '</span></div>' +
     '<div class="pfProjectMetric"><span class="pfProjectMetricLabel">累計利益</span><span class="pfProjectMetricVal isProfit">' + row.profit + '</span></div>' +
+    '<div class="pfProjectMetric"><span class="pfProjectMetricLabel">予測月利</span><span class="pfProjectMetricVal isYield">' + pfEscape(row.monthYield || '--') + '</span></div>' +
     '<div class="pfProjectMetric"><span class="pfProjectMetricLabel">達成率</span><span class="pfProjectMetricVal isRecovery">' + (row.recoveryDisplay || row.recovery + '%') + '</span></div>' +
     '</div>' +
     '<div class="pfRecoveryBlock">' +
@@ -445,27 +761,598 @@ function pfRenderProjectCards() {
   el.innerHTML = rows.map(pfRenderProjectCard).join('');
 }
 
-function pfOpenOperatingBreakdown() {
-  if (typeof modalTitle === 'undefined' || typeof modalContent === 'undefined' || typeof modalBg === 'undefined') return;
-  let rows = pfGetEnabledOperatingRows();
-  let total = rows.reduce(function (sum, row) { return sum + row.operatingUsd; }, 0);
-  if (!pfIsDemoMode() && total <= 0) {
-    modalTitle.textContent = '運用額の内訳';
-    modalContent.innerHTML = '<div class="lineBox"><p class="help">' + pfEmptyMark() + ' 運用額はまだ入力されていません。</p></div>';
-    modalBg.style.display = 'flex';
+function pfGetOperatingAccountLabel(projectKey, accountId) {
+  if (!accountId) return '—';
+  let acc = pfGetProjectAccounts(projectKey).find(function (a) { return a.id === accountId; });
+  return acc ? acc.name : accountId;
+}
+
+function pfGetOperatingProjectLabel(projectKey) {
+  let p = pfGetAllPortfolioProjects().find(function (x) { return x.key === projectKey; });
+  return p ? p.name : projectKey;
+}
+
+function pfSetOperatingDisplayMode(mode) {
+  pfEnsurePortfolioOperating();
+  if (mode !== 'project' && mode !== 'account') return;
+  settings.portfolioOperating.displayMode = mode;
+  pfPersistSettings();
+  pfRenderOperatingSettingsPage();
+  if (typeof showToast === 'function') showToast('✅ 集計方法を変更しました');
+}
+
+function pfSetOperatingFormMode(mode) {
+  if (mode !== 'project' && mode !== 'account') return;
+  pfOperatingFormMode = mode;
+  pfOperatingEditId = null;
+  pfRenderOperatingSettingsPage();
+}
+
+function pfReadOperatingFormState() {
+  let projectEl = document.getElementById('pfOperatingProject');
+  let accountEl = document.getElementById('pfOperatingAccount');
+  let amountEl = document.getElementById('pfOperatingAmount');
+  let dateEl = document.getElementById('pfOperatingEffectiveDate');
+  return {
+    inputMode: pfOperatingFormMode,
+    projectKey: projectEl ? projectEl.value : '',
+    accountId: accountEl ? accountEl.value : '',
+    amountUsd: Number(amountEl && amountEl.value) || 0,
+    effectiveDate: pfNormalizeOperatingDateKey(dateEl && dateEl.value)
+  };
+}
+
+function pfValidateOperatingForm(state) {
+  if (!state.projectKey) return 'プロジェクトを選択してください。';
+  if (state.inputMode === 'account' && !state.accountId) return 'アカウントを選択してください。';
+  if (!state.effectiveDate) return '適用日を入力してください。';
+  if (state.amountUsd <= 0) return '運用額（USD）を入力してください。';
+  return '';
+}
+
+function pfCommitOperatingEntry() {
+  let state = pfReadOperatingFormState();
+  let err = pfValidateOperatingForm(state);
+  if (err) {
+    alert(err);
     return;
   }
-  let body = rows.map(function (row) {
-    return '<div class="pfBreakdownBlock">' +
-      '<div class="pfBreakdownName">' + pfEscape(row.name) + '</div>' +
-      '<div class="pfBreakdownRow"><span>運用額</span><b>' + pfFormatOperatingUsd(row.operatingUsd) + '</b></div>' +
+  pfEnsurePortfolioOperating();
+  let now = new Date().toLocaleString();
+  if (pfOperatingEditId && pfFindPortfolioOperatingEntry(pfOperatingEditId)) {
+    settings.portfolioOperating.entries = settings.portfolioOperating.entries.map(function (e) {
+      if (e.id !== pfOperatingEditId) return e;
+      return Object.assign({}, e, {
+        inputMode: state.inputMode,
+        projectKey: state.projectKey,
+        accountId: state.inputMode === 'account' ? state.accountId : null,
+        amountUsd: Math.max(0, Math.round(state.amountUsd * 100) / 100),
+        effectiveDate: state.effectiveDate,
+        updatedAt: now
+      });
+    });
+  } else {
+    settings.portfolioOperating.entries.push({
+      id: pfGenerateOperatingEntryId(),
+      inputMode: state.inputMode,
+      projectKey: state.projectKey,
+      accountId: state.inputMode === 'account' ? state.accountId : null,
+      amountUsd: Math.max(0, Math.round(state.amountUsd * 100) / 100),
+      effectiveDate: state.effectiveDate,
+      savedAt: now,
+      updatedAt: now
+    });
+  }
+  settings.lastUpdate = now;
+  pfOperatingEditId = null;
+  pfPersistSettings();
+  if (typeof showToast === 'function') showToast('✅ 運用額を保存しました');
+  pfRenderOperatingSettingsPage();
+  renderPortfolio();
+}
+
+function pfEditOperatingEntry(id) {
+  let entry = pfFindPortfolioOperatingEntry(id);
+  if (!entry) return;
+  pfOperatingEditId = entry.id;
+  pfOperatingFormMode = entry.inputMode === 'account' ? 'account' : 'project';
+  pfRenderOperatingSettingsPage();
+}
+
+function pfCancelOperatingEdit() {
+  pfOperatingEditId = null;
+  pfRenderOperatingSettingsPage();
+}
+
+function pfDeleteOperatingEntry(id) {
+  let entry = pfFindPortfolioOperatingEntry(id);
+  if (!entry) return;
+  let label = entry.inputMode === 'account'
+    ? pfGetOperatingProjectLabel(entry.projectKey) + ' / ' + pfGetOperatingAccountLabel(entry.projectKey, entry.accountId)
+    : pfGetOperatingProjectLabel(entry.projectKey);
+  if (!confirm(label + '（' + entry.effectiveDate + '）の履歴を削除しますか？')) return;
+  pfEnsurePortfolioOperating();
+  settings.portfolioOperating.entries = settings.portfolioOperating.entries.filter(function (e) {
+    return e.id !== id;
+  });
+  if (pfOperatingEditId === id) pfOperatingEditId = null;
+  settings.lastUpdate = new Date().toLocaleString();
+  pfPersistSettings();
+  if (typeof showToast === 'function') showToast('🗑 履歴を削除しました');
+  pfRenderOperatingSettingsPage();
+  renderPortfolio();
+}
+
+function pfRenderOperatingCurrentSummary() {
+  let dateKey = pfGetOperatingAsOfDateKey();
+  let rows = pfGetEnabledOperatingRows();
+  let total = rows.reduce(function (sum, row) { return sum + row.operatingUsd; }, 0);
+  let mode = settings.portfolioOperating.displayMode || 'project';
+  let modeLabel = mode === 'account' ? 'アカウント別集計' : 'プロジェクト別集計';
+  let rowHtml = rows.map(function (row) {
+    return '<div class="pfOperatingSummaryRow"><span>' + pfEscape(row.name) + '</span><b>' +
+      pfFormatOperatingUsd(row.operatingUsd) + '</b></div>';
+  }).join('');
+  return '<div class="pfOperatingSummary panel">' +
+    '<div class="pfOperatingSummaryTitle">現在の運用額（' + pfEscape(dateKey) + ' 時点）</div>' +
+    '<p class="help">集計方法: ' + modeLabel + '。ポートフォリオ専用データを優先し、未入力分のみ組織図・実績入力の値を参照します。</p>' +
+    rowHtml +
+    '<div class="pfOperatingSummaryTotal"><span>合計</span><b>' + pfFormatOperatingUsd(total) + '</b></div>' +
+    '</div>';
+}
+
+function pfRenderOperatingSettingsPage() {
+  let el = document.getElementById('pfOperatingMain');
+  if (!el) return;
+  pfEnsurePortfolioOperating();
+  let displayMode = settings.portfolioOperating.displayMode || 'project';
+  let projects = pfGetAllPortfolioProjects();
+  let formProject = projects[0] ? projects[0].key : 'ram';
+  let editEntry = pfOperatingEditId ? pfFindPortfolioOperatingEntry(pfOperatingEditId) : null;
+  if (editEntry) {
+    pfOperatingFormMode = editEntry.inputMode === 'account' ? 'account' : 'project';
+    formProject = editEntry.projectKey;
+  }
+  let accounts = pfGetProjectAccounts(formProject);
+  let defaultDate = pfGetOperatingAsOfDateKey();
+  let formAmount = editEntry ? editEntry.amountUsd : '';
+  let formDate = editEntry ? editEntry.effectiveDate : defaultDate;
+  let formAccount = editEntry && editEntry.accountId ? editEntry.accountId : (accounts[0] ? accounts[0].id : '');
+
+  let projectOptions = projects.map(function (p) {
+    let sel = p.key === formProject ? ' selected' : '';
+    return '<option value="' + pfEscape(p.key) + '"' + sel + '>' + pfEscape(p.name) + '</option>';
+  }).join('');
+
+  let accountOptions = accounts.map(function (a) {
+    let sel = a.id === formAccount ? ' selected' : '';
+    return '<option value="' + pfEscape(a.id) + '"' + sel + '>' + pfEscape(a.name) + '</option>';
+  }).join('');
+
+  let history = pfGetPortfolioOperatingEntries().slice().sort(function (a, b) {
+    if (a.effectiveDate !== b.effectiveDate) return a.effectiveDate < b.effectiveDate ? 1 : -1;
+    return (b.updatedAt || b.savedAt || '').localeCompare(a.updatedAt || a.savedAt || '');
+  });
+
+  let historyRows = history.length ? history.map(function (e) {
+    let scope = e.inputMode === 'account'
+      ? pfEscape(pfGetOperatingProjectLabel(e.projectKey)) + ' / ' + pfEscape(pfGetOperatingAccountLabel(e.projectKey, e.accountId))
+      : pfEscape(pfGetOperatingProjectLabel(e.projectKey));
+    let modeBadge = e.inputMode === 'account' ? 'アカウント別' : 'プロジェクト別';
+    return '<div class="pfOperatingHistoryRow' + (pfOperatingEditId === e.id ? ' isEditing' : '') + '">' +
+      '<div class="pfOperatingHistoryMeta">' +
+      '<b>' + pfEscape(e.effectiveDate) + '</b>' +
+      '<span>' + scope + '</span>' +
+      '<small>' + modeBadge + '</small>' +
+      '</div>' +
+      '<div class="pfOperatingHistoryVal">' + pfFormatOperatingUsd(e.amountUsd) + '</div>' +
+      '<div class="pfOperatingHistoryActions">' +
+      '<button type="button" class="btn2" onclick=\'pfEditOperatingEntry(' + JSON.stringify(e.id) + ')\'>編集</button>' +
+      '<button type="button" class="btnDanger" onclick=\'pfDeleteOperatingEntry(' + JSON.stringify(e.id) + ')\'>削除</button>' +
+      '</div></div>';
+  }).join('') : '<p class="help pfOperatingHistoryEmpty">' + pfEmptyMark() + ' 履歴はまだありません。</p>';
+
+  el.innerHTML =
+    '<div class="pfOperatingSettingsHead">' +
+    '<button type="button" class="btn2 pfOperatingBackBtn" onclick="pfCloseOperatingSettings()">← 戻る</button>' +
+    '<h2 class="pfTitle">運用額の設定</h2>' +
+    '<p class="help pfOperatingIntro">この画面では、各プロジェクトの管理アプリに表示されている現在の運用額を登録できます。プロジェクト単位でも、アカウント単位でも、お好みの方法で管理できます。</p>' +
+    '</div>' +
+    pfRenderOperatingCurrentSummary() +
+    '<div class="pfOperatingPanel panel">' +
+    '<div class="pfOperatingSectionTitle">集計方法（表示用）</div>' +
+    '<div class="pfOperatingModeTabs" role="tablist">' +
+    '<button type="button" class="pfOperatingModeTab' + (displayMode === 'project' ? ' isActive' : '') +
+      '" onclick="pfSetOperatingDisplayMode(\'project\')">プロジェクト単位で入力</button>' +
+    '<button type="button" class="pfOperatingModeTab' + (displayMode === 'account' ? ' isActive' : '') +
+      '" onclick="pfSetOperatingDisplayMode(\'account\')">アカウント単位で入力</button>' +
+    '</div>' +
+    '<p class="help">サマリー・資産配分に反映する集計方法です。入力履歴自体は両方の方式で保持されます。</p>' +
+    '</div>' +
+    '<div class="pfOperatingPanel panel">' +
+    '<div class="pfOperatingSectionTitle">' + (editEntry ? '履歴を編集' : '運用額を登録') + '</div>' +
+    '<div class="pfOperatingFormMode">' +
+    '<span class="help">入力単位</span>' +
+    '<div class="pfOperatingModeTabs pfOperatingModeTabs--sub">' +
+    '<button type="button" class="pfOperatingModeTab' + (pfOperatingFormMode === 'project' ? ' isActive' : '') +
+      '" onclick="pfSetOperatingFormMode(\'project\')">プロジェクト別</button>' +
+    '<button type="button" class="pfOperatingModeTab' + (pfOperatingFormMode === 'account' ? ' isActive' : '') +
+      '" onclick="pfSetOperatingFormMode(\'account\')">アカウント別</button>' +
+    '</div></div>' +
+    '<label for="pfOperatingProject">プロジェクト</label>' +
+    '<select id="pfOperatingProject" onchange="pfOperatingProjectChanged()">' + projectOptions + '</select>' +
+    (pfOperatingFormMode === 'account'
+      ? '<label for="pfOperatingAccount">アカウント</label>' +
+        '<select id="pfOperatingAccount"' + (accounts.length ? '' : ' disabled') + '>' +
+        (accounts.length ? accountOptions : '<option value="">アカウントがありません</option>') +
+        '</select>'
+      : '') +
+    '<label for="pfOperatingAmount">現在の運用額（USD）</label>' +
+    '<input id="pfOperatingAmount" type="number" min="0" step="0.01" placeholder="40000" value="' +
+      (formAmount !== '' ? pfEscape(String(formAmount)) : '') + '">' +
+    '<label for="pfOperatingEffectiveDate">適用日（この日付以降に反映）</label>' +
+    '<input id="pfOperatingEffectiveDate" type="date" value="' + pfEscape(formDate) + '">' +
+    '<p class="help">同じプロジェクト（またはアカウント）で適用日が異なる履歴を複数登録できます。表示は適用日が新しいものを優先します。</p>' +
+    '<div class="pfOperatingFormActions">' +
+    (editEntry ? '<button type="button" class="btn2" onclick="pfCancelOperatingEdit()">キャンセル</button>' : '') +
+    '<button type="button" onclick="pfCommitOperatingEntry()">' + (editEntry ? '更新する' : '登録する') + '</button>' +
+    '</div></div>' +
+    '<div class="pfOperatingPanel panel">' +
+    '<div class="pfOperatingSectionTitle">入力履歴</div>' +
+    '<div class="pfOperatingHistoryList">' + historyRows + '</div>' +
+    '</div>';
+}
+
+function pfOperatingProjectChanged() {
+  pfRenderOperatingSettingsPage();
+}
+
+function pfOpenOperatingSettings() {
+  let page = document.getElementById('pfOperatingSettingsPage');
+  let portfolio = document.getElementById('portfolioPage');
+  if (!page || !portfolio) return;
+  pfEnsurePortfolioOperating();
+  pfOperatingEditId = null;
+  pfOperatingFormMode = settings.portfolioOperating.displayMode === 'account' ? 'account' : 'project';
+  portfolio.classList.add('hidden');
+  page.classList.remove('hidden');
+  if (typeof setPageLocation === 'function') setPageLocation('運用額設定');
+  pfRenderOperatingSettingsPage();
+}
+
+function pfCloseOperatingSettings() {
+  let page = document.getElementById('pfOperatingSettingsPage');
+  let portfolio = document.getElementById('portfolioPage');
+  if (!page || !portfolio) return;
+  pfOperatingEditId = null;
+  page.classList.add('hidden');
+  portfolio.classList.remove('hidden');
+  if (typeof setPageLocation === 'function') setPageLocation('ポートフォリオ');
+  renderPortfolio();
+}
+
+function pfGetDisplayedProjectProfitUsd(projectKey) {
+  let profitUsd = 0;
+  if (typeof pdSumAllTimeRevenue === 'function') {
+    let cumulative = pdSumAllTimeRevenue();
+    profitUsd = Number(cumulative.byProject[projectKey]) || 0;
+  }
+  pfGetPortfolioProfitEntries().forEach(function (entry) {
+    if (entry.projectKey !== projectKey) return;
+    profitUsd += Number(entry.totalUsd) || 0;
+  });
+  return Math.round(profitUsd * 100) / 100;
+}
+
+function pfDefaultProfitStartMonth(projectKey) {
+  if (typeof pmGetStartDate === 'function') {
+    let sd = pmGetStartDate(projectKey);
+    let m = String(sd || '').match(/(\d{4})[-/.](\d{1,2})/);
+    if (m) return m[1] + '-' + String(Number(m[2])).padStart(2, '0');
+  }
+  let end = pfGetProfitAllocationEndMonth();
+  return pfMonthKey(end.y, Math.max(0, end.m - 5));
+}
+
+function pfFormatAllocationLabel(mode) {
+  if (mode === 'growth') return '右肩上がり';
+  if (mode === 'manual') return '手動';
+  return '平均';
+}
+
+function pfRenderProfitManualMonthsSection(startMonth) {
+  if (pfProfitFormAllocation !== 'manual') return '';
+  let end = pfGetProfitAllocationEndMonth();
+  let months = pfIterateMonthRange(startMonth, end.y, end.m);
+  if (!months.length) {
+    return '<p class="help">開始月を選択してください。</p>';
+  }
+  let editEntry = pfProfitEditId ? pfFindPortfolioProfitEntry(pfProfitEditId) : null;
+  let manual = editEntry && editEntry.manualMonths ? editEntry.manualMonths : {};
+  let rows = months.map(function (mo) {
+    let val = manual[mo.key] != null ? manual[mo.key] : '';
+    return '<div class="pfProfitManualRow">' +
+      '<label for="pfProfitManual_' + mo.key + '">' + mo.key + '</label>' +
+      '<input id="pfProfitManual_' + mo.key + '" type="number" min="0" step="0.01" data-pf-profit-month="' + mo.key + '" value="' +
+      (val !== '' ? pfEscape(String(val)) : '') + '">' +
       '</div>';
   }).join('');
-  body += '<div class="pfBreakdownTotal">' +
-    '<span>合計</span><b>' + pfFormatOperatingUsd(total) + '</b></div>';
-  modalTitle.textContent = '運用額の内訳';
-  modalContent.innerHTML = body;
-  modalBg.style.display = 'flex';
+  return '<div class="pfOperatingSectionTitle">月別配分（手動）</div>' +
+    '<div class="pfProfitManualGrid">' + rows + '</div>' +
+    '<p class="help">各月の利益を個別に入力します。未入力の月は0として扱います。</p>';
+}
+
+function pfReadProfitFormState() {
+  let projectEl = document.getElementById('pfProfitProject');
+  let accountEl = document.getElementById('pfProfitAccount');
+  let startEl = document.getElementById('pfProfitStartMonth');
+  let totalEl = document.getElementById('pfProfitTotalUsd');
+  let manualMonths = {};
+  if (pfProfitFormAllocation === 'manual') {
+    document.querySelectorAll('[data-pf-profit-month]').forEach(function (input) {
+      let key = input.getAttribute('data-pf-profit-month');
+      if (!key) return;
+      let v = Number(input.value);
+      if (v > 0) manualMonths[key] = Math.round(v * 100) / 100;
+    });
+  }
+  let totalUsd = Number(totalEl && totalEl.value) || 0;
+  if (pfProfitFormAllocation === 'manual') {
+    totalUsd = Object.keys(manualMonths).reduce(function (sum, k) {
+      return sum + (Number(manualMonths[k]) || 0);
+    }, 0);
+    totalUsd = Math.round(totalUsd * 100) / 100;
+  }
+  return {
+    projectKey: projectEl ? projectEl.value : 'ram',
+    accountId: accountEl && accountEl.value ? accountEl.value : null,
+    startMonth: startEl ? startEl.value : '',
+    totalUsd: totalUsd,
+    allocation: pfProfitFormAllocation,
+    manualMonths: manualMonths
+  };
+}
+
+function pfCommitProfitEntry() {
+  let state = pfReadProfitFormState();
+  if (!state.projectKey) {
+    alert('プロジェクトを選択してください。');
+    return;
+  }
+  if (!state.startMonth || !/^\d{4}-\d{2}$/.test(state.startMonth)) {
+    alert('開始月を正しく入力してください。');
+    return;
+  }
+  if (state.totalUsd <= 0) {
+    alert('総利益（USD）を入力してください。');
+    return;
+  }
+  pfEnsurePortfolioProfit();
+  let now = new Date().toLocaleString();
+  if (pfProfitEditId && pfFindPortfolioProfitEntry(pfProfitEditId)) {
+    settings.portfolioProfit.entries = settings.portfolioProfit.entries.map(function (e) {
+      if (e.id !== pfProfitEditId) return e;
+      return Object.assign({}, e, {
+        projectKey: state.projectKey,
+        accountId: state.accountId,
+        startMonth: state.startMonth,
+        totalUsd: state.totalUsd,
+        allocation: state.allocation,
+        manualMonths: state.allocation === 'manual' ? state.manualMonths : null,
+        updatedAt: now
+      });
+    });
+  } else {
+    settings.portfolioProfit.entries.push({
+      id: pfGenerateProfitEntryId(),
+      projectKey: state.projectKey,
+      accountId: state.accountId,
+      startMonth: state.startMonth,
+      totalUsd: state.totalUsd,
+      allocation: state.allocation,
+      manualMonths: state.allocation === 'manual' ? state.manualMonths : null,
+      savedAt: now,
+      updatedAt: now
+    });
+  }
+  settings.lastUpdate = now;
+  pfProfitEditId = null;
+  pfPersistSettings();
+  if (typeof showToast === 'function') showToast('✅ 総利益を保存しました');
+  pfRenderProfitSettingsPage();
+  renderPortfolio();
+}
+
+function pfEditProfitEntry(id) {
+  let entry = pfFindPortfolioProfitEntry(id);
+  if (!entry) return;
+  pfProfitEditId = entry.id;
+  pfProfitFormAllocation = entry.allocation || 'flat';
+  pfRenderProfitSettingsPage();
+}
+
+function pfCancelProfitEdit() {
+  pfProfitEditId = null;
+  pfRenderProfitSettingsPage();
+}
+
+function pfDeleteProfitEntry(id) {
+  let entry = pfFindPortfolioProfitEntry(id);
+  if (!entry) return;
+  let label = pfGetOperatingProjectLabel(entry.projectKey);
+  if (entry.accountId) {
+    label += ' / ' + pfGetOperatingAccountLabel(entry.projectKey, entry.accountId);
+  }
+  if (!confirm(label + '（' + entry.startMonth + '〜）の総利益登録を削除しますか？')) return;
+  pfEnsurePortfolioProfit();
+  settings.portfolioProfit.entries = settings.portfolioProfit.entries.filter(function (e) {
+    return e.id !== id;
+  });
+  if (pfProfitEditId === id) pfProfitEditId = null;
+  settings.lastUpdate = new Date().toLocaleString();
+  pfPersistSettings();
+  if (typeof showToast === 'function') showToast('🗑 総利益登録を削除しました');
+  pfRenderProfitSettingsPage();
+  renderPortfolio();
+}
+
+function pfSetProfitAllocation(mode) {
+  pfProfitFormAllocation = mode;
+  pfRenderProfitSettingsPage();
+}
+
+function pfProfitProjectChanged() {
+  pfRenderProfitSettingsPage();
+}
+
+function pfProfitStartMonthChanged() {
+  pfRenderProfitSettingsPage();
+}
+
+function pfRenderProfitCurrentSummary() {
+  let entries = pfGetPortfolioProfitEntries();
+  if (!entries.length) {
+    return '<div class="pfOperatingSummary panel">' +
+      '<div class="pfOperatingSummaryTitle">登録済みの総利益</div>' +
+      '<p class="help">' + pfEmptyMark() + ' まだ登録がありません。収益管理に未登録の過去利益をここで追加できます。</p>' +
+      '</div>';
+  }
+  let byProject = {};
+  entries.forEach(function (e) {
+    let k = e.projectKey || 'other';
+    byProject[k] = (byProject[k] || 0) + (Number(e.totalUsd) || 0);
+  });
+  let rowHtml = pfGetAllPortfolioProjects().map(function (p) {
+    let amt = byProject[p.key] || 0;
+    if (amt <= 0) return '';
+    return '<div class="pfOperatingSummaryRow"><span>' + pfEscape(p.name) + '</span><b>' +
+      pfFormatOperatingUsd(amt) + '</b></div>';
+  }).join('');
+  let total = pfSumPortfolioProfitTotals();
+  return '<div class="pfOperatingSummary panel">' +
+    '<div class="pfOperatingSummaryTitle">登録済みの総利益（ポートフォリオ加算分）</div>' +
+    '<p class="help">収益管理の累計に加えて表示されます。revenueLog 自体は変更しません。</p>' +
+    rowHtml +
+    '<div class="pfOperatingSummaryTotal"><span>合計</span><b>' + pfFormatOperatingUsd(total) + '</b></div>' +
+    '</div>';
+}
+
+function pfRenderProfitSettingsPage() {
+  let el = document.getElementById('pfProfitMain');
+  if (!el) return;
+  pfEnsurePortfolioProfit();
+  let projects = pfGetAllPortfolioProjects();
+  let formProject = projects[0] ? projects[0].key : 'ram';
+  let editEntry = pfProfitEditId ? pfFindPortfolioProfitEntry(pfProfitEditId) : null;
+  if (editEntry) {
+    formProject = editEntry.projectKey;
+    pfProfitFormAllocation = editEntry.allocation || 'flat';
+  }
+  let accounts = pfGetProjectAccounts(formProject);
+  let formStart = editEntry ? editEntry.startMonth : pfDefaultProfitStartMonth(formProject);
+  let formTotal = editEntry ? editEntry.totalUsd : '';
+  let formAccount = editEntry && editEntry.accountId ? editEntry.accountId : '';
+
+  let projectOptions = projects.map(function (p) {
+    let sel = p.key === formProject ? ' selected' : '';
+    return '<option value="' + pfEscape(p.key) + '"' + sel + '>' + pfEscape(p.name) + '</option>';
+  }).join('');
+
+  let accountOptions = '<option value="">プロジェクト全体</option>' + accounts.map(function (a) {
+    let sel = a.id === formAccount ? ' selected' : '';
+    return '<option value="' + pfEscape(a.id) + '"' + sel + '>' + pfEscape(a.name) + '</option>';
+  }).join('');
+
+  let history = pfGetPortfolioProfitEntries().slice().sort(function (a, b) {
+    if (a.startMonth !== b.startMonth) return a.startMonth < b.startMonth ? 1 : -1;
+    return (b.updatedAt || b.savedAt || '').localeCompare(a.updatedAt || a.savedAt || '');
+  });
+
+  let historyRows = history.length ? history.map(function (e) {
+    let scope = pfEscape(pfGetOperatingProjectLabel(e.projectKey));
+    if (e.accountId) {
+      scope += ' / ' + pfEscape(pfGetOperatingAccountLabel(e.projectKey, e.accountId));
+    }
+    return '<div class="pfOperatingHistoryRow' + (pfProfitEditId === e.id ? ' isEditing' : '') + '">' +
+      '<div class="pfOperatingHistoryMeta">' +
+      '<b>' + pfEscape(e.startMonth) + ' 〜</b>' +
+      '<span>' + scope + '</span>' +
+      '<small>' + pfFormatAllocationLabel(e.allocation) + '</small>' +
+      '</div>' +
+      '<div class="pfOperatingHistoryVal">' + pfFormatOperatingUsd(e.totalUsd) + '</div>' +
+      '<div class="pfOperatingHistoryActions">' +
+      '<button type="button" class="btn2" onclick=\'pfEditProfitEntry(' + JSON.stringify(e.id) + ')\'>編集</button>' +
+      '<button type="button" class="btnDanger" onclick=\'pfDeleteProfitEntry(' + JSON.stringify(e.id) + ')\'>削除</button>' +
+      '</div></div>';
+  }).join('') : '<p class="help pfOperatingHistoryEmpty">' + pfEmptyMark() + ' 履歴はまだありません。</p>';
+
+  let alloc = pfProfitFormAllocation;
+  el.innerHTML =
+    '<div class="pfOperatingSettingsHead">' +
+    '<button type="button" class="btn2 pfOperatingBackBtn" onclick="pfCloseProfitSettings()">← 戻る</button>' +
+    '<h2 class="pfTitle">総利益の設定</h2>' +
+    '<p class="pfSubtitle">収益管理に未登録の過去利益を、プロジェクト単位で追加できます</p>' +
+    '<p class="help pfOperatingIntro">収益管理の実績に加えて、ポートフォリオ表示用の総利益を登録します。グラフへの配分は開始月から表示月まで、選択した方式で自動計算されます。</p>' +
+    '</div>' +
+    pfRenderProfitCurrentSummary() +
+    '<div class="pfOperatingPanel panel">' +
+    '<div class="pfOperatingSectionTitle">' + (editEntry ? '登録を編集' : '総利益を登録') + '</div>' +
+    '<label for="pfProfitProject">プロジェクト</label>' +
+    '<select id="pfProfitProject" onchange="pfProfitProjectChanged()">' + projectOptions + '</select>' +
+    '<label for="pfProfitAccount">アカウント（任意）</label>' +
+    '<select id="pfProfitAccount"' + (accounts.length ? '' : ' disabled') + '>' +
+    (accounts.length ? accountOptions : '<option value="">アカウントがありません</option>') +
+    '</select>' +
+    '<label for="pfProfitStartMonth">開始月（この月から配分）</label>' +
+    '<input id="pfProfitStartMonth" type="month" value="' + pfEscape(formStart) + '" onchange="pfProfitStartMonthChanged()">' +
+    '<label for="pfProfitTotalUsd">総利益（USD）</label>' +
+    '<input id="pfProfitTotalUsd" type="number" min="0" step="0.01" placeholder="5000"' +
+    (alloc === 'manual' ? ' readonly' : '') +
+    ' value="' + (formTotal !== '' ? pfEscape(String(formTotal)) : '') + '">' +
+    (alloc === 'manual' ? '<p class="help">手動配分では、下の月別入力の合計が総利益になります。</p>' : '') +
+    '<div class="pfOperatingSectionTitle">配分方式</div>' +
+    '<div class="pfOperatingModeTabs pfOperatingModeTabs--sub">' +
+    '<button type="button" class="pfOperatingModeTab' + (alloc === 'flat' ? ' isActive' : '') +
+      '" onclick="pfSetProfitAllocation(\'flat\')">平均</button>' +
+    '<button type="button" class="pfOperatingModeTab' + (alloc === 'growth' ? ' isActive' : '') +
+      '" onclick="pfSetProfitAllocation(\'growth\')">右肩上がり</button>' +
+    '<button type="button" class="pfOperatingModeTab' + (alloc === 'manual' ? ' isActive' : '') +
+      '" onclick="pfSetProfitAllocation(\'manual\')">手動</button>' +
+    '</div>' +
+    '<p class="help">平均：各月均等 / 右肩上がり：後の月ほど多め / 手動：月ごとに入力</p>' +
+    pfRenderProfitManualMonthsSection(formStart) +
+    '<div class="pfOperatingFormActions">' +
+    (editEntry ? '<button type="button" class="btn2" onclick="pfCancelProfitEdit()">キャンセル</button>' : '') +
+    '<button type="button" onclick="pfCommitProfitEntry()">' + (editEntry ? '更新する' : '登録する') + '</button>' +
+    '</div></div>' +
+    '<div class="pfOperatingPanel panel">' +
+    '<div class="pfOperatingSectionTitle">登録履歴</div>' +
+    '<div class="pfOperatingHistoryList">' + historyRows + '</div>' +
+    '</div>';
+}
+
+function pfOpenProfitSettings() {
+  let page = document.getElementById('pfProfitSettingsPage');
+  let portfolio = document.getElementById('portfolioPage');
+  if (!page || !portfolio) return;
+  pfEnsurePortfolioProfit();
+  pfProfitEditId = null;
+  pfProfitFormAllocation = 'flat';
+  portfolio.classList.add('hidden');
+  page.classList.remove('hidden');
+  if (typeof setPageLocation === 'function') setPageLocation('総利益設定');
+  pfRenderProfitSettingsPage();
+}
+
+function pfCloseProfitSettings() {
+  let page = document.getElementById('pfProfitSettingsPage');
+  let portfolio = document.getElementById('portfolioPage');
+  if (!page || !portfolio) return;
+  pfProfitEditId = null;
+  page.classList.add('hidden');
+  portfolio.classList.remove('hidden');
+  if (typeof setPageLocation === 'function') setPageLocation('ポートフォリオ');
+  renderPortfolio();
 }
 
 function pfOpenGoalSettings() {
@@ -650,12 +1537,19 @@ function pfRenderStackedBars() {
     ? pdGetStackedMonthlyRevenue(endY, endM, 6)
     : [];
   let hasLog = stacked.some(function (m) { return m.hasLog; });
-  if (!hasLog && !pfIsDemoMode()) {
+  let hasPortfolioProfit = pfHasPortfolioProfitEntries();
+  if (!hasLog && !pfIsDemoMode() && !hasPortfolioProfit) {
     el.innerHTML = '<div class="pfStackEmpty"><p class="pfEmptyHint">' + pfEmptyMark() + ' 実績データなし</p></div>';
     return;
   }
   if (!hasLog && pfIsDemoMode()) {
     stacked = PF_MOCK_STACKED;
+  }
+  if (stacked.length) {
+    let monthKeys = pfResolveStackedMonthKeys(endY, endM, stacked.length);
+    stacked = stacked.map(function (month, i) {
+      return pfMergeMonthWithProfitOverlay(month, monthKeys[i].key);
+    });
   }
 
   let maxTotal = Math.max.apply(null, stacked.map(function (m) { return m.total; }).concat([1]));
@@ -704,6 +1598,8 @@ function pfSyncMainTabs(active) {
 
 function renderPortfolio() {
   if (typeof portfolioPage !== 'undefined' && portfolioPage.classList.contains('hidden')) return;
+  if (typeof pfOperatingSettingsPage !== 'undefined' && !pfOperatingSettingsPage.classList.contains('hidden')) return;
+  if (typeof pfProfitSettingsPage !== 'undefined' && !pfProfitSettingsPage.classList.contains('hidden')) return;
   if (typeof hubEnsureViewMonth === 'function') hubEnsureViewMonth();
   if (typeof hubUpdateMonthLabels === 'function') hubUpdateMonthLabels();
   pfSyncMainTabs('portfolio');

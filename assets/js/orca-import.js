@@ -641,6 +641,7 @@ function oiHookShowPage() {
       if (typeof ochanRoomPage !== 'undefined') ochanRoomPage.classList.add('hidden');
       if (typeof portfolioPage !== 'undefined') portfolioPage.classList.add('hidden');
       if (typeof pfGoalSettingsPage !== 'undefined') pfGoalSettingsPage.classList.add('hidden');
+      if (typeof pfOperatingSettingsPage !== 'undefined') pfOperatingSettingsPage.classList.add('hidden');
       if (typeof projectSettingsPage !== 'undefined') projectSettingsPage.classList.add('hidden');
       if (typeof fxSettingsPage !== 'undefined') fxSettingsPage.classList.add('hidden');
       if (typeof revenueManagePage !== 'undefined') revenueManagePage.classList.add('hidden');
