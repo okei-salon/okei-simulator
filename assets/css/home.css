@@ -2487,13 +2487,13 @@
 
   .ochanContainer {
     width: 110px;
-    --ochan-left: -29px;
-    --ochan-bottom: -17px;
+    --ochan-left: -28px;
+    --ochan-bottom: -14px;
   }
 
   .ochanAvatar {
-    width: var(--ochan-width, 161px);
-    height: var(--ochan-height, 161px);
+    width: 140px;
+    height: 161px;
   }
 
   .ochanSpeechBubble {
