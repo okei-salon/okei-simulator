@@ -195,12 +195,12 @@ body.simulationMode .simBanner{display:block}
 </style>
 <link rel="stylesheet" href="assets/css/project-icons.css?v=20260705-v253">
 <link rel="stylesheet" href="assets/css/home.css?v=20260705-multi-project-v1">
-<link rel="stylesheet" href="assets/css/portfolio-ui.css?v=20260705-multi-project-v1">
+<link rel="stylesheet" href="assets/css/portfolio-ui.css?v=20260707-manage-head-v1">
 <link rel="stylesheet" href="assets/css/settings-ui.css?v=20260705-v253">
 <link rel="stylesheet" href="assets/css/hub-auth.css?v=20260704-v237">
 <link rel="stylesheet" href="assets/css/excel-import.css?v=20260705-v243">
 <link rel="stylesheet" href="assets/css/orca-import.css?v=20260628-v205">
-<link rel="stylesheet" href="assets/css/revenue-manage.css?v=20260705-sm252">
+<link rel="stylesheet" href="assets/css/revenue-manage.css?v=20260707-cal-btn-v1">
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="assets/js/project-icons.js?v=20260705-v254"></script>
 <script src="assets/js/home.js?v=20260705-v254"></script>
@@ -353,17 +353,19 @@ body.simulationMode .simBanner{display:block}
 <section id="portfolioPage" class="hidden portfolioPage">
 <div class="pfShell">
 <div class="pfHead">
-<div class="pfHeadTop">
+<div class="pfManageHeadTop">
 <div class="pfMainTabs" role="tablist" aria-label="画面切替">
 <button type="button" class="pfMainTab isActive" data-pf-main-tab="portfolio" role="tab" aria-selected="true" onclick="showPage('portfolio')">ポートフォリオ</button>
 <button type="button" class="pfMainTab" data-pf-main-tab="revenueManage" role="tab" aria-selected="false" onclick="showPage('revenueManage')">収益管理</button>
 <button type="button" class="pfMainTab" data-pf-main-tab="salesManage" role="tab" aria-selected="false" onclick="showPage('salesManage')">売上管理</button>
 </div>
-<div class="rmMonthNav pfMonthNav">
+<div class="pfManageHeadRight">
+<div class="rmMonthNav">
 <button type="button" class="rmMonthNavBtn" onclick="hubPrevMonth()" aria-label="前の月">◀</button>
 <span class="rmMonthLabel" id="pfMonthLabel">2026年6月</span>
 <button type="button" class="rmMonthNavBtn" onclick="hubNextMonth()" aria-label="次の月">▶</button>
-<button type="button" class="rmIconBtn pfMonthPickerBtn" onclick="hubOpenMonthPicker(event)" aria-label="月を選択"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M8 2v4M16 2v4M3 10h18"/></svg></button>
+<button type="button" class="rmIconBtn" onclick="hubOpenMonthPicker(event)" aria-label="月を選択"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M8 2v4M16 2v4M3 10h18"/></svg></button>
+</div>
 </div>
 </div>
 <p class="pfSubtitle">あなたの資産全体を一元管理</p>
@@ -390,23 +392,23 @@ body.simulationMode .simBanner{display:block}
 
 <section id="revenueManagePage" class="hidden portfolioPage revenueManagePage">
 <div class="pfShell rmShell">
-<div class="rmTopBar">
-<div class="rmTopBarLeft">
+<div class="pfManageHeadTop">
 <div class="pfMainTabs" role="tablist" aria-label="画面切替">
 <button type="button" class="pfMainTab" data-pf-main-tab="portfolio" role="tab" aria-selected="false" onclick="showPage('portfolio')">ポートフォリオ</button>
 <button type="button" class="pfMainTab isActive" data-pf-main-tab="revenueManage" role="tab" aria-selected="true" onclick="showPage('revenueManage')">収益管理</button>
 <button type="button" class="pfMainTab" data-pf-main-tab="salesManage" role="tab" aria-selected="false" onclick="showPage('salesManage')">売上管理</button>
 </div>
-</div>
-<div class="rmTopBarRight">
+<div class="pfManageHeadRight">
 <div class="rmMonthNav">
 <button type="button" class="rmMonthNavBtn" onclick="hubPrevMonth()" aria-label="前の月">◀</button>
 <span class="rmMonthLabel" id="rmMonthLabel">2026年6月</span>
 <button type="button" class="rmMonthNavBtn" onclick="hubNextMonth()" aria-label="次の月">▶</button>
-</div>
 <button type="button" class="rmIconBtn" onclick="hubOpenMonthPicker(event)" aria-label="月を選択"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M8 2v4M16 2v4M3 10h18"/></svg></button>
+</div>
+<div class="pfManageHeadActions">
 <span class="rmUpdated" id="rmLastUpdate">最終更新：—</span>
 <button type="button" class="rmExportBtn" onclick="rmExportPlaceholder()">エクスポート</button>
+</div>
 </div>
 </div>
 <div class="rmFilterBar">
@@ -445,23 +447,23 @@ body.simulationMode .simBanner{display:block}
 
 <section id="salesManagePage" class="hidden portfolioPage revenueManagePage salesManagePage">
 <div class="pfShell rmShell">
-<div class="rmTopBar">
-<div class="rmTopBarLeft">
+<div class="pfManageHeadTop">
 <div class="pfMainTabs" role="tablist" aria-label="画面切替">
 <button type="button" class="pfMainTab" data-pf-main-tab="portfolio" role="tab" aria-selected="false" onclick="showPage('portfolio')">ポートフォリオ</button>
 <button type="button" class="pfMainTab" data-pf-main-tab="revenueManage" role="tab" aria-selected="false" onclick="showPage('revenueManage')">収益管理</button>
 <button type="button" class="pfMainTab isActive" data-pf-main-tab="salesManage" role="tab" aria-selected="true" onclick="showPage('salesManage')">売上管理</button>
 </div>
-</div>
-<div class="rmTopBarRight">
+<div class="pfManageHeadRight">
 <div class="rmMonthNav">
 <button type="button" class="rmMonthNavBtn" onclick="hubPrevMonth()" aria-label="前の月">◀</button>
 <span class="rmMonthLabel" id="smMonthLabel">2026年6月</span>
 <button type="button" class="rmMonthNavBtn" onclick="hubNextMonth()" aria-label="次の月">▶</button>
-</div>
 <button type="button" class="rmIconBtn" onclick="hubOpenMonthPicker(event)" aria-label="月を選択"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M8 2v4M16 2v4M3 10h18"/></svg></button>
+</div>
+<div class="pfManageHeadActions">
 <span class="rmUpdated" id="smLastUpdate">最終更新：—</span>
 <button type="button" class="rmExportBtn" onclick="smExportPlaceholder()">エクスポート</button>
+</div>
 </div>
 </div>
 <div class="rmFilterBar">

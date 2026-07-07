@@ -1054,6 +1054,20 @@ function rmMonthTotalFromChartSeries(vals) {
   return hasAny ? Math.round(sum * 100) / 100 : 0;
 }
 
+function rmMonthTotalFromChartSeriesThroughDay(vals, throughDay) {
+  if (!throughDay) return 0;
+  let sum = 0;
+  let hasAny = false;
+  for (let i = 0; i < throughDay; i++) {
+    let v = vals[i];
+    if (v !== null && v !== undefined) {
+      hasAny = true;
+      sum += v;
+    }
+  }
+  return hasAny ? Math.round(sum * 100) / 100 : 0;
+}
+
 function rmMonthTotal(y, m) {
   return rmMonthTotalFromSeries(rmResolveDailySeries(y, m));
 }
@@ -1279,9 +1293,15 @@ function rmRenderChartSummary() {
   let prev = rmCalcPrevMonth(y, m);
   let curVals = rmCollectChartSeries(y, m);
   let prevVals = rmCollectChartSeries(prev.y, prev.m);
+  let compareDay = rmChartLastDataDay(y, m);
+  let prevDaysInMonth = new Date(prev.y, prev.m + 1, 0).getDate();
+  let prevCompareDay = Math.min(compareDay, prevDaysInMonth);
   let curTotal = rmMonthTotalFromChartSeries(curVals);
   let prevTotal = rmMonthTotalFromChartSeries(prevVals);
-  let pct = rmPctChange(curTotal, prevTotal);
+  let pct = rmPctChange(
+    rmMonthTotalFromChartSeriesThroughDay(curVals, compareDay),
+    rmMonthTotalFromChartSeriesThroughDay(prevVals, prevCompareDay)
+  );
   let pctCls = pct >= 0 ? 'isUp' : 'isDown';
   let arrow = pct >= 0 ? '↗' : '↘';
 

@@ -14,22 +14,6 @@
   padding: 4px 2px 28px;
 }
 
-.rmTopBar {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  flex-wrap: wrap;
-}
-
-.rmTopBarRight {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  margin-left: auto;
-}
-
 .rmMonthNav {
   display: inline-flex;
   align-items: center;
@@ -54,6 +38,31 @@
 
 .rmMonthNavBtn:hover {
   background: rgba(37, 99, 235, .18);
+}
+
+.rmMonthNav .rmIconBtn {
+  width: 36px;
+  height: 36px;
+  margin-left: 2px;
+  border-radius: 10px;
+  border: 1px solid rgba(53, 87, 119, .55);
+  background: rgba(8, 20, 38, .72);
+  color: #93c5fd;
+  flex-shrink: 0;
+}
+
+.rmMonthNav .rmIconBtn:hover {
+  background: rgba(37, 99, 235, .18);
+}
+
+.rmMonthNav .rmIconBtn svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .rmMonthLabel {
@@ -802,11 +811,6 @@ td.pfEditableCell {
     grid-template-columns: 1fr;
   }
 
-  .rmTopBarRight {
-    width: 100%;
-    margin-left: 0;
-  }
-
   .rmCurrency {
     margin-left: 0;
   }
@@ -1022,22 +1026,4 @@ td.pfEditableCell {
   border-color: #60a5fa;
   background: rgba(37, 99, 235, .28);
   color: #f0f7ff;
-}
-
-.pfMonthNav .pfMonthPickerBtn {
-  width: 30px;
-  height: 30px;
-  margin-left: 2px;
-  border-radius: 8px;
-  border: none;
-  background: transparent;
-}
-
-.pfMonthNav .pfMonthPickerBtn:hover {
-  background: rgba(37, 99, 235, .18);
-}
-
-.pfMonthNav .pfMonthPickerBtn svg {
-  width: 16px;
-  height: 16px;
 }

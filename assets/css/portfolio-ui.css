@@ -13,16 +13,35 @@
   padding: 4px 2px 28px;
 }
 
-.pfHeadTop {
+.pfManageHeadTop {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
   flex-wrap: wrap;
+  width: 100%;
 }
 
-.pfMonthNav {
+.pfManageHeadTop .pfMainTabs {
+  margin: 0;
+  flex: 1 1 540px;
+  max-width: 540px;
+}
+
+.pfManageHeadRight {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
   flex-shrink: 0;
+  margin-left: auto;
+}
+
+.pfManageHeadActions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 .pfHead {
@@ -59,7 +78,7 @@
   gap: 8px;
   width: 100%;
   max-width: 540px;
-  margin: 0 0 4px;
+  margin: 0;
 }
 
 .pfMainTab {
@@ -998,6 +1017,14 @@
 
   .pfLegendBar {
     display: none;
+  }
+}
+
+@media (max-width: 900px) {
+  .pfManageHeadRight {
+    width: 100%;
+    margin-left: 0;
+    justify-content: flex-end;
   }
 }
 
