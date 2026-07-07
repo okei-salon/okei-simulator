@@ -387,7 +387,39 @@ function smGetDemoAccountDaySales(accountId, projectKey, d) {
   return 8000 + (seed % 5) * 420 + Math.round(Math.sin((d + seed) * 0.65) * 380) + (d % 4) * 120;
 }
 
+function smGetSalesReferenceDate() {
+  return typeof getHomeReferenceDate === 'function' ? getHomeReferenceDate() : new Date();
+}
+
+function smIsFutureSalesDay(y, m, d) {
+  let ref = smGetSalesReferenceDate();
+  if (y > ref.getFullYear()) return true;
+  if (y === ref.getFullYear() && m > ref.getMonth()) return true;
+  if (y === ref.getFullYear() && m === ref.getMonth() && d > ref.getDate()) return true;
+  return false;
+}
+
+function smDayHasSalesEntry(y, m, d) {
+  let entry = smGetPerformanceEntry(y, m, d);
+  if (!entry) return false;
+  if (entry.accounts && Object.keys(entry.accounts).length) {
+    return Object.keys(entry.accounts).some(function (id) {
+      let ae = entry.accounts[id];
+      if (!ae) return false;
+      if (ae.todaySales != null && ae.todaySales !== '') return true;
+      if (ae.totalSales != null && ae.totalSales !== '') return true;
+      return false;
+    });
+  }
+  if (entry.total != null && entry.total !== '') return true;
+  return ['ram', 'orca', 'cary', 'genesis', 'other'].some(function (pk) {
+    return entry[pk] != null && entry[pk] !== '';
+  });
+}
+
 function smGetAccountDaySalesFromLog(accountId, projectKey, y, m, d) {
+  if (smIsFutureSalesDay(y, m, d)) return null;
+  if (!smDayHasSalesEntry(y, m, d)) return null;
   let entry = smGetPerformanceEntry(y, m, d);
   if (!entry || !entry.accounts || !entry.accounts[accountId]) return null;
   let ae = entry.accounts[accountId];
@@ -397,12 +429,15 @@ function smGetAccountDaySalesFromLog(accountId, projectKey, y, m, d) {
 }
 
 function smGetAccountDaySales(accountId, projectKey, y, m, d) {
+  if (smIsFutureSalesDay(y, m, d)) return null;
   let fromLog = smGetAccountDaySalesFromLog(accountId, projectKey, y, m, d);
   if (fromLog !== null) return fromLog;
   return smIsDemoMode() ? smGetDemoAccountDaySales(accountId, projectKey, d) : null;
 }
 
 function smGetProjectDayAmountDeduped(projectKey, y, m, d) {
+  if (smIsFutureSalesDay(y, m, d)) return null;
+  if (!smDayHasSalesEntry(y, m, d)) return null;
   let entry = smGetPerformanceEntry(y, m, d);
   let accounts = smGetProjectAccounts(projectKey);
   if (accounts.length) {

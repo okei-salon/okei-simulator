@@ -1316,6 +1316,52 @@ function pdSaveSalesAccountEntry(dateKey, projectKey, accountId, todaySales) {
   return entry;
 }
 
+function pdGetRamPreviousTotalSales(accountId, dateKey) {
+  if (!accountId || !dateKey) return null;
+  ensurePerformanceLogs();
+  let keys = pdListSalesDateKeys().filter(function (k) { return k < dateKey; });
+  for (let i = keys.length - 1; i >= 0; i--) {
+    let entry = settings.salesLog[keys[i]];
+    if (!entry || !entry.accounts || !entry.accounts[accountId]) continue;
+    let ae = entry.accounts[accountId];
+    if (ae.totalSales == null || ae.totalSales === '') continue;
+    return pdRound(ae.totalSales);
+  }
+  return null;
+}
+
+function pdCalcRamTodaySalesFromTotal(accountId, dateKey, totalSales) {
+  totalSales = pdRound(totalSales);
+  let prevTotal = pdGetRamPreviousTotalSales(accountId, dateKey);
+  if (prevTotal == null) {
+    return { todaySales: 0, totalSales: totalSales, prevTotal: null, isFirst: true };
+  }
+  return {
+    todaySales: pdRound(totalSales - prevTotal),
+    totalSales: totalSales,
+    prevTotal: prevTotal,
+    isFirst: false
+  };
+}
+
+function pdSaveRamTotalSalesEntry(dateKey, accountId, totalSales) {
+  if (!dateKey || !accountId) return null;
+  if (totalSales == null || totalSales === '' || isNaN(Number(totalSales))) return null;
+  let calc = pdCalcRamTodaySalesFromTotal(accountId, dateKey, Number(totalSales));
+  let entry = pdGetSalesEntryRaw(dateKey) || {};
+  entry.accounts = entry.accounts || {};
+  entry.accounts[accountId] = {
+    projectKey: 'ram',
+    todaySales: calc.todaySales,
+    totalSales: calc.totalSales,
+    salesSource: 'manual'
+  };
+  entry = pdRecalculateSalesEntry(entry);
+  pdWriteSalesEntry(dateKey, entry);
+  pdNotifyPerformanceChanged({ type: 'sales', dateKey: dateKey, projectKey: 'ram', accountId: accountId });
+  return calc;
+}
+
 function pdMergeRevenueEntry(dateKey, patch) {
   let entry = pdGetRevenueEntryRaw(dateKey) || {};
   Object.keys(patch || {}).forEach(function (k) {
@@ -1837,6 +1883,9 @@ if (typeof window !== 'undefined') {
   window.pdCollectSalesAccountIds = pdCollectSalesAccountIds;
   window.pdSaveRevenueAccountEntry = pdSaveRevenueAccountEntry;
   window.pdSaveSalesAccountEntry = pdSaveSalesAccountEntry;
+  window.pdGetRamPreviousTotalSales = pdGetRamPreviousTotalSales;
+  window.pdCalcRamTodaySalesFromTotal = pdCalcRamTodaySalesFromTotal;
+  window.pdSaveRamTotalSalesEntry = pdSaveRamTotalSalesEntry;
   window.pdNotifyPerformanceChanged = pdNotifyPerformanceChanged;
   window.pdGetPortfolioSummary = pdGetPortfolioSummary;
   window.pdGetStackedMonthlyRevenue = pdGetStackedMonthlyRevenue;
