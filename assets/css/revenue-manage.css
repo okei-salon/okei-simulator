@@ -1027,3 +1027,8 @@ td.pfEditableCell {
   background: rgba(37, 99, 235, .28);
   color: #f0f7ff;
 }
+
+#smProjectStats .rmStatTableHead,
+#smProjectStats .rmStatTableRow {
+  grid-template-columns: minmax(108px, 1.05fr) 1fr 1fr 1fr;
+}

@@ -3,7 +3,7 @@
  * PNG icons loaded from assets/projects/
  */
 
-var PJ_ICON_VERSION = '20260705-v253';
+var PJ_ICON_VERSION = '20260708-v254';
 var PJ_ICON_BASE = 'assets/projects/';
 
 /** プロジェクト名の完全一致 → 公式アイコン key */

@@ -1,4 +1,4 @@
-/* OUKEI HUB Performance Data — Ver2.0.4
+/* OUKEI HUB Performance Data — Ver2.0.8
  * Single Source of Truth for revenue & sales actuals.
  * Storage: settings.revenueLog[dateKey], settings.salesLog[dateKey]
  *           settings.investmentHistory[accountId] — 投資履歴（運用額の一元管理）
@@ -189,8 +189,9 @@ function pdProjectHasActualData(projectKey) {
     if (!entry.accounts) return false;
     return Object.keys(entry.accounts).some(function (id) {
       let ae = entry.accounts[id];
-      return (ae.projectKey || 'other') === projectKey &&
-        ae.todaySales != null && ae.todaySales !== '';
+      if ((ae.projectKey || 'other') !== projectKey) return false;
+      if (ae.totalSales != null && ae.totalSales !== '') return true;
+      return ae.todaySales != null && ae.todaySales !== '';
     });
   })) return true;
   return false;
@@ -272,7 +273,7 @@ function pdCollectSalesAccountIds(projectKey) {
       let ae = entry.accounts[id];
       let pk = ae.projectKey || 'other';
       if (pk !== projectKey) return;
-      if (ae.todaySales != null) ids[id] = true;
+      if (ae.todaySales != null || (ae.totalSales != null && ae.totalSales !== '')) ids[id] = true;
     });
   });
   return Object.keys(ids);
@@ -1222,6 +1223,7 @@ function pdWriteSalesEntry(dateKey, entry) {
   settings.salesLog[dateKey] = entry;
   settings.lastUpdate = new Date().toLocaleString();
   if (typeof markActivity === 'function') markActivity();
+  if (typeof markSettingsDirty === 'function') markSettingsDirty();
   pdPersist();
 }
 
@@ -1306,14 +1308,41 @@ function pdSaveSalesAccountEntry(dateKey, projectKey, accountId, todaySales) {
   if (!dateKey || !projectKey || !accountId) return null;
   let entry = pdGetSalesEntryRaw(dateKey) || {};
   entry.accounts = entry.accounts || {};
-  entry.accounts[accountId] = {
+  let prev = entry.accounts[accountId];
+  let nextAccount = {
     projectKey: projectKey,
     todaySales: pdRound(todaySales)
   };
+  if (prev) {
+    if (prev.totalSales != null && prev.totalSales !== '') {
+      nextAccount.totalSales = pdRound(prev.totalSales);
+    }
+    if (prev.salesSource) nextAccount.salesSource = prev.salesSource;
+  }
+  entry.accounts[accountId] = nextAccount;
   entry = pdRecalculateSalesEntry(entry);
   pdWriteSalesEntry(dateKey, entry);
   pdNotifyPerformanceChanged({ type: 'sales', dateKey: dateKey, projectKey: projectKey, accountId: accountId });
   return entry;
+}
+
+function pdGetLatestTotalSalesForAccount(accountId, projectKey) {
+  if (!accountId || !projectKey) return null;
+  ensurePerformanceLogs();
+  let keys = pdListSalesDateKeys();
+  for (let i = keys.length - 1; i >= 0; i--) {
+    let dateKey = keys[i];
+    let entry = settings.salesLog[dateKey];
+    if (!entry || !entry.accounts || !entry.accounts[accountId]) continue;
+    let ae = entry.accounts[accountId];
+    if (ae.projectKey && ae.projectKey !== projectKey) continue;
+    if (ae.totalSales == null || ae.totalSales === '') continue;
+    return {
+      amount: pdRound(ae.totalSales),
+      dateKey: dateKey
+    };
+  }
+  return null;
 }
 
 function pdGetRamPreviousTotalSales(accountId, dateKey) {
@@ -1359,6 +1388,59 @@ function pdSaveRamTotalSalesEntry(dateKey, accountId, totalSales) {
   entry = pdRecalculateSalesEntry(entry);
   pdWriteSalesEntry(dateKey, entry);
   pdNotifyPerformanceChanged({ type: 'sales', dateKey: dateKey, projectKey: 'ram', accountId: accountId });
+  return calc;
+}
+
+function pdGetOrcaPreviousTotalSales(accountId, dateKey) {
+  if (!accountId || !dateKey) return null;
+  ensurePerformanceLogs();
+  let keys = pdListSalesDateKeys().filter(function (k) { return k < dateKey; });
+  for (let i = keys.length - 1; i >= 0; i--) {
+    let entry = settings.salesLog[keys[i]];
+    if (!entry || !entry.accounts || !entry.accounts[accountId]) continue;
+    let ae = entry.accounts[accountId];
+    if (ae.projectKey && ae.projectKey !== 'orca') continue;
+    if (ae.totalSales == null || ae.totalSales === '') continue;
+    return pdRound(ae.totalSales);
+  }
+  return null;
+}
+
+function pdCalcOrcaTodaySalesFromTotal(accountId, dateKey, totalSales) {
+  totalSales = pdRound(totalSales);
+  let prevTotal = pdGetOrcaPreviousTotalSales(accountId, dateKey);
+  if (prevTotal == null) {
+    return { todaySales: 0, totalSales: totalSales, prevTotal: null, isFirst: true };
+  }
+  return {
+    todaySales: pdRound(totalSales - prevTotal),
+    totalSales: totalSales,
+    prevTotal: prevTotal,
+    isFirst: false
+  };
+}
+
+function pdSaveOrcaTotalSalesEntry(dateKey, accountId, totalSales) {
+  return pdSaveTotalSalesEntry(dateKey, accountId, totalSales, 'orca');
+}
+
+function pdSaveTotalSalesEntry(dateKey, accountId, totalSales, projectKey) {
+  if (!dateKey || !accountId || !projectKey) return null;
+  if (totalSales == null || totalSales === '' || isNaN(Number(totalSales))) return null;
+  let calc = projectKey === 'orca'
+    ? pdCalcOrcaTodaySalesFromTotal(accountId, dateKey, Number(totalSales))
+    : pdCalcRamTodaySalesFromTotal(accountId, dateKey, Number(totalSales));
+  let entry = pdGetSalesEntryRaw(dateKey) || {};
+  entry.accounts = entry.accounts || {};
+  entry.accounts[accountId] = {
+    projectKey: projectKey,
+    todaySales: calc.todaySales,
+    totalSales: calc.totalSales,
+    salesSource: 'manual'
+  };
+  entry = pdRecalculateSalesEntry(entry);
+  pdWriteSalesEntry(dateKey, entry);
+  pdNotifyPerformanceChanged({ type: 'sales', dateKey: dateKey, projectKey: projectKey, accountId: accountId });
   return calc;
 }
 
@@ -1844,7 +1926,8 @@ function pdNotifyPerformanceChanged(opts) {
     }
   }
   if (typeof renderSalesManage === 'function') {
-    if (typeof salesManagePage === 'undefined' ||
+    if (opts.type === 'sales' ||
+        typeof salesManagePage === 'undefined' ||
         !salesManagePage.classList.contains('hidden')) {
       renderSalesManage();
     }
@@ -1883,9 +1966,14 @@ if (typeof window !== 'undefined') {
   window.pdCollectSalesAccountIds = pdCollectSalesAccountIds;
   window.pdSaveRevenueAccountEntry = pdSaveRevenueAccountEntry;
   window.pdSaveSalesAccountEntry = pdSaveSalesAccountEntry;
+  window.pdGetLatestTotalSalesForAccount = pdGetLatestTotalSalesForAccount;
   window.pdGetRamPreviousTotalSales = pdGetRamPreviousTotalSales;
   window.pdCalcRamTodaySalesFromTotal = pdCalcRamTodaySalesFromTotal;
   window.pdSaveRamTotalSalesEntry = pdSaveRamTotalSalesEntry;
+  window.pdGetOrcaPreviousTotalSales = pdGetOrcaPreviousTotalSales;
+  window.pdCalcOrcaTodaySalesFromTotal = pdCalcOrcaTodaySalesFromTotal;
+  window.pdSaveOrcaTotalSalesEntry = pdSaveOrcaTotalSalesEntry;
+  window.pdSaveTotalSalesEntry = pdSaveTotalSalesEntry;
   window.pdNotifyPerformanceChanged = pdNotifyPerformanceChanged;
   window.pdGetPortfolioSummary = pdGetPortfolioSummary;
   window.pdGetStackedMonthlyRevenue = pdGetStackedMonthlyRevenue;

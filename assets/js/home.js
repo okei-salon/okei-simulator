@@ -1,8 +1,9 @@
-/* OUKEI HUB Home UI — Ver1.9.5 */
+/* OUKEI HUB Home UI — Ver2.0.7 */
 let homeCalView = { y: new Date().getFullYear(), m: new Date().getMonth() };
 let ramSavePending = null;
 let ramSalesDecreasePending = null;
 let orcaSavePending = null;
+let orcaSalesDecreasePending = null;
 
 function ensureRevenueLog() {
   if (!settings.revenueLog || typeof settings.revenueLog !== 'object') settings.revenueLog = {};
@@ -1928,21 +1929,103 @@ function isCaryFullyEntered(entry) {
 }
 
 function orcaInputDiffersFromSaved(collected, existing) {
-  if (!existing || !hasOrcaDataSavedForToday(existing)) return false;
-  let existingAccounts = normalizeOrcaAccountsMap(existing.orcaAccounts);
+  let hasExistingRevenue = existing && hasOrcaDataSavedForToday(existing);
+  let hasExistingSales = hasOrcaSalesSavedForToday();
+  if (!hasExistingRevenue && !hasExistingSales) return false;
+  let existingAccounts = hasExistingRevenue ? normalizeOrcaAccountsMap(existing.orcaAccounts) : {};
+  let existingSales = getTodayRamSalesEntry();
   let accounts = getOrcaInputAccounts();
 
   return accounts.some(function (acc) {
-    let next = collected.orcaAccounts[acc.id];
-    let prev = existingAccounts[acc.id];
-    let nextYesterday = next ? normalizeRamRevenueNumber(next.yesterdayAiProfit) : null;
-    let prevYesterday = prev ? prev.yesterdayAiProfit : null;
-    let nextAff = next ? normalizeRamRevenueNumber(next.todayAffiliateProfit) : null;
-    let prevAff = prev ? prev.todayAffiliateProfit : null;
-    if (!next && !prev) return false;
-    if (!next || !prev) return true;
-    return nextYesterday !== prevYesterday || nextAff !== prevAff;
+    if (hasExistingRevenue) {
+      let next = collected.orcaAccounts[acc.id];
+      let prev = existingAccounts[acc.id];
+      let nextYesterday = next ? normalizeRamRevenueNumber(next.yesterdayAiProfit) : null;
+      let prevYesterday = prev ? prev.yesterdayAiProfit : null;
+      let nextAff = next ? normalizeRamRevenueNumber(next.todayAffiliateProfit) : null;
+      let prevAff = prev ? prev.todayAffiliateProfit : null;
+      if (!next && !prev) {
+        // continue to sales check
+      } else if (!next || !prev) {
+        return true;
+      } else if (nextYesterday !== prevYesterday || nextAff !== prevAff) {
+        return true;
+      }
+    }
+    let nextTotalSales = collected.orcaSales && collected.orcaSales[acc.id];
+    let prevSales = getRamAccountSalesEntry(existingSales, acc.id);
+    if (prevSales && prevSales.projectKey && prevSales.projectKey !== 'orca') prevSales = null;
+    let prevTotalSales = prevSales && prevSales.totalSales != null ? Number(prevSales.totalSales) : null;
+    if (nextTotalSales != null) {
+      if (prevTotalSales == null || nextTotalSales !== prevTotalSales) return true;
+    } else if (prevTotalSales != null) {
+      return true;
+    }
+    return false;
   });
+}
+
+function collectOrcaSalesFromForm() {
+  let out = {};
+  getOrcaInputAccounts().forEach(function (acc) {
+    let el = document.getElementById('orcaTotalSales_' + acc.id);
+    if (el && el.value !== '' && !isNaN(Number(el.value))) {
+      out[acc.id] = Number(el.value);
+    }
+  });
+  return out;
+}
+
+function orcaTotalSalesDecreaseConfirmNeeded(orcaSales, dateKey) {
+  if (typeof pdGetOrcaPreviousTotalSales !== 'function') return false;
+  return Object.keys(orcaSales || {}).some(function (accountId) {
+    let prev = pdGetOrcaPreviousTotalSales(accountId, dateKey);
+    if (prev == null) return false;
+    return Number(orcaSales[accountId]) < prev;
+  });
+}
+
+function hasOrcaSalesSavedForToday() {
+  let entry = getTodayRamSalesEntry();
+  if (!entry || !entry.accounts) return false;
+  return getOrcaInputAccounts().some(function (a) {
+    let ae = getRamAccountSalesEntry(entry, a.id);
+    return ae && ae.projectKey === 'orca' && ae.totalSales != null && ae.totalSales !== '';
+  });
+}
+
+function persistOrcaSalesFromTotals(orcaSales, dateKey) {
+  if (!orcaSales || !dateKey) return false;
+  if (typeof ensurePerformanceLogs === 'function') ensurePerformanceLogs();
+  let saveEntry = typeof pdSaveOrcaTotalSalesEntry === 'function'
+    ? pdSaveOrcaTotalSalesEntry
+    : (typeof pdSaveTotalSalesEntry === 'function'
+      ? function (dk, id, val) { return pdSaveTotalSalesEntry(dk, id, val, 'orca'); }
+      : null);
+  if (!saveEntry) return false;
+  let saved = false;
+  Object.keys(orcaSales).forEach(function (accountId) {
+    let result = saveEntry(dateKey, accountId, orcaSales[accountId]);
+    if (result == null) return;
+    saved = true;
+    if (typeof pfRegisterManageDisplayFromEntry === 'function') {
+      pfRegisterManageDisplayFromEntry('orca', accountId);
+    }
+  });
+  if (saved && typeof renderSalesManage === 'function') {
+    renderSalesManage();
+  }
+  return saved;
+}
+
+function formatOrcaTodaySalesPreview(accountId, totalSalesRaw) {
+  if (totalSalesRaw === '' || totalSalesRaw == null || isNaN(Number(totalSalesRaw))) return '—';
+  let dateKey = todayKey();
+  if (typeof pdCalcOrcaTodaySalesFromTotal === 'function') {
+    let calc = pdCalcOrcaTodaySalesFromTotal(accountId, dateKey, Number(totalSalesRaw));
+    return money(calc.todaySales);
+  }
+  return '—';
 }
 
 function collectOrcaInputFromForm() {
@@ -1973,7 +2056,11 @@ function collectOrcaInputFromForm() {
     }
   });
 
-  return { orcaAccounts: orcaAccounts, totalOrca: Math.round(totalOrca * 100) / 100 };
+  return {
+    orcaAccounts: orcaAccounts,
+    totalOrca: Math.round(totalOrca * 100) / 100,
+    orcaSales: collectOrcaSalesFromForm()
+  };
 }
 
 function persistOrcaRevenueEntry(orcaAccounts, totalOrca) {
@@ -2013,7 +2100,25 @@ function bindOrcaInputListeners() {
         });
       }
     });
+    let salesEl = document.getElementById('orcaTotalSales_' + acc.id);
+    if (salesEl) {
+      salesEl.addEventListener('input', function () {
+        updateOrcaSalesDerived(acc.id);
+      });
+    }
   });
+}
+
+function updateOrcaSalesDerived(accountId) {
+  let previewEl = document.getElementById('orcaTodaySales_' + accountId);
+  let salesEl = document.getElementById('orcaTotalSales_' + accountId);
+  if (!previewEl) return;
+  let raw = salesEl ? String(salesEl.value).trim() : '';
+  if (raw === '' || isNaN(Number(raw))) {
+    previewEl.textContent = '—';
+    return;
+  }
+  previewEl.textContent = formatOrcaTodaySalesPreview(accountId, raw);
 }
 
 function updateOrcaInputDerived(accountId) {
@@ -2051,6 +2156,20 @@ function renderOrcaInputAccountCard(acc, existing) {
   let yesterdayAi = accEntry ? accEntry.yesterdayAiProfit : '';
   let todayAff = accEntry ? accEntry.todayAffiliateProfit : '';
   let total = accEntry ? calcOrcaAccountTotal(accEntry) : 0;
+  let dateKey = todayKey();
+  let salesEntry = getTodayRamSalesEntry();
+  let accSales = getRamAccountSalesEntry(salesEntry, acc.id);
+  if (accSales && accSales.projectKey && accSales.projectKey !== 'orca') accSales = null;
+  let totalSalesVal = accSales && accSales.totalSales != null ? accSales.totalSales : '';
+  let prevTotal = typeof pdGetOrcaPreviousTotalSales === 'function'
+    ? pdGetOrcaPreviousTotalSales(acc.id, dateKey)
+    : null;
+  let todaySalesPreview = totalSalesVal !== ''
+    ? formatOrcaTodaySalesPreview(acc.id, totalSalesVal)
+    : (accSales && accSales.todaySales != null ? money(accSales.todaySales) : '—');
+  let salesHint = prevTotal != null
+    ? '前回 ' + money(prevTotal)
+    : '初回は本日売上0として登録';
   return '<section class="ramInputAccount" data-acc="' + acc.id + '">' +
     '<div class="ramInputAccountHead">' + renderInputStatusBadge(isOrcaAccountEntered(existing, acc.id)) + '</div>' +
     '<div class="ramInputRows">' +
@@ -2059,6 +2178,8 @@ function renderOrcaInputAccountCard(acc, existing) {
     '<div class="ramInputRow ramInputRow--main"><span class="ramInputLabel ramInputLabel--hero">昨日AI利益</span><div class="ramInputField ramInputField--hero"><input type="number" step="0.01" min="0" id="orcaYesterdayAi_' + acc.id + '" class="ramInputMain" inputmode="decimal" placeholder="0" value="' + yesterdayAi + '"><span class="ramInputUnit">ドル</span><span class="ramInputBadge">毎日入力</span></div></div>' +
     '<div class="ramInputRow ramInputRow--main"><span class="ramInputLabel ramInputLabel--hero">本日AF収益</span><div class="ramInputField ramInputField--hero"><input type="number" step="0.01" min="0" id="orcaTodayAff_' + acc.id + '" class="ramInputMain" inputmode="decimal" placeholder="0" value="' + todayAff + '"><span class="ramInputUnit">ドル</span><span class="ramInputBadge">毎日入力</span></div></div>' +
     '<div class="ramInputRow ramInputRow--readonly"><span class="ramInputLabel">本日のORCA合計</span><span class="ramInputVal ramInputVal--gold" id="orcaTotal_' + acc.id + '">' + money(total) + '</span></div>' +
+    '<div class="ramInputRow"><span class="ramInputLabel">総売上</span><div class="ramInputField"><input type="number" step="0.01" id="orcaTotalSales_' + acc.id + '" class="ramInputOptional" inputmode="decimal" placeholder="0" value="' + totalSalesVal + '"><span class="ramInputUnit">ドル</span><span class="ramInputHint">' + salesHint + '</span></div></div>' +
+    '<div class="ramInputRow ramInputRow--readonly"><span class="ramInputLabel">本日売上</span><span class="ramInputVal" id="orcaTodaySales_' + acc.id + '">' + todaySalesPreview + '</span></div>' +
     '</div></section>';
 }
 
@@ -2100,13 +2221,61 @@ function openOrcaRevenueInput() {
 }
 
 function executeOrcaSave(collected) {
-  persistOrcaRevenueEntry(collected.orcaAccounts, collected.totalOrca);
-  persistHubSettings();
+  if (collected.orcaSales && Object.keys(collected.orcaSales).length) {
+    persistOrcaSalesFromTotals(collected.orcaSales, todayKey());
+  }
+  if (collected.orcaAccounts && Object.keys(collected.orcaAccounts).length) {
+    persistOrcaRevenueEntry(collected.orcaAccounts, collected.totalOrca);
+  }
   if (typeof render === 'function') render();
   refreshHomeAfterRevenueSave();
   if (typeof showPage === 'function') showPage('home');
   if (typeof closeModal === 'function') closeModal();
   showToast('✅ 保存しました');
+}
+
+function proceedOrcaSaveAfterSalesChecks(collected) {
+  let existing = getTodayOrcaRevenueEntry();
+  if ((hasOrcaDataSavedForToday(existing) || hasOrcaSalesSavedForToday()) &&
+    orcaInputDiffersFromSaved(collected, existing)) {
+    showOrcaOverwriteConfirm(collected);
+    return;
+  }
+  executeOrcaSave(collected);
+}
+
+function proceedOrcaSaveAfterDecreaseConfirm(collected) {
+  proceedOrcaSaveAfterSalesChecks(collected);
+}
+
+function showOrcaTotalSalesDecreaseConfirm(collected) {
+  orcaSalesDecreasePending = collected;
+  let existing = document.getElementById('orcaTotalSalesDecreaseConfirm');
+  if (existing) existing.remove();
+  modalContent.insertAdjacentHTML('beforeend',
+    '<div class="ramInputConfirm" id="orcaTotalSalesDecreaseConfirm">' +
+    '<p class="ramInputConfirmText">前回より総売上が減少しています。入力内容に間違いがなければ『登録』を押してください。</p>' +
+    '<div class="ramInputFooterStack">' +
+    '<button type="button" class="ramInputBtnSave" onclick="confirmOrcaTotalSalesDecreaseSave()">登録</button>' +
+    '<button type="button" class="btn2 ramInputBtnAdd" onclick="cancelOrcaTotalSalesDecrease()">キャンセル</button>' +
+    '</div></div>');
+  let confirmEl = document.getElementById('orcaTotalSalesDecreaseConfirm');
+  if (confirmEl && confirmEl.scrollIntoView) confirmEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function cancelOrcaTotalSalesDecrease() {
+  orcaSalesDecreasePending = null;
+  let el = document.getElementById('orcaTotalSalesDecreaseConfirm');
+  if (el) el.remove();
+}
+
+function confirmOrcaTotalSalesDecreaseSave() {
+  if (!orcaSalesDecreasePending) return;
+  let collected = orcaSalesDecreasePending;
+  orcaSalesDecreasePending = null;
+  let el = document.getElementById('orcaTotalSalesDecreaseConfirm');
+  if (el) el.remove();
+  proceedOrcaSaveAfterDecreaseConfirm(collected);
 }
 
 function showOrcaOverwriteConfirm(collected) {
@@ -2141,16 +2310,18 @@ function confirmOrcaOverwriteSave() {
 
 function saveTodayOrcaRevenue() {
   let collected = collectOrcaInputFromForm();
-  if (!Object.keys(collected.orcaAccounts).length) {
-    alert('保存する内容がありません。「昨日AI利益」と「本日AF収益」を入力してください。');
+  let hasRevenue = Object.keys(collected.orcaAccounts).length;
+  let hasSales = collected.orcaSales && Object.keys(collected.orcaSales).length;
+  if (!hasRevenue && !hasSales) {
+    alert('保存する内容がありません。「昨日AI利益」と「本日AF収益」、または「総売上」を入力してください。');
     return;
   }
-  let existing = getTodayOrcaRevenueEntry();
-  if (hasOrcaDataSavedForToday(existing) && orcaInputDiffersFromSaved(collected, existing)) {
-    showOrcaOverwriteConfirm(collected);
+  let dateKey = todayKey();
+  if (hasSales && orcaTotalSalesDecreaseConfirmNeeded(collected.orcaSales, dateKey)) {
+    showOrcaTotalSalesDecreaseConfirm(collected);
     return;
   }
-  executeOrcaSave(collected);
+  proceedOrcaSaveAfterSalesChecks(collected);
 }
 
 function openOrcaAddAccountForm() {

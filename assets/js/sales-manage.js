@@ -1,4 +1,4 @@
-/* OUKEI HUB Sales Management — Ver2.0.6 */
+/* OUKEI HUB Sales Management — Ver2.0.8 */
 
 /*
  * settings.salesLog[dateKey] structure (future Excel / 実績入力):
@@ -60,8 +60,8 @@ function smSyncProjectFilterOptions() {
 var SM_WEEKDAYS = ['日', '月', '火', '水', '木', '金', '土'];
 
 var SM_DEMO_STATS = {
-  ram: { bestDayAmount: 2180, bestDayLabel: '2026/06/18', bestMonthAmount: 52400, bestMonthLabel: '2026年6月' },
-  orca: { bestDayAmount: 1720, bestDayLabel: '2026/06/15', bestMonthAmount: 41200, bestMonthLabel: '2026年6月' },
+  ram: { bestDayAmount: 2180, bestDayLabel: '2026/06/18', bestMonthAmount: 52400, bestMonthLabel: '2026年6月', totalSalesAmount: 7400000, totalSalesLabel: '2026/06/18' },
+  orca: { bestDayAmount: 1720, bestDayLabel: '2026/06/15', bestMonthAmount: 41200, bestMonthLabel: '2026年6月', totalSalesAmount: 1500000, totalSalesLabel: '2026/06/15' },
   cary: { bestDayAmount: 1340, bestDayLabel: '2026/06/22', bestMonthAmount: 31800, bestMonthLabel: '2026年6月' },
   genesis: { bestDayAmount: 980, bestDayLabel: '2026/06/10', bestMonthAmount: 26800, bestMonthLabel: '2026年6月' },
   other: { bestDayAmount: 620, bestDayLabel: '2026/06/05', bestMonthAmount: 16200, bestMonthLabel: '2026年6月' }
@@ -304,7 +304,7 @@ function smIsDemoMode() {
 }
 
 function smFormatStatAmount(amount, label) {
-  if (!amount && (!label || label === '—')) return smEmptyMark();
+  if ((amount == null || amount === '') && (!label || label === '—')) return smEmptyMark();
   return smMoney(amount, { forceFull: !smIsMobileView() });
 }
 
@@ -695,7 +695,7 @@ function smGetDemoDailySeries(y, m) {
 }
 
 function smHasChartData(vals) {
-  return vals.some(function (v) { return v !== null && v !== undefined && v > 0; });
+  return vals.some(function (v) { return v !== null && v !== undefined; });
 }
 
 function smResolveDailySeries(y, m) {
@@ -1043,8 +1043,15 @@ function smComputeProjectStats(projectKey) {
 
 function smGetProjectStats(projectKey) {
   let stats = smComputeProjectStats(projectKey);
-  if (stats.bestDayAmount || stats.bestMonthAmount) return stats;
+  let total = smGetProjectLatestTotalSales(projectKey);
+  stats.totalSalesAmount = total.totalSalesAmount;
+  stats.totalSalesLabel = total.totalSalesLabel;
+  if (stats.bestDayAmount || stats.bestMonthAmount || stats.totalSalesAmount) return stats;
   return smIsDemoMode() ? (SM_DEMO_STATS[projectKey] || stats) : stats;
+}
+
+function smProjectSupportsTotalSales(projectKey) {
+  return projectKey === 'ram' || projectKey === 'orca';
 }
 
 function smGetDemoAccountStats(accountId) {
@@ -1054,11 +1061,298 @@ function smGetDemoAccountStats(accountId) {
     bestDayAmount: 2800 + (seed % 8) * 320,
     bestDayLabel: '2026/06/' + String(day).padStart(2, '0'),
     bestMonthAmount: 8200 + (seed % 11) * 680,
-    bestMonthLabel: '2026年6月'
+    bestMonthLabel: '2026年6月',
+    totalSalesAmount: 1500000 + (seed % 12) * 500000,
+    totalSalesLabel: '2026/06/' + String(day).padStart(2, '0')
   };
 }
 
-function smGetAccountStats(projectKey, accountId) {
+function smNormalizeOrcaSalesLabel(value) {
+  return String(value || '').replace(/^@/, '').trim().toLowerCase();
+}
+
+function smGetOrcaSalesLookupIds(accountId, displayName) {
+  let ids = [];
+  function push(id) {
+    if (id && ids.indexOf(id) < 0) ids.push(id);
+  }
+  push(accountId);
+  if (typeof getOrcaInputAccounts !== 'function') return ids;
+  let inputs = getOrcaInputAccounts();
+  let label = smNormalizeOrcaSalesLabel(displayName);
+  if (!label && typeof pfLookupManageAccountName === 'function') {
+    label = smNormalizeOrcaSalesLabel(pfLookupManageAccountName('orca', accountId));
+  }
+  if (label) {
+    inputs.forEach(function (acc) {
+      let un = smNormalizeOrcaSalesLabel(acc.username || acc.name);
+      if (un && un === label) push(acc.id);
+    });
+  }
+  if (typeof settings !== 'undefined' && settings.salesLog && label) {
+    let seen = {};
+    ids.forEach(function (id) { seen[id] = true; });
+    Object.keys(settings.salesLog).forEach(function (dateKey) {
+      let entry = settings.salesLog[dateKey];
+      if (!entry || !entry.accounts) return;
+      Object.keys(entry.accounts).forEach(function (sid) {
+        if (seen[sid]) return;
+        let ae = entry.accounts[sid];
+        if (!ae || (ae.projectKey && ae.projectKey !== 'orca')) return;
+        if (ae.totalSales == null || ae.totalSales === '') return;
+        let name = smNormalizeOrcaSalesLabel(
+          typeof pfLookupManageAccountName === 'function'
+            ? pfLookupManageAccountName('orca', sid)
+            : ''
+        );
+        if (!name) {
+          let matched = inputs.find(function (acc) { return acc.id === sid; });
+          name = smNormalizeOrcaSalesLabel(matched && (matched.username || matched.name));
+        }
+        if (name && name === label) push(sid);
+      });
+    });
+  }
+  return ids;
+}
+
+function smGetSalesLogEntry(dateKey) {
+  if (typeof pdGetSalesEntryRaw === 'function') {
+    let raw = pdGetSalesEntryRaw(dateKey);
+    if (raw) return raw;
+  }
+  return getSalesEntry(dateKey);
+}
+
+function smSalesAccountMatchesProject(ae, projectKey) {
+  if (!ae) return false;
+  if (!ae.projectKey) return true;
+  return ae.projectKey === projectKey;
+}
+
+function smFormatTotalSalesDateLabel(dateKey) {
+  if (!dateKey) return '—';
+  let parts = String(dateKey).split('-');
+  if (parts.length !== 3) return '—';
+  return parts[0] + '/' + parts[1] + '/' + parts[2];
+}
+
+function smRoundSalesAmount(value) {
+  if (value == null || value === '') return null;
+  return typeof pdRound === 'function'
+    ? pdRound(value)
+    : Math.round(Number(value) * 100) / 100;
+}
+
+function smResolveOrcaSalesAccountLabel(accountId, displayName) {
+  let label = smNormalizeOrcaSalesLabel(displayName);
+  if (label) return label;
+  if (typeof pfLookupManageAccountName === 'function') {
+    label = smNormalizeOrcaSalesLabel(pfLookupManageAccountName('orca', accountId));
+  }
+  if (!label && typeof getOrcaInputAccounts === 'function') {
+    let matched = getOrcaInputAccounts().find(function (acc) { return acc.id === accountId; });
+    label = smNormalizeOrcaSalesLabel(matched && (matched.username || matched.name));
+  }
+  return label;
+}
+
+function smResolveOrcaSalesAccountLabelById(accountId) {
+  if (typeof pfLookupManageAccountName === 'function') {
+    let fromManage = smNormalizeOrcaSalesLabel(pfLookupManageAccountName('orca', accountId));
+    if (fromManage) return fromManage;
+  }
+  if (typeof getOrcaInputAccounts === 'function') {
+    let matched = getOrcaInputAccounts().find(function (acc) { return acc.id === accountId; });
+    return smNormalizeOrcaSalesLabel(matched && (matched.username || matched.name));
+  }
+  return '';
+}
+
+function smConsiderLatestTotalSalesCandidate(best, dateKey, amount) {
+  if (amount == null || isNaN(amount)) return best;
+  if (!best || dateKey > best.totalSalesDateKey) {
+    return {
+      totalSalesAmount: amount,
+      totalSalesLabel: smFormatTotalSalesDateLabel(dateKey),
+      totalSalesDateKey: dateKey
+    };
+  }
+  return best;
+}
+
+function smScanSalesLogForLatestTotalSales(lookupIds, projectKey, displayName) {
+  let ids = lookupIds || [];
+  let idSet = {};
+  ids.forEach(function (id) { if (id) idSet[id] = true; });
+  let keys = smScanAllDateKeys();
+  let best = null;
+  let orcaLabel = projectKey === 'orca'
+    ? smResolveOrcaSalesAccountLabel(ids[0] || '', displayName)
+    : '';
+
+  for (let i = keys.length - 1; i >= 0; i--) {
+    let dateKey = keys[i];
+    let entry = smGetSalesLogEntry(dateKey);
+    if (!entry || !entry.accounts) continue;
+
+    ids.forEach(function (lookupId) {
+      let ae = entry.accounts[lookupId];
+      if (!smSalesAccountMatchesProject(ae, projectKey)) return;
+      if (ae.totalSales == null || ae.totalSales === '') return;
+      best = smConsiderLatestTotalSalesCandidate(best, dateKey, smRoundSalesAmount(ae.totalSales));
+    });
+
+    if (projectKey !== 'orca' || !orcaLabel) continue;
+
+    Object.keys(entry.accounts).forEach(function (sid) {
+      if (idSet[sid]) return;
+      let ae = entry.accounts[sid];
+      if (!smSalesAccountMatchesProject(ae, projectKey)) return;
+      if (ae.totalSales == null || ae.totalSales === '') return;
+      let name = smResolveOrcaSalesAccountLabelById(sid);
+      if (!name || name !== orcaLabel) return;
+      best = smConsiderLatestTotalSalesCandidate(best, dateKey, smRoundSalesAmount(ae.totalSales));
+    });
+  }
+
+  return best;
+}
+
+function smGetAccountLatestTotalSales(accountId, projectKey, displayName) {
+  if (!smProjectSupportsTotalSales(projectKey) || !accountId) {
+    return { totalSalesAmount: null, totalSalesLabel: '—', totalSalesDateKey: '' };
+  }
+  if (typeof ensurePerformanceLogs === 'function') ensurePerformanceLogs();
+  if (typeof settings === 'undefined' || !settings.salesLog) {
+    return { totalSalesAmount: null, totalSalesLabel: '—', totalSalesDateKey: '' };
+  }
+  let lookupIds = projectKey === 'orca'
+    ? smGetOrcaSalesLookupIds(accountId, displayName)
+    : [accountId];
+  let best = smScanSalesLogForLatestTotalSales(lookupIds, projectKey, displayName);
+  if (best) return best;
+  return { totalSalesAmount: null, totalSalesLabel: '—', totalSalesDateKey: '' };
+}
+
+function smGetRamPrimaryTotalSalesAccountEntry() {
+  if (typeof getRamInputAccounts === 'function') {
+    let roots = getRamInputAccounts();
+    if (roots.length) {
+      let acc = roots[0];
+      return {
+        id: acc.id,
+        name: acc.username || acc.name || acc.id
+      };
+    }
+  }
+  let tree = smGetLiveRamAccountTree();
+  let accounts = tree.length ? tree : smGetProjectAccounts('ram');
+  let aggIds = smGetAggregationAccountIds(accounts);
+  if (!aggIds.length) return null;
+  let byId = {};
+  accounts.forEach(function (acc) { byId[acc.id] = acc; });
+  let id = aggIds[0];
+  return byId[id] || {
+    id: id,
+    name: typeof pfLookupManageAccountName === 'function'
+      ? pfLookupManageAccountName('ram', id)
+      : id
+  };
+}
+
+function smGetProjectTotalSalesAggregationEntries(projectKey) {
+  if (projectKey === 'ram') {
+    let primary = smGetRamPrimaryTotalSalesAccountEntry();
+    return primary ? [primary] : [];
+  }
+  if (projectKey === 'orca') {
+    if (typeof getOrcaInputAccounts === 'function') {
+      let inputs = getOrcaInputAccounts();
+      if (inputs.length) {
+        return inputs.map(function (acc) {
+          return {
+            id: acc.id,
+            name: acc.username || acc.name || acc.id
+          };
+        });
+      }
+    }
+    return smGetProjectAccounts('orca');
+  }
+  return [];
+}
+
+function smGetProjectLatestTotalSales(projectKey) {
+  if (!smProjectSupportsTotalSales(projectKey)) {
+    return { totalSalesAmount: null, totalSalesLabel: '—' };
+  }
+  if (projectKey === 'ram') {
+    let primary = smGetRamPrimaryTotalSalesAccountEntry();
+    if (!primary) {
+      return { totalSalesAmount: null, totalSalesLabel: '—' };
+    }
+    let t = smGetAccountLatestTotalSales(primary.id, 'ram', primary.name);
+    if (t.totalSalesAmount == null && smIsDemoMode() && SM_DEMO_STATS.ram) {
+      return {
+        totalSalesAmount: SM_DEMO_STATS.ram.totalSalesAmount,
+        totalSalesLabel: SM_DEMO_STATS.ram.totalSalesLabel || '—'
+      };
+    }
+    return {
+      totalSalesAmount: t.totalSalesAmount,
+      totalSalesLabel: t.totalSalesLabel
+    };
+  }
+  let entries = smGetProjectTotalSalesAggregationEntries(projectKey);
+  if (!entries.length) {
+    return { totalSalesAmount: null, totalSalesLabel: '—' };
+  }
+  let sum = 0;
+  let hasAny = false;
+  let latestDateKey = '';
+  entries.forEach(function (acc) {
+    let t = smGetAccountLatestTotalSales(acc.id, projectKey, acc.name);
+    if (t.totalSalesAmount == null) return;
+    hasAny = true;
+    sum += t.totalSalesAmount;
+    if (t.totalSalesDateKey && t.totalSalesDateKey > latestDateKey) {
+      latestDateKey = t.totalSalesDateKey;
+    }
+  });
+  if (!hasAny) {
+    if (smIsDemoMode() && SM_DEMO_STATS[projectKey] && SM_DEMO_STATS[projectKey].totalSalesAmount) {
+      return {
+        totalSalesAmount: SM_DEMO_STATS[projectKey].totalSalesAmount,
+        totalSalesLabel: SM_DEMO_STATS[projectKey].totalSalesLabel || '—'
+      };
+    }
+    return { totalSalesAmount: null, totalSalesLabel: '—' };
+  }
+  let label = '—';
+  if (latestDateKey) {
+    let parts = latestDateKey.split('-');
+    if (parts.length === 3) label = parts[0] + '/' + parts[1] + '/' + parts[2];
+  }
+  return {
+    totalSalesAmount: Math.round(sum * 100) / 100,
+    totalSalesLabel: label
+  };
+}
+
+function smMergeAccountTotalSalesStats(stats, accountId, projectKey, displayName) {
+  let total = smGetAccountLatestTotalSales(accountId, projectKey, displayName);
+  if (total.totalSalesAmount == null && smIsDemoMode()) {
+    let demo = smGetDemoAccountStats(accountId);
+    total.totalSalesAmount = demo.totalSalesAmount;
+    total.totalSalesLabel = demo.totalSalesLabel;
+  }
+  stats.totalSalesAmount = total.totalSalesAmount;
+  stats.totalSalesLabel = total.totalSalesLabel;
+  return stats;
+}
+
+function smGetAccountStats(projectKey, accountId, displayName) {
   let bestDay = { amount: 0, dateKey: '' };
   let monthTotals = {};
   let daysInMonth = new Date(smView.y, smView.m + 1, 0).getDate();
@@ -1071,19 +1365,20 @@ function smGetAccountStats(projectKey, accountId) {
   }
   if (bestDay.amount > 0) {
     let p = bestDay.dateKey.split('-');
-    return {
+    return smMergeAccountTotalSalesStats({
       bestDayAmount: bestDay.amount,
       bestDayLabel: p[0] + '/' + p[1] + '/' + p[2],
       bestMonthAmount: smSumAccountMonth(accountId, projectKey, smView.y, smView.m),
       bestMonthLabel: smFormatMonthLabel(smView.y, smView.m)
-    };
+    }, accountId, projectKey, displayName);
   }
-  return smIsDemoMode() ? smGetDemoAccountStats(accountId) : {
+  if (smIsDemoMode()) return smGetDemoAccountStats(accountId);
+  return smMergeAccountTotalSalesStats({
     bestDayAmount: 0,
     bestDayLabel: '—',
     bestMonthAmount: 0,
     bestMonthLabel: '—'
-  };
+  }, accountId, projectKey, displayName);
 }
 
 function smRenderProjectStats() {
@@ -1098,6 +1393,7 @@ function smRenderProjectStats() {
       '<div class="rmStatTableCol rmStatTableCol--project"></div>' +
       '<div class="rmStatTableCol rmStatTableCol--metric">最高日売上</div>' +
       '<div class="rmStatTableCol rmStatTableCol--metric">最高月売上</div>' +
+      '<div class="rmStatTableCol rmStatTableCol--metric">総売上</div>' +
       '</div>' +
       smGetActiveProjects().map(function (p) {
         let stats = smGetProjectStats(p.key);
@@ -1109,6 +1405,9 @@ function smRenderProjectStats() {
           '<div class="rmStatTableCol rmStatTableCol--metric">' +
           '<span class="rmStatAmt">' + smFormatStatAmount(stats.bestMonthAmount, stats.bestMonthLabel) + '</span>' +
           '<span class="rmStatDate">' + smEscape(stats.bestMonthLabel) + '</span></div>' +
+          '<div class="rmStatTableCol rmStatTableCol--metric">' +
+          '<span class="rmStatAmt">' + smFormatStatAmount(stats.totalSalesAmount, stats.totalSalesLabel) + '</span>' +
+          '<span class="rmStatDate">' + smEscape(stats.totalSalesLabel) + '</span></div>' +
           '</div>';
       }).join('') +
       '</div>';
@@ -1122,9 +1421,10 @@ function smRenderProjectStats() {
     '<div class="rmStatTableCol rmStatTableCol--project"></div>' +
     '<div class="rmStatTableCol rmStatTableCol--metric">最高日売上</div>' +
     '<div class="rmStatTableCol rmStatTableCol--metric">最高月売上</div>' +
+    '<div class="rmStatTableCol rmStatTableCol--metric">総売上</div>' +
     '</div>' +
     accounts.map(function (acc) {
-      let stats = smGetAccountStats(smFilter, acc.id);
+      let stats = smGetAccountStats(smFilter, acc.id, acc.name);
       return '<div class="rmStatTableRow">' +
         '<div class="rmStatTableCol rmStatTableCol--project">' + pfRenderAccountLabel(smEscape(acc.name), acc.seriesIndex || 0) + '</div>' +
         '<div class="rmStatTableCol rmStatTableCol--metric">' +
@@ -1133,6 +1433,9 @@ function smRenderProjectStats() {
         '<div class="rmStatTableCol rmStatTableCol--metric">' +
         '<span class="rmStatAmt">' + smFormatStatAmount(stats.bestMonthAmount, stats.bestMonthLabel) + '</span>' +
         '<span class="rmStatDate">' + smEscape(stats.bestMonthLabel) + '</span></div>' +
+        '<div class="rmStatTableCol rmStatTableCol--metric">' +
+        '<span class="rmStatAmt">' + smFormatStatAmount(stats.totalSalesAmount, stats.totalSalesLabel) + '</span>' +
+        '<span class="rmStatDate">' + smEscape(stats.totalSalesLabel) + '</span></div>' +
         '</div>';
     }).join('') +
     '</div>';
