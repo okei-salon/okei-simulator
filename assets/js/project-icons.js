@@ -30,6 +30,7 @@ var PJ_ICON_SIZE_BY_CLASS = {
   homeProjCardIcon: 'md',
   rmRowIcon: 'md',
   rmFilterIconImg: 'md',
+  orgChartTitleIcon: 'md',
   pfProjectCardIcon: 'lg',
   pmProjectCardIcon: 'xl',
   pmEditIcon: 'xl',

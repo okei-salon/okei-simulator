@@ -28,6 +28,17 @@ function hubCreateDefaultSettings() {
   };
 }
 
+function hubCreateEmptyOrcaOrgChart() {
+  return {
+    members: [],
+    currentData: [],
+    scenarios: [],
+    rootId: '',
+    rootAccountIds: [],
+    zoom: 1
+  };
+}
+
 function hubCreateEmptyData() {
   return {
     members: [],
@@ -36,6 +47,7 @@ function hubCreateEmptyData() {
     scenarios: [],
     rootId: '',
     rootAccountIds: [],
+    orcaOrgChart: hubCreateEmptyOrcaOrgChart(),
     updatedAt: 0
   };
 }
@@ -125,6 +137,9 @@ function hubNormalizeLoadedData(raw) {
     scenarios: Array.isArray(raw.scenarios) ? raw.scenarios : base.scenarios,
     rootId: typeof raw.rootId === 'string' ? raw.rootId : base.rootId,
     rootAccountIds: Array.isArray(raw.rootAccountIds) ? raw.rootAccountIds : base.rootAccountIds,
+    orcaOrgChart: raw.orcaOrgChart && typeof raw.orcaOrgChart === 'object'
+      ? Object.assign(hubCreateEmptyOrcaOrgChart(), raw.orcaOrgChart)
+      : hubCreateEmptyOrcaOrgChart(),
     updatedAt: typeof raw.updatedAt === 'number' ? raw.updatedAt : 0
   };
   return normalized;
@@ -138,6 +153,7 @@ function hubPackLocalData() {
     scenarios: typeof scenarios !== 'undefined' ? scenarios : [],
     rootId: typeof rootId !== 'undefined' ? rootId : '',
     rootAccountIds: typeof rootAccountIds !== 'undefined' ? rootAccountIds : [],
+    orcaOrgChart: typeof orcaPackOrgChart === 'function' ? orcaPackOrgChart() : hubCreateEmptyOrcaOrgChart(),
     updatedAt: hubLocalUpdatedAt
   };
 }
@@ -159,6 +175,7 @@ function hubPackFirestorePayload(updatedAt) {
       rootAccountIds: local.rootAccountIds,
       scenarios: local.scenarios
     },
+    orcaOrgChart: local.orcaOrgChart || hubCreateEmptyOrcaOrgChart(),
     manageAccounts: manageAccounts,
     revenue: {
       revenueLog: revenueLog,
@@ -182,6 +199,7 @@ function hubUnpackFirestorePayload(doc) {
     rootId: org.rootId,
     rootAccountIds: org.rootAccountIds,
     scenarios: org.scenarios,
+    orcaOrgChart: doc.orcaOrgChart || hubCreateEmptyOrcaOrgChart(),
     settings: mergedSettings,
     updatedAt: typeof doc.updatedAt === 'number' ? doc.updatedAt : 0
   });
@@ -228,6 +246,7 @@ function hubApplyData(data) {
   focusId = rootId || focusId || '';
   simMode = false;
   hubLocalUpdatedAt = normalized.updatedAt || 0;
+  if (typeof orcaApplyOrgChart === 'function') orcaApplyOrgChart(normalized.orcaOrgChart);
   if (typeof pfEnsureManageDisplayAccounts === 'function') pfEnsureManageDisplayAccounts();
   if (typeof pfEnsurePerformanceInputHiddenAccounts === 'function') pfEnsurePerformanceInputHiddenAccounts();
   if (typeof pfMigrateDisplaySettingsCompat === 'function') pfMigrateDisplaySettingsCompat();

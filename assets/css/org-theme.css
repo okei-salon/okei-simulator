@@ -31,8 +31,8 @@
   --org-flash-glow: rgba(249, 115, 22, .34);
 }
 
-/* ── ORCA theme placeholder (future) ── */
-#ramPage[data-project-theme="orca"] {
+/* ── ORCA theme (blue) ── */
+#orcaOrgPage[data-project-theme="orca"] {
   --org-accent: #60a5fa;
   --org-accent-mid: #3b82f6;
   --org-accent-deep: #1d4ed8;
@@ -50,7 +50,8 @@
 }
 
 /* ── Simulation theme (purple accents) ── */
-#ramPage[data-mode="simulation"] {
+#ramPage[data-mode="simulation"],
+#orcaOrgPage[data-mode="simulation"] {
   --org-accent: #c084fc;
   --org-accent-mid: #a855f7;
   --org-accent-deep: #7e22ce;
@@ -67,255 +68,92 @@
   --org-flash-glow: rgba(168, 85, 247, .34);
 }
 
-/* ── Section top accent line ── */
-#ramPage[data-project-theme] {
-  position: relative;
-}
 
-#ramPage[data-project-theme]::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 2px;
+/* ── Shared org chart page accents ── */
+.orgChartPage[data-project-theme] { position: relative; }
+.orgChartPage[data-project-theme]::after {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
   background: linear-gradient(90deg, transparent, var(--org-accent), transparent);
-  box-shadow: 0 0 20px var(--org-accent-glow);
-  opacity: .92;
-  pointer-events: none;
-  z-index: 2;
+  box-shadow: 0 0 20px var(--org-accent-glow); opacity: .92; pointer-events: none; z-index: 2;
 }
-
-/* ── 上部操作エリア：高級感オレンジグラデーション背景 ── */
-#ramPage[data-project-theme] .ramHeaderBar {
-  position: relative;
-  margin: 8px 0 12px;
-  padding: 12px 14px 14px;
-  border-radius: 16px;
-  overflow: hidden;
-  border: 1px solid var(--org-accent-border);
-  background: var(--org-header-bg);
-  box-shadow:
-    0 12px 32px rgba(0, 0, 0, .35),
-    0 0 28px var(--org-accent-glow),
-    inset 0 1px 0 rgba(251, 191, 36, .12),
-    inset 0 -1px 0 rgba(0, 0, 0, .25);
+.orgChartPage[data-project-theme] .ramHeaderBar {
+  position: relative; margin: 8px 0 12px; padding: 12px 14px 14px; border-radius: 16px; overflow: hidden;
+  border: 1px solid var(--org-accent-border); background: var(--org-header-bg);
+  box-shadow: 0 12px 32px rgba(0,0,0,.35), 0 0 28px var(--org-accent-glow), inset 0 1px 0 rgba(251,191,36,.12), inset 0 -1px 0 rgba(0,0,0,.25);
 }
-
-#ramPage[data-project-theme] .ramHeaderBar::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 2px;
+.orgChartPage[data-project-theme] .ramHeaderBar::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
   background: linear-gradient(90deg, transparent, var(--org-accent), #fbbf24, var(--org-accent), transparent);
-  box-shadow: 0 0 20px var(--org-accent-glow);
-  opacity: .95;
-  pointer-events: none;
-  z-index: 1;
+  box-shadow: 0 0 20px var(--org-accent-glow); opacity: .95; pointer-events: none; z-index: 1;
 }
-
-#ramPage[data-project-theme] .ramHeaderBar::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  background: linear-gradient(135deg, rgba(255, 255, 255, .05) 0%, transparent 42%);
-  pointer-events: none;
-  z-index: 1;
+.orgChartPage[data-project-theme] .ramHeaderBar::after {
+  content: ''; position: absolute; inset: 0; border-radius: inherit;
+  background: linear-gradient(135deg, rgba(255,255,255,.05) 0%, transparent 42%); pointer-events: none; z-index: 1;
 }
-
-#ramPage[data-project-theme] .ramHeaderBar > * {
-  position: relative;
-  z-index: 2;
-}
-
-/* ── 枠線のみオレンジグラデーション（背景は維持） ── */
-#ramPage[data-project-theme] .currentSelectBox {
-  --org-fill: #081426;
-  border: 1px solid transparent;
-  background:
-    linear-gradient(var(--org-fill), var(--org-fill)) padding-box,
-    var(--org-border-grad) border-box;
+.orgChartPage[data-project-theme] .ramHeaderBar > * { position: relative; z-index: 2; }
+.orgChartPage[data-project-theme] .currentSelectBox {
+  --org-fill: #081426; border: 1px solid transparent;
+  background: linear-gradient(var(--org-fill), var(--org-fill)) padding-box, var(--org-border-grad) border-box;
   box-shadow: 0 0 14px var(--org-accent-glow);
 }
-
-#ramPage[data-project-theme] .currentSelectBox .caption {
-  color: #b7c9df;
+.orgChartPage[data-project-theme] .currentSelectBox .caption { color: #b7c9df; }
+.orgChartPage[data-project-theme] .currentSelectBox select { border-color: #2a4264; background: #081426; }
+.orgChartPage[data-project-theme] .addRootBtn {
+  background: #2563eb !important; border: 1px solid #60a5fa !important; color: #fff !important; box-shadow: none !important;
 }
-
-#ramPage[data-project-theme] .currentSelectBox select {
-  border-color: #2a4264;
-  background: #081426;
-}
-
-#ramPage[data-project-theme] .currentSelectBox select:focus {
-  border-color: #2a4264;
-  box-shadow: none;
-}
-
-/* 表示中横の＋は青のまま */
-#ramPage[data-project-theme] .addRootBtn {
-  background: #2563eb !important;
-  border: 1px solid #60a5fa !important;
-  color: #fff !important;
-  box-shadow: none !important;
-}
-
-#ramPage[data-project-theme] #modeBadge,
-#ramPage[data-project-theme] #accountBadge,
-#ramPage[data-project-theme] #reflectBadge {
-  --org-fill: #0d1b30;
-  border: 1px solid transparent;
-  background:
-    linear-gradient(var(--org-fill), var(--org-fill)) padding-box,
-    var(--org-border-grad) border-box;
+.orgChartPage[data-project-theme] #modeBadge,
+.orgChartPage[data-project-theme] #orcaModeBadge,
+.orgChartPage[data-project-theme] #accountBadge,
+.orgChartPage[data-project-theme] #orcaAccountBadge,
+.orgChartPage[data-project-theme] #reflectBadge,
+.orgChartPage[data-project-theme] #orcaReflectBadge {
+  --org-fill: #0d1b30; border: 1px solid transparent;
+  background: linear-gradient(var(--org-fill), var(--org-fill)) padding-box, var(--org-border-grad) border-box;
   box-shadow: 0 0 12px var(--org-accent-glow);
 }
-
-#ramPage[data-project-theme] .ramNavActions .tabBtn[onclick*="showAccountManage"],
-#ramPage[data-project-theme] .ramNavActions .tabBtn[onclick*="openAccountManager"] {
-  --org-fill: #132842;
-  border: 1px solid transparent;
-  background:
-    linear-gradient(var(--org-fill), var(--org-fill)) padding-box,
-    var(--org-border-grad) border-box !important;
+.orgChartPage[data-project-theme] .ramNavActions .tabBtn[onclick*="showAccountManage"],
+.orgChartPage[data-project-theme] .ramNavActions .tabBtn[onclick*="openAccountManager"],
+.orgChartPage[data-project-theme] .ramNavActions .tabBtn[onclick*="orcaShowAccountManage"] {
+  --org-fill: #132842; border: 1px solid transparent;
+  background: linear-gradient(var(--org-fill), var(--org-fill)) padding-box, var(--org-border-grad) border-box !important;
   box-shadow: 0 0 12px var(--org-accent-glow);
 }
-
-/* シミュレーションは紫枠（機能色として分離） */
-#ramPage[data-project-theme="ram"] .ramNavActions .tabBtn[onclick*="openSimulationPanel"] {
-  --org-fill: #132842;
-  border: 1px solid transparent;
-  background:
-    linear-gradient(var(--org-fill), var(--org-fill)) padding-box,
-    linear-gradient(135deg, #581c87 0%, #a855f7 48%, #c084fc 100%) border-box !important;
+.orgChartPage[data-project-theme="ram"] .ramNavActions .tabBtn[onclick*="openSimulationPanel"],
+.orgChartPage[data-project-theme="orca"] .ramNavActions .tabBtn[onclick*="orcaOpenSimulationPanel"] {
+  --org-fill: #132842; border: 1px solid transparent;
+  background: linear-gradient(var(--org-fill), var(--org-fill)) padding-box, linear-gradient(135deg, #581c87 0%, #a855f7 48%, #c084fc 100%) border-box !important;
   box-shadow: 0 0 12px rgba(168, 85, 247, .28);
 }
-
-#ramPage[data-mode="simulation"] .ramNavActions .tabBtn[onclick*="openSimulationPanel"] {
-  background:
-    linear-gradient(#132842, #132842) padding-box,
-    var(--org-border-grad) border-box !important;
-  box-shadow: 0 0 12px var(--org-accent-glow);
-}
-
-/* 組織図タブは枠グラデーション対象外（元スタイル） */
-
-/* ── Income cards — border + top glow line only ── */
-#ramPage[data-project-theme] .card {
-  position: relative;
-  overflow: hidden;
-  border-color: var(--org-accent-border);
-}
-
-#ramPage[data-project-theme] .card::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 2px;
-  border-radius: 16px 16px 0 0;
+.orgChartPage[data-project-theme] .card { position: relative; overflow: hidden; border-color: var(--org-accent-border); }
+.orgChartPage[data-project-theme] .card::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; border-radius: 16px 16px 0 0;
   background: linear-gradient(90deg, transparent, var(--org-accent), transparent);
-  box-shadow: 0 0 20px var(--org-accent-glow);
-  opacity: .92;
-  pointer-events: none;
-  z-index: 1;
+  box-shadow: 0 0 20px var(--org-accent-glow); opacity: .92; pointer-events: none; z-index: 1;
 }
-
-#ramPage[data-project-theme] .card.total {
-  border-color: var(--org-accent-soft);
-  box-shadow: 0 0 22px var(--org-accent-glow);
-}
-
-#ramPage[data-project-theme] .card.flash {
-  box-shadow:
-    0 0 0 3px var(--org-flash),
-    0 0 24px var(--org-flash-glow);
-}
-
-/* ── Org chart panel accents ── */
-#ramPage[data-project-theme] .panel {
-  position: relative;
-  overflow: hidden;
-  border-color: var(--org-accent-border);
-}
-
-#ramPage[data-project-theme] .panel::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 2px;
+.orgChartPage[data-project-theme] .card.total { border-color: var(--org-accent-soft); box-shadow: 0 0 22px var(--org-accent-glow); }
+.orgChartPage[data-project-theme] .card.flash { box-shadow: 0 0 0 3px var(--org-flash), 0 0 24px var(--org-flash-glow); }
+.orgChartPage[data-project-theme] .panel { position: relative; overflow: hidden; border-color: var(--org-accent-border); }
+.orgChartPage[data-project-theme] .panel::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
   background: linear-gradient(90deg, transparent, var(--org-accent), transparent);
-  box-shadow: 0 0 20px var(--org-accent-glow);
-  opacity: .9;
-  pointer-events: none;
-  z-index: 1;
+  box-shadow: 0 0 20px var(--org-accent-glow); opacity: .9; pointer-events: none; z-index: 1;
 }
-
-#ramPage[data-project-theme] .chartArea {
-  border: 1px solid var(--org-accent-border);
-  box-shadow: inset 0 0 28px rgba(0, 0, 0, .12);
+.orgChartPage[data-project-theme] .chartArea { border: 1px solid var(--org-accent-border); box-shadow: inset 0 0 28px rgba(0,0,0,.12); }
+.orgChartPage[data-project-theme] .tree li::before,
+.orgChartPage[data-project-theme] .tree li::after,
+.orgChartPage[data-project-theme] .tree ul ul::before { border-color: var(--org-accent) !important; opacity: .62; }
+.orgChartPage[data-project-theme][data-mode="live"] .node:not(.root) {
+  border-color: rgba(45, 73, 107, .95); box-shadow: 0 0 0 1px var(--org-accent-border);
 }
-
-#ramPage[data-project-theme] .tree li::before,
-#ramPage[data-project-theme] .tree li::after,
-#ramPage[data-project-theme] .tree ul ul::before {
-  border-color: var(--org-accent) !important;
-  opacity: .62;
+.orgChartPage[data-project-theme][data-mode="simulation"] .node {
+  border-color: var(--org-accent-border) !important; box-shadow: 0 0 12px var(--org-accent-glow);
 }
-
-#ramPage[data-project-theme] .node.groupNode {
-  border-color: var(--org-accent-soft) !important;
-  border-style: dashed;
-}
-
-#ramPage[data-project-theme][data-mode="live"] .node:not(.root) {
-  border-color: rgba(45, 73, 107, .95);
-  box-shadow: 0 0 0 1px var(--org-accent-border);
-}
-
-#ramPage[data-project-theme][data-mode="simulation"] .node {
-  border-color: var(--org-accent-border) !important;
-  box-shadow: 0 0 12px var(--org-accent-glow);
-}
-
-#ramPage[data-project-theme] .node.flash {
-  box-shadow:
-    0 0 0 3px var(--org-flash),
-    0 0 24px var(--org-flash-glow);
-}
-
-/* ── Simulation banner (org chart only) ── */
-.orgSimBanner {
-  display: none;
-  padding: 10px 12px;
-  margin: 8px 0 10px;
-  border-radius: 14px;
-  font-weight: 900;
-  text-align: center;
-  position: relative;
-  overflow: hidden;
-}
-
+.orgChartPage[data-project-theme] .node.flash { box-shadow: 0 0 0 3px var(--org-flash), 0 0 24px var(--org-flash-glow); }
+.orgSimBanner { display: none; padding: 10px 12px; margin: 8px 0 10px; border-radius: 14px; font-weight: 900; text-align: center; position: relative; overflow: hidden; }
 .orgSimBanner::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 2px;
-  background: linear-gradient(90deg, transparent, #c084fc, transparent);
-  box-shadow: 0 0 20px rgba(168, 85, 247, .45);
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+  background: linear-gradient(90deg, transparent, #c084fc, transparent); box-shadow: 0 0 20px rgba(168, 85, 247, .45);
 }
-
 .orgSimBanner.isVisible {
-  display: block;
-  border: 1px solid rgba(192, 132, 252, .55);
-  background: rgba(168, 85, 247, .14);
-  color: #f3e8ff;
+  display: block; border: 1px solid rgba(192, 132, 252, .55); background: rgba(168, 85, 247, .14); color: #f3e8ff;
 }

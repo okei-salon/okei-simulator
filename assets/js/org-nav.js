@@ -61,3 +61,22 @@ function renderOrgProjectSelect() {
       '<span class="orgSelectName">ORCA</span>' +
     '</button>';
 }
+
+function initOrgChartTitleIcons() {
+  [
+    ['ramChartTitleIcon', 'ram'],
+    ['orcaChartTitleIcon', 'orca']
+  ].forEach(function (pair) {
+    var el = document.getElementById(pair[0]);
+    if (!el || typeof pjRenderProjectIcon !== 'function') return;
+    el.innerHTML = pjRenderProjectIcon(pair[1], 'orgChartTitleIcon');
+  });
+}
+
+if (typeof document !== 'undefined') {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initOrgChartTitleIcons);
+  } else {
+    initOrgChartTitleIcons();
+  }
+}

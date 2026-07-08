@@ -1,10 +1,20 @@
 /* OUKEI HUB Organization Chart Navigation — Ver2.0.9 */
 
-.orgSelectPage,
-.orcaOrgPage {
+.orgSelectPage {
   max-width: 920px;
   margin: 0 auto;
   padding: 8px 4px 24px;
+}
+
+.orgChartTitleRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.orgChartTitleIcon {
+  flex-shrink: 0;
+  line-height: 0;
 }
 
 .orgSelectShell {
@@ -121,6 +131,24 @@
 
 .orgComingSoonShell .btn2 {
   min-width: 220px;
+}
+
+.orcaIncomeCards {
+  display: grid !important;
+  grid-template-columns: repeat(5, minmax(120px, 1fr)) !important;
+  margin: 10px 0 12px !important;
+}
+
+.orcaIncomeCards .helpInline {
+  font-size: 10px;
+  color: #9fb3cc;
+  font-weight: 700;
+}
+
+@media (max-width: 900px) {
+  .orcaIncomeCards {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
 }
 
 @media (max-width: 640px) {
