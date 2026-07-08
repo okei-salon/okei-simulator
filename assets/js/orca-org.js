@@ -114,32 +114,75 @@ function orcaPlaceholderTotals() {
 function orcaCardHelpPersonalBody() {
   return '<div class="helpSectionTitle">個人収益（個人運用益）とは</div>' +
     'AIエージェントによる運用で得られる予想収益です。<br><br>' +
-    '選択したAIエージェント・投資額・運用期間に応じて、自動で予想収益を計算します。<br><br>' +
+    '本シミュレーションでは、毎日チェックインを行った場合の「中間利率」を採用しています。<br><br>' +
+    '選択したAIエージェント・投資額・運用期間に応じて、自動で個人収益を計算します。<br><br>' +
+    '<div class="helpSectionTitle">AIエージェント一覧</div>' +
     '<div class="helpSectionTitle">■ Eden（10日）</div>' +
     '・想定日次収益：0.20〜0.30%<br>' +
     '・チェックイン報酬：+50%<br>' +
-    '・想定最大収益：0.30〜0.45%／日<br><br>' +
+    '・想定最大収益：0.30〜0.45%<br>' +
+    '・採用利率：0.375%／日<br><br>' +
     '<div class="helpSectionTitle">■ Oracle（90日）</div>' +
     '・想定日次収益：0.30〜0.40%<br>' +
     '・チェックイン報酬：+50%<br>' +
-    '・想定最大収益：0.45〜0.60%／日<br><br>' +
+    '・想定最大収益：0.45〜0.60%<br>' +
+    '・採用利率：0.525%／日<br><br>' +
     '<div class="helpSectionTitle">■ Axiom（180日）</div>' +
     '・想定日次収益：0.40〜0.50%<br>' +
     '・チェックイン報酬：+75%<br>' +
-    '・想定最大収益：0.70〜0.875%／日<br><br>' +
+    '・想定最大収益：0.70〜0.875%<br>' +
+    '・採用利率：0.7875%／日<br><br>' +
     '<div class="helpSectionTitle">■ Apex（360日）</div>' +
     '・想定日次収益：0.50〜0.60%<br>' +
     '・チェックイン報酬：+100%<br>' +
-    '・想定最大収益：1.00〜1.20%／日<br><br>' +
-    '<div class="helpSectionTitle">※ チェックイン報酬について</div>' +
-    'チェックイン報酬は、毎日のチェックインによって通常の運用利益へ追加される報酬です。';
+    '・想定最大収益：1.00〜1.20%<br>' +
+    '・採用利率：1.10%／日<br><br>' +
+    '<div class="helpSectionTitle">計算式</div>' +
+    '個人収益 ＝ 投資額 × 採用利率<br><br>' +
+    '<div class="helpSectionTitle">計算例</div>' +
+    'Apex・$1,000運用<br><br>' +
+    '$1,000 × 1.10%<br><br>' +
+    '＝ $11.00／日<br><br>' +
+    '<div class="helpSectionTitle">注意事項</div>' +
+    '・本シミュレーションでは、毎日チェックインを行う前提で計算しています。<br><br>' +
+    '・実際の運用結果は市場状況やAIエージェントの成績により変動する場合があります。';
+}
+
+function orcaCardHelpRankingBody() {
+  return '<div class="helpSectionTitle">ランキング報酬とは</div>' +
+    'チームメンバーの基礎運用収益に対して、自分の保有ランクに応じた報酬が支払われます。<br><br>' +
+    '※チェックイン報酬は計算対象外です。<br>' +
+    '※相手のランクに関係なく、自分の保有ランクの報酬率が適用されます。<br><br>' +
+    '<div class="helpSectionTitle">計算式</div>' +
+    '相手の基礎運用収益 × 自分のランク報酬率<br><br>' +
+    '<div class="helpSectionTitle">計算例</div>' +
+    '自分：Orca2（20%）<br>' +
+    '相手：$1,000・Apex<br><br>' +
+    '基礎運用収益<br>' +
+    '＝ $1,000 × 0.55%<br>' +
+    '＝ $5.50／日<br><br>' +
+    'ランキング報酬<br>' +
+    '＝ $5.50 × 20%<br>' +
+    '＝ $1.10／日<br><br>' +
+    '相手がUserでもOrca5でも、自分がOrca2なら20%で計算されます。<br><br>' +
+    '<div class="helpSectionTitle">ランク報酬率</div>' +
+    '・User：5%<br>' +
+    '・Orca1：10%<br>' +
+    '・Orca2：20%<br>' +
+    '・Orca3：30%<br>' +
+    '・Orca4：40%<br>' +
+    '・Orca5：50%<br>' +
+    '・Orca6：55%<br>' +
+    '・Orca7：60%<br>' +
+    '・Orca8：65%<br>' +
+    '・Orca9：70%';
 }
 
 function orcaCardHelpMap() {
   return {
     total: { title: '合計利益', body: null },
     personal: { title: '個人収益（個人運用益）', body: orcaCardHelpPersonalBody() },
-    ranking: { title: 'ランキング報酬', body: null },
+    ranking: { title: 'ランキング報酬', body: orcaCardHelpRankingBody() },
     title: { title: 'タイトル報酬', body: null },
     volume: { title: 'グループ販売', body: null }
   };
