@@ -111,6 +111,53 @@ function orcaPlaceholderTotals() {
   return { total: 0, personal: 0, ranking: 0, title: 0, volume: orcaCalcVolume(orcaFocusId) };
 }
 
+function orcaCardHelpPersonalBody() {
+  return '<div class="helpSectionTitle">個人収益（個人運用益）とは</div>' +
+    'AIエージェントによる運用で得られる予想収益です。<br><br>' +
+    '選択したAIエージェント・投資額・運用期間に応じて、自動で予想収益を計算します。<br><br>' +
+    '<div class="helpSectionTitle">■ Eden（10日）</div>' +
+    '・想定日次収益：0.20〜0.30%<br>' +
+    '・チェックイン報酬：+50%<br>' +
+    '・想定最大収益：0.30〜0.45%／日<br><br>' +
+    '<div class="helpSectionTitle">■ Oracle（90日）</div>' +
+    '・想定日次収益：0.30〜0.40%<br>' +
+    '・チェックイン報酬：+50%<br>' +
+    '・想定最大収益：0.45〜0.60%／日<br><br>' +
+    '<div class="helpSectionTitle">■ Axiom（180日）</div>' +
+    '・想定日次収益：0.40〜0.50%<br>' +
+    '・チェックイン報酬：+75%<br>' +
+    '・想定最大収益：0.70〜0.875%／日<br><br>' +
+    '<div class="helpSectionTitle">■ Apex（360日）</div>' +
+    '・想定日次収益：0.50〜0.60%<br>' +
+    '・チェックイン報酬：+100%<br>' +
+    '・想定最大収益：1.00〜1.20%／日<br><br>' +
+    '<div class="helpSectionTitle">※ チェックイン報酬について</div>' +
+    'チェックイン報酬は、毎日のチェックインによって通常の運用利益へ追加される報酬です。';
+}
+
+function orcaCardHelpMap() {
+  return {
+    total: { title: '合計利益', body: null },
+    personal: { title: '個人収益（個人運用益）', body: orcaCardHelpPersonalBody() },
+    ranking: { title: 'ランキング報酬', body: null },
+    title: { title: 'タイトル報酬', body: null },
+    volume: { title: 'グループ販売', body: null }
+  };
+}
+
+function orcaShowCardHelp(type) {
+  var map = orcaCardHelpMap();
+  var entry = map[type];
+  if (!entry || typeof modalTitle === 'undefined' || typeof modalContent === 'undefined' || typeof modalBg === 'undefined') {
+    return;
+  }
+  modalTitle.textContent = entry.title;
+  modalContent.innerHTML = entry.body
+    ? '<div class="explain">' + entry.body + '</div>'
+    : '<div class="explain">説明は準備中です。</div>';
+  modalBg.style.display = 'flex';
+}
+
 function orcaRender() {
   orcaNormalizeVolumes();
   if (!orcaSimMode) orcaCurrentData = orcaClone(orcaMembers);

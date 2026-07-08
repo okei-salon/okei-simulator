@@ -145,6 +145,17 @@
   font-weight: 700;
 }
 
+.orcaIncomeCards .orcaHelpQ {
+  border-color: rgba(96, 165, 250, .45);
+  background: #0d1b30;
+  box-shadow: 0 0 10px rgba(59, 130, 246, .22);
+}
+
+.orcaIncomeCards .orcaHelpQ:hover {
+  border-color: #60a5fa;
+  box-shadow: 0 0 14px rgba(59, 130, 246, .35);
+}
+
 @media (max-width: 900px) {
   .orcaIncomeCards {
     grid-template-columns: repeat(2, 1fr) !important;
