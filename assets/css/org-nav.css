@@ -1,0 +1,134 @@
+/* OUKEI HUB Organization Chart Navigation — Ver2.0.9 */
+
+.orgSelectPage,
+.orcaOrgPage {
+  max-width: 920px;
+  margin: 0 auto;
+  padding: 8px 4px 24px;
+}
+
+.orgSelectShell {
+  padding: 8px 2px 0;
+}
+
+.orgSelectTitle {
+  margin: 0 0 6px;
+  font-size: 24px;
+  font-weight: 900;
+  color: #f8fafc;
+  letter-spacing: .03em;
+}
+
+.orgSelectHelp {
+  margin: 0 0 18px;
+  font-size: 13px;
+  color: #8fa8c5;
+  line-height: 1.55;
+}
+
+.orgSelectGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.orgSelectCard {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 168px;
+  padding: 22px 16px 18px;
+  border-radius: 18px;
+  border: 1px solid transparent;
+  background:
+    linear-gradient(180deg, #13243d, #0d1b30) padding-box,
+    linear-gradient(135deg, rgba(251, 146, 60, .55), rgba(251, 191, 36, .35)) border-box;
+  color: #eef7ff;
+  cursor: pointer;
+  text-align: center;
+  transition: transform .16s ease, box-shadow .16s ease;
+}
+
+.orgSelectCard::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, #fb923c, transparent);
+  box-shadow: 0 0 18px rgba(249, 115, 22, .4);
+  opacity: .9;
+}
+
+.orgSelectCard:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 14px 28px rgba(0, 0, 0, .32);
+}
+
+.orgSelectCard--orca {
+  background:
+    linear-gradient(180deg, #13243d, #0d1b30) padding-box,
+    linear-gradient(135deg, rgba(96, 165, 250, .55), rgba(6, 182, 212, .35)) border-box;
+}
+
+.orgSelectCard--orca::before {
+  background: linear-gradient(90deg, transparent, #60a5fa, transparent);
+  box-shadow: 0 0 18px rgba(59, 130, 246, .4);
+}
+
+.orgSelectCardIcon {
+  position: relative;
+  z-index: 1;
+}
+
+.orgSelectName {
+  position: relative;
+  z-index: 1;
+  font-size: 22px;
+  font-weight: 900;
+  letter-spacing: .04em;
+}
+
+.orgSelectSub {
+  position: relative;
+  z-index: 1;
+  font-size: 11px;
+  color: #9fb3cc;
+  line-height: 1.45;
+}
+
+.orgComingSoonShell {
+  margin-top: 10px;
+  padding: 28px 20px;
+  text-align: center;
+}
+
+.orgComingSoonShell h2 {
+  margin: 0 0 10px;
+  font-size: 22px;
+  font-weight: 900;
+  color: #f8fafc;
+}
+
+.orgComingSoonShell .help {
+  margin: 0 0 18px;
+}
+
+.orgComingSoonShell .btn2 {
+  min-width: 220px;
+}
+
+@media (max-width: 640px) {
+  .orgSelectGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .orgSelectTitle {
+    font-size: 20px;
+  }
+}

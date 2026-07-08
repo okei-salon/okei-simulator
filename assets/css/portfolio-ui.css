@@ -24,8 +24,8 @@
 
 .pfManageHeadTop .pfMainTabs {
   margin: 0;
-  flex: 1 1 540px;
-  max-width: 540px;
+  flex: 1 1 680px;
+  max-width: 720px;
 }
 
 .pfManageHeadRight {
@@ -74,10 +74,10 @@
 
 .pfMainTabs {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
   width: 100%;
-  max-width: 540px;
+  max-width: 720px;
   margin: 0;
 }
 
