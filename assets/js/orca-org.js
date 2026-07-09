@@ -178,12 +178,105 @@ function orcaCardHelpRankingBody() {
     '・Orca9：70%';
 }
 
+function orcaCardHelpTitleBody() {
+  return '<div class="helpSectionTitle">タイトル報酬とは</div>' +
+    'タイトルは、自己投資額と弱ライン条件を満たすことで獲得できます。<br><br>' +
+    '<div class="helpSectionTitle">タイトル一覧</div>' +
+    '<div class="helpSectionTitle">User</div>' +
+    '・自己投資：100 USDT<br>' +
+    '・弱ライン：-<br>' +
+    '・ランキング報酬：5%<br>' +
+    '・グローバル報酬：-<br>' +
+    '・同ランクボーナス：-<br><br>' +
+    '<div class="helpSectionTitle">Orca1</div>' +
+    '・自己投資：100 USDT<br>' +
+    '・弱ライン：10,000 USDT<br>' +
+    '・ランキング報酬：10%<br>' +
+    '・グローバル報酬：-<br>' +
+    '・同ランクボーナス：-<br><br>' +
+    '<div class="helpSectionTitle">Orca2</div>' +
+    '・自己投資：100 USDT<br>' +
+    '・弱ライン：30,000 USDT<br>' +
+    '・ランキング報酬：20%<br>' +
+    '・グローバル報酬：-<br>' +
+    '・同ランクボーナス：-<br><br>' +
+    '<div class="helpSectionTitle">Orca3</div>' +
+    '・自己投資：500 USDT<br>' +
+    '・弱ライン：100,000 USDT<br>' +
+    '・ランキング報酬：30%<br>' +
+    '・グローバル報酬：-<br>' +
+    '・同ランクボーナス：10%<br><br>' +
+    '<div class="helpSectionTitle">Orca4</div>' +
+    '・自己投資：1,000 USDT<br>' +
+    '・弱ライン：300,000 USDT<br>' +
+    '・ランキング報酬：40%<br>' +
+    '・グローバル報酬：-<br>' +
+    '・同ランクボーナス：10%<br><br>' +
+    '<div class="helpSectionTitle">Orca5</div>' +
+    '・自己投資：5,000 USDT<br>' +
+    '・弱ライン：1,000,000 USDT<br>' +
+    '・ランキング報酬：50%<br>' +
+    '・グローバル報酬：3%<br>' +
+    '・同ランクボーナス：10%<br><br>' +
+    '<div class="helpSectionTitle">Orca6</div>' +
+    '・自己投資：10,000 USDT<br>' +
+    '・弱ライン：3,000,000 USDT<br>' +
+    '・ランキング報酬：55%<br>' +
+    '・グローバル報酬：3%<br>' +
+    '・同ランクボーナス：10%<br><br>' +
+    '<div class="helpSectionTitle">Orca7</div>' +
+    '・自己投資：20,000 USDT<br>' +
+    '・弱ライン：10,000,000 USDT<br>' +
+    '・ランキング報酬：60%<br>' +
+    '・グローバル報酬：3%<br>' +
+    '・同ランクボーナス：10%<br><br>' +
+    '<div class="helpSectionTitle">Orca8</div>' +
+    '・自己投資：50,000 USDT<br>' +
+    '・弱ライン：30,000,000 USDT<br>' +
+    '・ランキング報酬：65%<br>' +
+    '・グローバル報酬：2%<br>' +
+    '・同ランクボーナス：10%<br><br>' +
+    '<div class="helpSectionTitle">Orca9</div>' +
+    '・自己投資：100,000 USDT<br>' +
+    '・弱ライン：80,000,000 USDT<br>' +
+    '・ランキング報酬：70%<br>' +
+    '・グローバル報酬：2%<br>' +
+    '・同ランクボーナス：10%<br><br>' +
+    '<div class="helpSectionTitle">ランキング報酬</div>' +
+    'ランキング報酬は、直紹介メンバーの「基礎運用益」に対して、自分のタイトルに応じた報酬率が適用されます。<br><br>' +
+    '※チェックイン報酬は計算対象外です。<br><br>' +
+    '例）<br>' +
+    '自分：Orca2<br>' +
+    '直紹介：Orca5<br><br>' +
+    '直紹介メンバーの基礎運用益 × 20%<br><br>' +
+    '<div class="helpSectionTitle">同ランクボーナス</div>' +
+    '直紹介メンバーが自分と同じタイトルの場合、そのメンバーが獲得したランキング報酬の10%を受け取ることができます。<br><br>' +
+    '例）<br>' +
+    '自分：Orca5<br>' +
+    '直紹介：Orca5<br><br>' +
+    '直紹介メンバーのランキング報酬 × 10%<br><br>' +
+    '<div class="helpSectionTitle">グローバルボーナス</div>' +
+    'Orca5以上のタイトルを獲得すると、プロジェクト全体の対象売上に応じたグローバルボーナスを受け取ることができます。<br><br>' +
+    'Orca5〜7：3%<br>' +
+    'Orca8〜9：2%<br><br>' +
+    '<div class="helpSectionTitle">弱ラインとは</div>' +
+    '弱ラインとは、グループ販売の合計から「最大系列」の販売額を除いた金額です。<br><br>' +
+    '<div class="helpSectionTitle">計算式</div>' +
+    '弱ライン ＝ グループ販売 − 最大系列<br><br>' +
+    '<div class="helpSectionTitle">計算例</div>' +
+    'A系列：15,000USDT（最大）<br>' +
+    'B〜K系列：30,000USDT<br><br>' +
+    'グループ販売：45,000USDT<br>' +
+    '弱ライン：45,000 − 15,000 = 30,000USDT<br><br>' +
+    'この場合、弱ライン30,000USDTとなるため、Orca2のタイトル条件を達成します。';
+}
+
 function orcaCardHelpMap() {
   return {
     total: { title: '合計利益', body: null },
     personal: { title: '個人収益（個人運用益）', body: orcaCardHelpPersonalBody() },
     ranking: { title: 'ランキング報酬', body: orcaCardHelpRankingBody() },
-    title: { title: 'タイトル報酬', body: null },
+    title: { title: 'タイトル報酬', body: orcaCardHelpTitleBody() },
     volume: { title: 'グループ販売', body: null }
   };
 }
