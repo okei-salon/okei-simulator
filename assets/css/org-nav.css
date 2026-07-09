@@ -135,7 +135,7 @@
 
 .orcaIncomeCards {
   display: grid !important;
-  grid-template-columns: repeat(5, minmax(120px, 1fr)) !important;
+  grid-template-columns: repeat(4, minmax(120px, 1fr)) !important;
   margin: 10px 0 12px !important;
 }
 

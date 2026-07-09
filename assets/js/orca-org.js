@@ -1,8 +1,28 @@
 /* OUKEI HUB ORCA Organization Chart — Ver2.0.9
- * RAM組織図とデータ・操作を完全分離。報酬計算は未実装（土台のみ）。
+ * RAM組織図とデータ・操作を完全分離。
  */
 
-var ORCA_AI_AGENTS = ['Eden', 'Oracle', 'Axiom', 'Apex'];
+var ORCA_AI_AGENTS = ['不明', 'Eden', 'Oracle', 'Axiom', 'Apex'];
+
+var ORCA_RANK_NAMES = [
+  'User', 'Orca1', 'Orca2', 'Orca3', 'Orca4', 'Orca5', 'Orca6', 'Orca7', 'Orca8', 'Orca9'
+];
+
+var ORCA_PERSONAL_RATES = {
+  Eden: 0.00375,
+  Oracle: 0.00525,
+  Axiom: 0.007875,
+  Apex: 0.011
+};
+
+var ORCA_BASE_RATES = {
+  Eden: 0.0025,
+  Oracle: 0.0035,
+  Axiom: 0.0045,
+  Apex: 0.0055
+};
+
+var ORCA_RANK_REWARD_RATES = [0.05, 0.10, 0.20, 0.30, 0.40, 0.50, 0.55, 0.60, 0.65, 0.70];
 
 var orcaMembers = [];
 var orcaCurrentData = [];
@@ -76,7 +96,7 @@ function orcaCalcVolume(id) {
 
 function orcaLineAmountOf(id) {
   var m = orcaMembers.find(function (x) { return x.id === id; });
-  return m ? ((Number(m.investment) || 0) + orcaCalcVolume(id)) : 0;
+  return m ? ((Number(m.investment) || 0) + (Number(m.groupSales) || 0)) : 0;
 }
 
 function orcaAdjustAncestorManualVolumes(startId, delta) {
@@ -107,8 +127,64 @@ function orcaReflectionRate() {
   return r ? Math.min(99, Math.round(e / r * 100)) : 0;
 }
 
-function orcaPlaceholderTotals() {
-  return { total: 0, personal: 0, ranking: 0, title: 0, volume: orcaCalcVolume(orcaFocusId) };
+function orcaRankLabel(rank) {
+  var r = Math.max(0, Math.min(9, Number(rank) || 0));
+  return ORCA_RANK_NAMES[r] || 'User';
+}
+
+function orcaAgentForCalc(agent) {
+  if (!agent || agent === '不明') return 'Eden';
+  return agent;
+}
+
+function orcaPersonalRate(agent) {
+  return ORCA_PERSONAL_RATES[orcaAgentForCalc(agent)] || ORCA_PERSONAL_RATES.Eden;
+}
+
+function orcaBaseRate(agent) {
+  return ORCA_BASE_RATES[orcaAgentForCalc(agent)] || ORCA_BASE_RATES.Eden;
+}
+
+function orcaRankRewardRate(rank) {
+  var r = Math.max(0, Math.min(9, Number(rank) || 0));
+  return ORCA_RANK_REWARD_RATES[r] || 0;
+}
+
+function orcaCalcPersonalIncome(m) {
+  if (!m) return { daily: 0, monthly: 0 };
+  var inv = Number(m.investment) || 0;
+  var daily = inv * orcaPersonalRate(m.aiAgent);
+  return { daily: daily, monthly: daily * 30 };
+}
+
+function orcaCalcBaseProfitDaily(m) {
+  if (!m) return 0;
+  var inv = Number(m.investment) || 0;
+  return inv * orcaBaseRate(m.aiAgent);
+}
+
+function orcaCalcRankingReward(id) {
+  var self = orcaMembers.find(function (x) { return x.id === id; });
+  if (!self) return { daily: 0, monthly: 0 };
+  var ownRate = orcaRankRewardRate(self.rank);
+  var daily = orcaChildrenOf(id).reduce(function (sum, child) {
+    return sum + orcaCalcBaseProfitDaily(child) * ownRate;
+  }, 0);
+  return { daily: daily, monthly: daily * 30 };
+}
+
+function orcaCalcTotals(id) {
+  var m = orcaMembers.find(function (x) { return x.id === id; });
+  var personal = orcaCalcPersonalIncome(m);
+  var ranking = orcaCalcRankingReward(id);
+  var personalMonthly = personal.monthly;
+  var rankingMonthly = ranking.monthly;
+  return {
+    total: personalMonthly + rankingMonthly,
+    personal: personalMonthly,
+    ranking: rankingMonthly,
+    volume: m ? (Number(m.groupSales) || 0) : 0
+  };
 }
 
 function orcaCardHelpPersonalBody() {
@@ -150,125 +226,73 @@ function orcaCardHelpPersonalBody() {
 
 function orcaCardHelpRankingBody() {
   return '<div class="helpSectionTitle">ランキング報酬とは</div>' +
-    'チームメンバーの基礎運用収益に対して、自分の保有ランクに応じた報酬が支払われます。<br><br>' +
-    '※チェックイン報酬は計算対象外です。<br>' +
-    '※相手のランクに関係なく、自分の保有ランクの報酬率が適用されます。<br><br>' +
+    '直紹介メンバーの基礎運用益に対して、自分の保有ランクに応じたランキング報酬を受け取れます。<br><br>' +
+    '本シミュレーションでは、チェックイン報酬は含めず、AIエージェントの中間利率による基礎運用益のみを対象として計算しています。<br><br>' +
     '<div class="helpSectionTitle">計算式</div>' +
-    '相手の基礎運用収益 × 自分のランク報酬率<br><br>' +
-    '<div class="helpSectionTitle">計算例</div>' +
-    '自分：Orca2（20%）<br>' +
-    '相手：$1,000・Apex<br><br>' +
-    '基礎運用収益<br>' +
-    '＝ $1,000 × 0.55%<br>' +
-    '＝ $5.50／日<br><br>' +
-    'ランキング報酬<br>' +
-    '＝ $5.50 × 20%<br>' +
-    '＝ $1.10／日<br><br>' +
-    '相手がUserでもOrca5でも、自分がOrca2なら20%で計算されます。<br><br>' +
-    '<div class="helpSectionTitle">ランク報酬率</div>' +
-    '・User：5%<br>' +
-    '・Orca1：10%<br>' +
-    '・Orca2：20%<br>' +
-    '・Orca3：30%<br>' +
-    '・Orca4：40%<br>' +
-    '・Orca5：50%<br>' +
-    '・Orca6：55%<br>' +
-    '・Orca7：60%<br>' +
-    '・Orca8：65%<br>' +
-    '・Orca9：70%';
-}
-
-function orcaCardHelpTitleBody() {
-  return '<div class="helpSectionTitle">タイトル報酬とは</div>' +
-    'タイトルは、自己投資額と弱ライン条件を満たすことで獲得できます。<br><br>' +
+    '直紹介メンバーの基礎運用益（月）<br>' +
+    '×<br>' +
+    '自分の保有ランク％<br><br>' +
+    '<div class="helpSectionTitle">例</div>' +
+    '甲斐（Orca2）<br><br>' +
+    '↓<br><br>' +
+    '恵子<br>' +
+    'Eden<br>' +
+    '$2,000運用<br><br>' +
+    '基礎運用益<br>' +
+    '$225/月<br><br>' +
+    '↓<br><br>' +
+    'ランキング報酬<br><br>' +
+    '$225 × 20%<br>' +
+    '＝ $45/月<br><br>' +
     '<div class="helpSectionTitle">タイトル一覧</div>' +
     '<div class="helpSectionTitle">User</div>' +
-    '・自己投資：100 USDT<br>' +
-    '・弱ライン：-<br>' +
-    '・ランキング報酬：5%<br>' +
-    '・グローバル報酬：-<br>' +
-    '・同ランクボーナス：-<br><br>' +
+    'ランキング報酬：5%<br><br>' +
     '<div class="helpSectionTitle">Orca1</div>' +
-    '・自己投資：100 USDT<br>' +
-    '・弱ライン：10,000 USDT<br>' +
-    '・ランキング報酬：10%<br>' +
-    '・グローバル報酬：-<br>' +
-    '・同ランクボーナス：-<br><br>' +
+    'ランキング報酬：10%<br><br>' +
     '<div class="helpSectionTitle">Orca2</div>' +
-    '・自己投資：100 USDT<br>' +
-    '・弱ライン：30,000 USDT<br>' +
-    '・ランキング報酬：20%<br>' +
-    '・グローバル報酬：-<br>' +
-    '・同ランクボーナス：-<br><br>' +
+    'ランキング報酬：20%<br><br>' +
     '<div class="helpSectionTitle">Orca3</div>' +
-    '・自己投資：500 USDT<br>' +
-    '・弱ライン：100,000 USDT<br>' +
-    '・ランキング報酬：30%<br>' +
-    '・グローバル報酬：-<br>' +
-    '・同ランクボーナス：10%<br><br>' +
+    'ランキング報酬：30%<br>' +
+    '同ランクボーナス：10%<br><br>' +
     '<div class="helpSectionTitle">Orca4</div>' +
-    '・自己投資：1,000 USDT<br>' +
-    '・弱ライン：300,000 USDT<br>' +
-    '・ランキング報酬：40%<br>' +
-    '・グローバル報酬：-<br>' +
-    '・同ランクボーナス：10%<br><br>' +
+    'ランキング報酬：40%<br>' +
+    '同ランクボーナス：10%<br><br>' +
     '<div class="helpSectionTitle">Orca5</div>' +
-    '・自己投資：5,000 USDT<br>' +
-    '・弱ライン：1,000,000 USDT<br>' +
-    '・ランキング報酬：50%<br>' +
-    '・グローバル報酬：3%<br>' +
-    '・同ランクボーナス：10%<br><br>' +
+    'ランキング報酬：50%<br>' +
+    'グローバルボーナス：3%<br>' +
+    '同ランクボーナス：10%<br><br>' +
     '<div class="helpSectionTitle">Orca6</div>' +
-    '・自己投資：10,000 USDT<br>' +
-    '・弱ライン：3,000,000 USDT<br>' +
-    '・ランキング報酬：55%<br>' +
-    '・グローバル報酬：3%<br>' +
-    '・同ランクボーナス：10%<br><br>' +
+    'ランキング報酬：55%<br>' +
+    'グローバルボーナス：3%<br>' +
+    '同ランクボーナス：10%<br><br>' +
     '<div class="helpSectionTitle">Orca7</div>' +
-    '・自己投資：20,000 USDT<br>' +
-    '・弱ライン：10,000,000 USDT<br>' +
-    '・ランキング報酬：60%<br>' +
-    '・グローバル報酬：3%<br>' +
-    '・同ランクボーナス：10%<br><br>' +
+    'ランキング報酬：60%<br>' +
+    'グローバルボーナス：3%<br>' +
+    '同ランクボーナス：10%<br><br>' +
     '<div class="helpSectionTitle">Orca8</div>' +
-    '・自己投資：50,000 USDT<br>' +
-    '・弱ライン：30,000,000 USDT<br>' +
-    '・ランキング報酬：65%<br>' +
-    '・グローバル報酬：2%<br>' +
-    '・同ランクボーナス：10%<br><br>' +
+    'ランキング報酬：65%<br>' +
+    'グローバルボーナス：2%<br>' +
+    '同ランクボーナス：10%<br><br>' +
     '<div class="helpSectionTitle">Orca9</div>' +
-    '・自己投資：100,000 USDT<br>' +
-    '・弱ライン：80,000,000 USDT<br>' +
-    '・ランキング報酬：70%<br>' +
-    '・グローバル報酬：2%<br>' +
-    '・同ランクボーナス：10%<br><br>' +
-    '<div class="helpSectionTitle">ランキング報酬</div>' +
-    'ランキング報酬は、直紹介メンバーの「基礎運用益」に対して、自分のタイトルに応じた報酬率が適用されます。<br><br>' +
-    '※チェックイン報酬は計算対象外です。<br><br>' +
-    '例）<br>' +
-    '自分：Orca2<br>' +
-    '直紹介：Orca5<br><br>' +
-    '直紹介メンバーの基礎運用益 × 20%<br><br>' +
-    '<div class="helpSectionTitle">同ランクボーナス</div>' +
-    '直紹介メンバーが自分と同じタイトルの場合、そのメンバーが獲得したランキング報酬の10%を受け取ることができます。<br><br>' +
-    '例）<br>' +
-    '自分：Orca5<br>' +
-    '直紹介：Orca5<br><br>' +
-    '直紹介メンバーのランキング報酬 × 10%<br><br>' +
-    '<div class="helpSectionTitle">グローバルボーナス</div>' +
-    'Orca5以上のタイトルを獲得すると、プロジェクト全体の対象売上に応じたグローバルボーナスを受け取ることができます。<br><br>' +
-    'Orca5〜7：3%<br>' +
-    'Orca8〜9：2%<br><br>' +
-    '<div class="helpSectionTitle">弱ラインとは</div>' +
-    '弱ラインとは、グループ販売の合計から「最大系列」の販売額を除いた金額です。<br><br>' +
-    '<div class="helpSectionTitle">計算式</div>' +
-    '弱ライン ＝ グループ販売 − 最大系列<br><br>' +
-    '<div class="helpSectionTitle">計算例</div>' +
-    'A系列：15,000USDT（最大）<br>' +
-    'B〜K系列：30,000USDT<br><br>' +
-    'グループ販売：45,000USDT<br>' +
-    '弱ライン：45,000 − 15,000 = 30,000USDT<br><br>' +
-    'この場合、弱ライン30,000USDTとなるため、Orca2のタイトル条件を達成します。';
+    'ランキング報酬：70%<br>' +
+    'グローバルボーナス：2%<br>' +
+    '同ランクボーナス：10%<br><br>' +
+    '<div class="helpSectionTitle">タイトル取得条件</div>' +
+    '各タイトルは、<br><br>' +
+    '・自己投資額<br>' +
+    '・弱ライン販売額<br><br>' +
+    'の条件を満たすことで取得できます。<br><br>' +
+    '弱ライン販売額は、最大系列を除いた残りすべての系列の販売額合計で判定します。<br><br>' +
+    '<div class="helpSectionTitle">例</div>' +
+    '11系列すべて3,000USDTの場合<br><br>' +
+    '最大系列3,000を除外<br><br>' +
+    '残り10系列<br><br>' +
+    '3,000 × 10<br>' +
+    '＝30,000USDT<br><br>' +
+    'この30,000USDTが弱ライン販売額となります。<br><br>' +
+    '<div class="helpSectionTitle">※ 現在のOUKEI HUBについて</div>' +
+    '現在のOUKEI HUBでは、ランキング報酬（直紹介分）のみ計算対象です。<br><br>' +
+    'グローバルボーナス・同ランクボーナス・タイトル取得判定については、今後正式なロジックが確定次第対応予定です。';
 }
 
 function orcaCardHelpMap() {
@@ -276,7 +300,6 @@ function orcaCardHelpMap() {
     total: { title: '合計利益', body: null },
     personal: { title: '個人収益（個人運用益）', body: orcaCardHelpPersonalBody() },
     ranking: { title: 'ランキング報酬', body: orcaCardHelpRankingBody() },
-    title: { title: 'タイトル報酬', body: orcaCardHelpTitleBody() },
     volume: { title: 'グループ販売', body: null }
   };
 }
@@ -329,13 +352,19 @@ function orcaRenderStats() {
 }
 
 function orcaRenderCards() {
-  var t = orcaPlaceholderTotals();
+  var t = orcaCalcTotals(orcaRootId);
   var z = orcaMoney(0);
   var set = function (id, val) { var el = document.getElementById(id); if (el) el.textContent = val; };
-  set('ocTotal', z);
-  set('ocPersonal', z);
-  set('ocRanking', z);
-  set('ocTitle', z);
+  if (!orcaRootId || !orcaMembers.some(function (x) { return x.id === orcaRootId; })) {
+    set('ocTotal', z);
+    set('ocPersonal', z);
+    set('ocRanking', z);
+    set('ocVolume', z);
+    return;
+  }
+  set('ocTotal', orcaMoney(t.total) + '/月');
+  set('ocPersonal', orcaMoney(t.personal) + '/月');
+  set('ocRanking', orcaMoney(t.ranking) + '/月');
   set('ocVolume', orcaMoney(t.volume));
 }
 
@@ -375,11 +404,13 @@ function orcaSwitchRootAccount(id) {
 
 function orcaNodeHtml(m, kidCount) {
   var nm = orcaDisplayName(m);
-  var agent = m.aiAgent || 'Eden';
-  return '<div class="node ' + (m.id === orcaRootId ? 'root' : '') + ' rankBorder' + (m.rank || 0) +
+  var agent = m.aiAgent || '不明';
+  var rank = Math.max(0, Math.min(9, Number(m.rank) || 0));
+  var rankBorder = Math.min(rank, 5);
+  return '<div class="node ' + (m.id === orcaRootId ? 'root' : '') + ' rankBorder' + rankBorder +
     '" onclick="flashEl(this)"><div class="nodeHead"><div><div class="nodeName">' + nm +
     '</div><div class="userName">' + (m.username ? '@' + m.username : '') + '</div></div>' +
-    '<span class="rank r' + (m.rank || 0) + '">' + (typeof rankName !== 'undefined' ? rankName[m.rank || 0] : ('L' + (m.rank || 0))) +
+    '<span class="rank r' + rankBorder + '">' + orcaRankLabel(rank) +
     '</span></div><div class="nodeInfo">個人投資額：' + orcaMoney(m.investment) + '<br>運用AIエージェント：' + agent +
     '<br>個人販売：' + orcaMoney(m.personalSales) + '<br>グループ販売：' + orcaMoney(m.groupSales) +
     '</div><div class="nodeBtns">' +
@@ -448,9 +479,8 @@ function orcaAgentOptions(selected) {
 }
 
 function orcaRankOptions(rank) {
-  return [5, 4, 3, 2, 1, 0].map(function (r) {
-    var label = typeof rankName !== 'undefined' ? rankName[r] : ('L' + r);
-    return '<option value="' + r + '"' + (Number(rank || 0) === r ? ' selected' : '') + '>' + label + '</option>';
+  return ORCA_RANK_NAMES.map(function (label, i) {
+    return '<option value="' + i + '"' + (Number(rank || 0) === i ? ' selected' : '') + '>' + label + '</option>';
   }).join('');
 }
 
@@ -468,10 +498,9 @@ function orcaOpenEdit(data) {
     '<label>ユーザーネーム</label><input id="orcaUsernameInput" value="' + (data.username || '') + '">' +
     '<div class="grid2"><div><label>保有ランク</label><select id="orcaRankInput">' + orcaRankOptions(data.rank) + '</select></div>' +
     '<div><label>個人投資額</label><input id="orcaInvestmentInput" type="number" value="' + (data.investment != null ? data.investment : '') + '"></div></div>' +
-    '<label>運用AIエージェント</label><select id="orcaAiAgentInput">' + orcaAgentOptions(data.aiAgent || 'Eden') + '</select>' +
+    '<label>運用AIエージェント</label><select id="orcaAiAgentInput">' + orcaAgentOptions(data.aiAgent || '不明') + '</select>' +
     '<div class="grid2"><div><label>個人販売</label><input id="orcaPersonalSalesInput" type="number" value="' + (data.personalSales != null ? data.personalSales : '') + '"></div>' +
     '<div><label>グループ販売</label><input id="orcaGroupSalesInput" type="number" value="' + (data.groupSales != null ? data.groupSales : '') + '"></div></div>' +
-    '<label>チームボリューム</label><input id="orcaVolumeInput" type="number" value="' + (data.manualVolume != null ? data.manualVolume : '') + '">' +
     '<div style="display:flex;gap:8px;margin-top:14px;justify-content:flex-end">' +
     '<button class="btn2" onclick="closeModal()">キャンセル</button>' +
     '<button onclick="orcaSaveMember()">保存</button></div>';
@@ -488,7 +517,6 @@ function orcaSaveMember() {
   var aiAgentInput = document.getElementById('orcaAiAgentInput');
   var personalSalesInput = document.getElementById('orcaPersonalSalesInput');
   var groupSalesInput = document.getElementById('orcaGroupSalesInput');
-  var volumeInput = document.getElementById('orcaVolumeInput');
   if (!editId) return;
   var id = editId.value || ('o' + Date.now());
   var isEdit = !!editId.value;
@@ -502,15 +530,14 @@ function orcaSaveMember() {
     username: usernameInput.value || '',
     rank: Number(rankInput.value),
     investment: Number(investmentInput.value) || 0,
-    aiAgent: aiAgentInput.value || 'Eden',
+    aiAgent: aiAgentInput.value || '不明',
     personalSales: Number(personalSalesInput.value) || 0,
     groupSales: Number(groupSalesInput.value) || 0,
-    manualVolume: Number(volumeInput.value) || 0,
     open: true,
     bvMode: 'MANUAL',
     bvPrompted: false
   };
-  var newLine = (Number(obj.investment) || 0) + (Number(obj.manualVolume) || 0);
+  var newLine = (Number(obj.investment) || 0) + (Number(obj.groupSales) || 0);
   if (isEdit && old) {
     obj.open = old.open;
     obj.bvMode = old.bvMode || 'MANUAL';
@@ -569,15 +596,17 @@ function orcaShowDetail(id) {
   orcaFocusId = id;
   var m = orcaMembers.find(function (x) { return x.id === id; });
   if (!m || typeof modalTitle === 'undefined') return;
-  var rankLabel = typeof rankName !== 'undefined' ? rankName[m.rank || 0] : ('L' + (m.rank || 0));
+  var pi = orcaCalcPersonalIncome(m);
   modalTitle.textContent = orcaDisplayName(m) + ' 詳細';
   modalContent.innerHTML =
     '<div class="detailGrid">' +
     '<div class="detailBox"><div class="label">名前</div><div class="val">' + (m.name || '未入力') + '</div></div>' +
     '<div class="detailBox"><div class="label">ユーザーネーム</div><div class="val">' + (m.username ? '@' + m.username : '—') + '</div></div>' +
-    '<div class="detailBox"><div class="label">保有ランク</div><div class="val">' + rankLabel + '</div></div>' +
+    '<div class="detailBox"><div class="label">保有ランク</div><div class="val">' + orcaRankLabel(m.rank) + '</div></div>' +
     '<div class="detailBox"><div class="label">個人投資額</div><div class="val">' + orcaMoney(m.investment) + '</div></div>' +
-    '<div class="detailBox"><div class="label">運用AIエージェント</div><div class="val">' + (m.aiAgent || 'Eden') + '</div></div>' +
+    '<div class="detailBox"><div class="label">運用AIエージェント</div><div class="val">' + (m.aiAgent || '不明') + '</div></div>' +
+    '<div class="detailBox"><div class="label">個人収益（日）</div><div class="val">' + orcaMoney(pi.daily) + '/日</div></div>' +
+    '<div class="detailBox"><div class="label">個人収益（月）</div><div class="val">' + orcaMoney(pi.monthly) + '/月</div></div>' +
     '<div class="detailBox"><div class="label">個人販売</div><div class="val">' + orcaMoney(m.personalSales) + '</div></div>' +
     '<div class="detailBox"><div class="label">グループ販売</div><div class="val">' + orcaMoney(m.groupSales) + '</div></div>' +
     '</div><div class="lineBox"><b>管理</b><div class="accountManageActions">' +
@@ -620,7 +649,7 @@ function orcaAddRootAccount() {
   var id = 'o' + Date.now();
   orcaMembers.push({
     id: id, parent: null, name: name, username: '', rank: 0, investment: 300,
-    aiAgent: 'Eden', personalSales: 0, groupSales: 0, manualVolume: 0, open: true, bvMode: 'MANUAL'
+    aiAgent: '不明', personalSales: 0, groupSales: 0, open: true, bvMode: 'MANUAL'
   });
   orcaRootAccountIds.push(id);
   orcaRootId = id;
@@ -840,7 +869,7 @@ function orcaImportPackage(d, parentId, asRoot) {
     copy.id = idMap[m.id];
     copy.parent = m.id === oldRoot ? (asRoot ? null : parentId) : (idMap[m.parent] || null);
     copy.open = true;
-    copy.aiAgent = copy.aiAgent || 'Eden';
+    copy.aiAgent = copy.aiAgent || '不明';
     copy.personalSales = Number(copy.personalSales) || 0;
     copy.groupSales = Number(copy.groupSales) || 0;
     return copy;
