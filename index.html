@@ -196,7 +196,7 @@ input,select{width:100%;background:#081426;color:var(--text);border:1px solid #2
 <link rel="stylesheet" href="assets/css/excel-import.css?v=20260705-v243">
 <link rel="stylesheet" href="assets/css/orca-import.css?v=20260628-v205">
 <link rel="stylesheet" href="assets/css/revenue-manage.css?v=20260707-sales-total-panel-v1">
-<link rel="stylesheet" href="assets/css/org-nav.css?v=20260709-v273">
+<link rel="stylesheet" href="assets/css/org-nav.css?v=20260711-v274">
 <link rel="stylesheet" href="assets/css/org-theme.css?v=20260708-v264">
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="assets/js/project-icons.js?v=20260708-v254"></script>
@@ -212,7 +212,7 @@ input,select{width:100%;background:#081426;color:var(--text);border:1px solid #2
 <script src="assets/js/revenue-manage.js?v=20260708-v254"></script>
 <script src="assets/js/sales-manage.js?v=20260708-ram-total-v254"></script>
 <script src="assets/js/org-nav.js?v=20260708-v265"></script>
-<script src="assets/js/orca-org.js?v=20260709-v273"></script>
+<script src="assets/js/orca-org.js?v=20260711-v282"></script>
 <script src="assets/js/ochan-lines.js?v=20260705-v2img-v1"></script>
 <script src="assets/js/ochan-engine.js?v=20260705-ochan-pc-restore-v1"></script>
 </head>
@@ -354,8 +354,8 @@ input,select{width:100%;background:#081426;color:var(--text);border:1px solid #2
 <div class="notice">⚠️ 入力内容をもとにした参考シミュレーションです。実際の報酬額・タイトル・ボリュームを保証するものではありません。</div>
 <section class="cards orcaIncomeCards" id="orcaIncomeCards">
   <div class="card total"><div class="label">合計利益 <span class="helpQ orcaHelpQ" onclick="event.stopPropagation();orcaShowCardHelp('total')">?</span></div><div class="main" id="ocTotal">$0</div></div>
-  <div class="card"><div class="label">個人収益 <span class="help helpInline">（個人運用益）</span><span class="helpQ orcaHelpQ" onclick="event.stopPropagation();orcaShowCardHelp('personal')">?</span></div><div class="main" id="ocPersonal">$0</div></div>
-  <div class="card"><div class="label">ランキング報酬 <span class="helpQ orcaHelpQ" onclick="event.stopPropagation();orcaShowCardHelp('ranking')">?</span></div><div class="main" id="ocRanking">$0</div></div>
+  <div class="card"><div class="label">AI収益 <span class="helpQ orcaHelpQ" onclick="event.stopPropagation();orcaShowCardHelp('personal')">?</span></div><div class="main" id="ocPersonal">$0</div></div>
+  <div class="card" onclick="orcaShowAffiliateDetail()"><div class="label"><span class="orcaCardLabel orcaCardLabel--pc">推定アフィリエイト利益</span><span class="orcaCardLabel orcaCardLabel--sp">推定AF利益</span> <span class="helpQ orcaHelpQ" onclick="event.stopPropagation();orcaShowCardHelp('ranking')">?</span></div><div class="main" id="ocRanking">$0</div></div>
   <div class="card"><div class="label">グループ販売 <span class="helpQ orcaHelpQ" onclick="event.stopPropagation();orcaShowCardHelp('volume')">?</span></div><div class="main" id="ocVolume">$0</div><div class="subline">手入力値を優先</div></div>
 </section>
 <section class="panel">

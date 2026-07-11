@@ -156,9 +156,21 @@
   box-shadow: 0 0 14px rgba(59, 130, 246, .35);
 }
 
+.orcaIncomeCards .orcaCardLabel--sp {
+  display: none;
+}
+
 @media (max-width: 900px) {
   .orcaIncomeCards {
     grid-template-columns: repeat(2, 1fr) !important;
+  }
+
+  .orcaIncomeCards .orcaCardLabel--pc {
+    display: none;
+  }
+
+  .orcaIncomeCards .orcaCardLabel--sp {
+    display: inline;
   }
 }
 
