@@ -16,6 +16,14 @@ jobs:
           node-version: '20'
           cache: npm
       - run: npm ci
+      - name: Write Firebase service account
+        run: echo "$FIREBASE_SERVICE_ACCOUNT" > "${RUNNER_TEMP}/firebase-sa.json"
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_OUKEI_HUB }}
+      - name: Prune old Hosting releases
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/firebase-sa.json
+        run: npm run hosting:cleanup
       - uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: ${{ secrets.GITHUB_TOKEN }}
