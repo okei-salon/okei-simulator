@@ -2,7 +2,8 @@
 
 var PF_COLORS = {
   ram: '#f97316',
-  orca: '#06b6d4',
+  orca: '#3b82f6',
+  eni: '#a3e635',
   cary: '#a855f7',
   genesis: '#eab308',
   other: '#64748b'
@@ -58,6 +59,11 @@ var pfOperatingEditId = null;
 var pfOperatingFormMode = 'project';
 var pfProfitEditId = null;
 var pfProfitFormAllocation = 'flat';
+
+function pfGetProjectColor(key) {
+  if (typeof pjGetChartColor === 'function') return pjGetChartColor(key);
+  return PF_COLORS[key] || PF_COLORS.other;
+}
 
 function pfRecoveryScaleMax(rate) {
   let r = Math.max(0, Number(rate) || 0);
@@ -1783,7 +1789,7 @@ function pfBuildAllocationRows() {
       return {
         key: row.key,
         name: row.name,
-        color: PF_COLORS[row.key] || '#64748b',
+        color: pfGetProjectColor(row.key),
         pct: Math.round((row.operatingUsd / total) * 1000) / 10
       };
     });
@@ -1886,7 +1892,7 @@ function pfRenderStackedBars() {
       let val = month[key] || 0;
       if (val <= 0) return;
       let h = axisMax > 0 ? (val / axisMax) * chartH : 0;
-      segments.push('<div class="pfStackSeg pfStackSeg--' + key + '" style="height:' + h.toFixed(1) + 'px;background:' + PF_COLORS[key] + '"></div>');
+      segments.push('<div class="pfStackSeg pfStackSeg--' + key + '" style="height:' + h.toFixed(1) + 'px;background:' + pfGetProjectColor(key) + '"></div>');
     });
     let totalLabel = typeof formatAxisDollar === 'function' ? formatAxisDollar(month.total) : ('$' + month.total);
     return '<div class="pfStackCol">' +
@@ -1902,7 +1908,7 @@ function pfRenderStackedBars() {
   }).join('');
 
   let legend = pfGetActiveProjects().map(function (p) {
-    return '<span class="pfStackLegendItem"><i style="background:' + (PF_COLORS[p.key] || '#94a3b8') + '"></i>' + pfEscape(p.name) + '</span>';
+    return '<span class="pfStackLegendItem"><i style="background:' + pfGetProjectColor(p.key) + '"></i>' + pfEscape(p.name) + '</span>';
   }).join('');
 
   el.innerHTML =

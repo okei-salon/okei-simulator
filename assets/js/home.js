@@ -60,7 +60,7 @@ function getHomeActionProjects() {
   });
 }
 
-var HOME_BUILTIN_PROJECT_KEYS = { ram: 1, orca: 1, cary: 1, genesis: 1 };
+var HOME_BUILTIN_PROJECT_KEYS = { ram: 1, orca: 1, cary: 1, genesis: 1, eni: 1 };
 
 function homeProjectCls(key) {
   return HOME_BUILTIN_PROJECT_KEYS[key] ? key : 'custom';
@@ -84,6 +84,7 @@ function isHomeProjectEnteredToday(entry, projectKey) {
   if (!entry) return false;
   if (projectKey === 'ram') return isRamFullyEntered(entry);
   if (projectKey === 'orca') return isOrcaFullyEntered(entry);
+  if (projectKey === 'eni' && typeof isEniFullyEntered === 'function') return isEniFullyEntered(entry);
   if (projectKey === 'cary') return isCaryFullyEntered(entry);
   return Number(entry[projectKey] || 0) > 0;
 }
@@ -95,6 +96,7 @@ function getRevenueInputProjects() {
 var REVENUE_PROJECT_META = {
   ram: { desc: '銅鉱山／本日の収益', ready: true },
   orca: { desc: '昨日AI利益＋本日AF収益', ready: true },
+  eni: { desc: '決済カード／収益入力', ready: true },
   cary: { desc: 'ブロックチェーン／報酬入力', ready: false }
 };
 
@@ -109,6 +111,11 @@ function countProjectEnteredAccounts(projectKey, entry) {
   if (projectKey === 'orca') {
     return getOrcaInputAccounts().filter(function (a) { return isOrcaAccountEntered(entry, a.id); }).length;
   }
+  if (projectKey === 'eni' && typeof getEniInputAccounts === 'function') {
+    return getEniInputAccounts().filter(function (a) {
+      return typeof isEniAccountEntered === 'function' ? isEniAccountEntered(entry, a.id) : false;
+    }).length;
+  }
   if (projectKey === 'cary') {
     return getCaryInputAccounts().filter(function (a) { return isCaryAccountEntered(entry, a.id); }).length;
   }
@@ -118,6 +125,7 @@ function countProjectEnteredAccounts(projectKey, entry) {
 function countProjectInputAccounts(projectKey) {
   if (projectKey === 'ram') return getRamInputAccounts().length;
   if (projectKey === 'orca') return getOrcaInputAccounts().length;
+  if (projectKey === 'eni' && typeof getEniInputAccounts === 'function') return getEniInputAccounts().length;
   if (projectKey === 'cary') return getCaryInputAccounts().length;
   return 0;
 }
@@ -145,6 +153,15 @@ function getProjectInputSavedTotal(projectKey, entry) {
         return sum + pdOrcaAccountRevenueTotal(ae);
       }
       return sum + (typeof calcOrcaAccountTotal === 'function' ? calcOrcaAccountTotal(ae) : 0);
+    }, 0);
+  }
+  if (projectKey === 'eni' && entry.eniAccounts && typeof getEniInputAccounts === 'function') {
+    return getEniInputAccounts().reduce(function (sum, acc) {
+      let ae = entry.eniAccounts[acc.id];
+      if (!ae) return sum;
+      if (typeof pdEniAccountRevenueTotal === 'function') return sum + pdEniAccountRevenueTotal(ae);
+      if (typeof eniAccountRevenueTotal === 'function') return sum + eniAccountRevenueTotal(ae);
+      return sum + (Number(ae.todayRevenue) || 0) + (Number(ae.referralProfit) || 0) + (Number(ae.titleProfit) || 0);
     }, 0);
   }
   if (projectKey === 'cary') {
@@ -680,6 +697,7 @@ function updateHomeActionCard() {
 function getHomeActionPendingText(projectKey, projectName) {
   if (projectKey === 'ram') return projectName + 'の本日収益を入力してください';
   if (projectKey === 'orca') return projectName + 'の昨日AI利益・本日AF収益を入力してください';
+  if (projectKey === 'eni') return projectName + 'の収益を入力してください';
   if (projectKey === 'cary') return projectName + 'の報酬を入力してください';
   return projectName + 'の収益を入力してください';
 }
@@ -1313,13 +1331,10 @@ function renderHomeTodayDonut(rows, total) {
     return;
   }
 
-  let colors = {
-    ram: '#3b82f6',
-    orca: '#14b8a6',
-    genesis: '#a855f7',
-    cary: '#a855f7',
-    custom: '#94a3b8'
-  };
+  function homeDonutColor(cls) {
+    if (typeof pjGetChartColor === 'function') return pjGetChartColor(cls);
+    return '#94a3b8';
+  }
   let r = 30;
   let cx = 44;
   let cy = 44;
@@ -1327,7 +1342,7 @@ function renderHomeTodayDonut(rows, total) {
   let offset = 0;
   let segs = rows.map(function (row, i) {
     let len = (row.amt / total) * c;
-    let stroke = colors[row.proj.cls] || colors.custom;
+    let stroke = homeDonutColor(row.proj.cls);
     let hit = '<circle class="homeTodayDonutHit" data-idx="' + i + '" cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="none" stroke="transparent" stroke-width="14" stroke-dasharray="' + len.toFixed(2) + ' ' + (c - len).toFixed(2) + '" stroke-dashoffset="' + (-offset).toFixed(2) + '" transform="rotate(-90 ' + cx + ' ' + cy + ')"></circle>';
     let seg = '<circle class="homeTodayDonutSeg" data-idx="' + i + '" cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="none" stroke="' + stroke + '" stroke-width="9" stroke-dasharray="' + len.toFixed(2) + ' ' + (c - len).toFixed(2) + '" stroke-dashoffset="' + (-offset).toFixed(2) + '" transform="rotate(-90 ' + cx + ' ' + cy + ')"></circle>';
     offset += len;
@@ -1335,7 +1350,7 @@ function renderHomeTodayDonut(rows, total) {
   }).join('');
 
   let legend = rows.map(function (row, i) {
-    let stroke = colors[row.proj.cls] || colors.custom;
+    let stroke = homeDonutColor(row.proj.cls);
     return '<button type="button" class="homeTodayDonutLegendItem" data-idx="' + i + '" aria-label="' + row.proj.name + ' ' + row.pct + '%">' +
       '<span class="homeTodayDonutLegendDot" style="background:' + stroke + '"></span>' +
       '<span class="homeTodayDonutLegendName">' + row.proj.name + '</span>' +
@@ -1574,6 +1589,10 @@ function selectRevenueProject(projectKey) {
   }
   if (projectKey === 'orca') {
     openOrcaRevenueInput();
+    return;
+  }
+  if (projectKey === 'eni' && typeof openEniRevenueInput === 'function') {
+    openEniRevenueInput();
     return;
   }
   alert('このプロジェクトの実績入力は準備中です。');
@@ -2411,7 +2430,7 @@ function openPortfolioNav() {
 function syncMobileNav(page) {
   let nav = document.getElementById('mobileBottomNav');
   if (!nav) return;
-  let map = { home: 'home', ram: 'ram', orgSelect: 'ram', orcaOrg: 'ram', orcaAccountManage: 'ram', portfolio: 'portfolio', revenueManage: 'portfolio', salesManage: 'portfolio', settings: 'settings', accountManage: 'ram' };
+  let map = { home: 'home', ram: 'ram', orgSelect: 'ram', orcaOrg: 'ram', eniOrg: 'ram', eniAccountManage: 'ram', orcaAccountManage: 'ram', portfolio: 'portfolio', revenueManage: 'portfolio', salesManage: 'portfolio', settings: 'settings', accountManage: 'ram' };
   let active = map[page] || '';
   nav.querySelectorAll('[data-nav]').forEach(function (btn) {
     btn.classList.toggle('isActive', btn.getAttribute('data-nav') === active);

@@ -8,6 +8,7 @@ var PM_BUILTIN = {
 };
 
 var PM_VALID_CODES = {
+  ENI: 'eni',
   ORCA: 'orca',
   CARY: 'cary',
   CARYPACT: 'cary',
@@ -16,13 +17,14 @@ var PM_VALID_CODES = {
 };
 
 var PM_CODE_META = {
+  eni: { name: 'ENI', startDate: '2026/07/11' },
   orca: { name: 'ORCA', startDate: '2024/04/15' },
   cary: { name: 'Cary Pact', startDate: '2024/03/10' },
   genesis: { name: 'Genesis', startDate: '2023/11/20' },
   demo2026: { name: 'OUKEI 2026', startDate: '2026/01/01' }
 };
 
-var PM_OFFICIAL_ICON_KEYS = { ram: 1, orca: 1, genesis: 1, cary: 1 };
+var PM_OFFICIAL_ICON_KEYS = { ram: 1, orca: 1, genesis: 1, cary: 1, eni: 1 };
 
 function pmIsOfficialProjectName(name) {
   return typeof pjIsOfficialProjectName === 'function' && pjIsOfficialProjectName(name);
@@ -134,7 +136,7 @@ function pmNormalizeProjects() {
     p.registered = !!p.registered;
     if (!p.startDate) p.startDate = PM_BUILTIN[key] ? PM_BUILTIN[key].startDate : '—';
     if (!p.name) p.name = PM_BUILTIN[key] ? PM_BUILTIN[key].name : key;
-    if (!PM_BUILTIN[key] && key !== 'demo2026' && !p.kind) p.kind = 'other';
+    if (!PM_BUILTIN[key] && key !== 'demo2026' && key !== 'eni' && !p.kind) p.kind = 'other';
     if (typeof pjGetOfficialIconKeyByName === 'function') {
       let official = pjGetOfficialIconKeyByName(p.name);
       p.iconKey = official || 'custom';
@@ -322,7 +324,10 @@ function pmSyncLegacyFlags() {
 }
 
 function pmCommitProjectMaster(state) {
+  let prevKeys = pmGetRegisteredProjects().map(function (p) { return p.key; });
   pmApplyMasterState(state);
+  let nextKeys = pmGetRegisteredProjects().map(function (p) { return p.key; });
+  if (typeof pmOnProjectsCommitted === 'function') pmOnProjectsCommitted(prevKeys, nextKeys);
   settings.projectMaster.savedAt = new Date().toLocaleString();
   settings.lastUpdate = settings.projectMaster.savedAt;
   pmSyncLegacyFlags();

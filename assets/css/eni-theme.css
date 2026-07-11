@@ -1,0 +1,140 @@
+/* OUKEI HUB ENI Theme — Ver2.0.2 (lime green accent, glass UI) */
+
+.eniOrgComingSoon {
+  min-height: calc(100vh - 120px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px 48px;
+  background:
+    radial-gradient(ellipse 80% 60% at 50% 0%, rgba(163, 230, 53, .08), transparent 70%),
+    radial-gradient(ellipse 60% 50% at 80% 100%, rgba(99, 102, 241, .06), transparent 65%);
+}
+
+.eniComingSoonShell {
+  width: min(520px, 100%);
+}
+
+.eniComingSoonGlass {
+  position: relative;
+  padding: 40px 32px 36px;
+  border-radius: 24px;
+  text-align: center;
+  border: 1px solid rgba(163, 230, 53, .22);
+  background:
+    linear-gradient(145deg, rgba(15, 23, 42, .82) 0%, rgba(8, 14, 28, .92) 100%);
+  box-shadow:
+    0 24px 48px rgba(0, 0, 0, .38),
+    0 0 40px rgba(132, 204, 22, .12),
+    inset 0 1px 0 rgba(255, 255, 255, .06);
+  overflow: hidden;
+}
+
+.eniComingSoonGlass::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, #a3e635, #84cc16, transparent);
+  box-shadow: 0 0 20px rgba(163, 230, 53, .45);
+}
+
+.eniComingSoonGlass::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(135deg, rgba(255, 255, 255, .04) 0%, transparent 45%);
+  pointer-events: none;
+}
+
+.eniComingSoonLogo {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  justify-content: center;
+  margin-bottom: 20px;
+}
+
+.eniComingSoonLogo .eniComingSoonLogoIcon,
+.eniComingSoonLogo .homeProjIcon {
+  width: 96px !important;
+  height: 96px !important;
+  border-radius: 20px;
+}
+
+.eniComingSoonTitle {
+  position: relative;
+  z-index: 1;
+  margin: 0 0 10px;
+  font-size: 1.35rem;
+  font-weight: 900;
+  letter-spacing: .04em;
+  color: #f8fafc;
+}
+
+.eniComingSoonBadge {
+  position: relative;
+  z-index: 1;
+  display: inline-block;
+  margin: 0 0 18px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-size: .78rem;
+  font-weight: 800;
+  letter-spacing: .08em;
+  color: #ecfccb;
+  border: 1px solid rgba(163, 230, 53, .45);
+  background: rgba(132, 204, 22, .14);
+  box-shadow: 0 0 16px rgba(163, 230, 53, .2);
+}
+
+.eniComingSoonText {
+  position: relative;
+  z-index: 1;
+  margin: 0 0 28px;
+  font-size: .95rem;
+  line-height: 1.7;
+  color: #94a3b8;
+}
+
+.eniComingSoonActions {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.eniComingSoonActions button {
+  border-color: rgba(163, 230, 53, .4) !important;
+  color: #ecfccb !important;
+}
+
+.eniComingSoonActions button:first-child {
+  background: linear-gradient(135deg, #65a30d 0%, #84cc16 55%, #a3e635 100%) !important;
+  border: none !important;
+  color: #0f172a !important;
+  font-weight: 800;
+}
+
+/* ── ENI org page theme vars (lime green) ── */
+#eniOrgPage[data-project-theme="eni"] {
+  --org-accent: #a3e635;
+  --org-accent-mid: #84cc16;
+  --org-accent-deep: #65a30d;
+  --org-accent-light: #d9f99d;
+  --org-accent-soft: rgba(163, 230, 53, .38);
+  --org-accent-border: rgba(163, 230, 53, .34);
+  --org-accent-glow: rgba(132, 204, 22, .42);
+  --org-border-grad: linear-gradient(135deg, #365314 0%, #65a30d 40%, #a3e635 70%, #84cc16 100%);
+  --org-header-bg:
+    radial-gradient(ellipse 85% 120% at 12% -10%, rgba(163, 230, 53, .22), transparent 58%),
+    radial-gradient(ellipse 70% 90% at 88% 0%, rgba(101, 163, 13, .14), transparent 52%),
+    linear-gradient(165deg, rgba(22, 38, 12, .55) 0%, rgba(15, 22, 38, .94) 72%, rgba(8, 14, 28, .98) 100%);
+  --org-flash: rgba(163, 230, 53, .65);
+  --org-flash-glow: rgba(132, 204, 22, .34);
+}

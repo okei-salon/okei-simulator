@@ -14,6 +14,13 @@ var RM_ACCOUNT_DETAIL_DEFS = {
     { key: 'yesterdayAiProfit', label: '昨日AI利益' },
     { key: 'todayAffiliateProfit', label: '本日AF収益' },
     { key: 'total', label: '合計' }
+  ],
+  eni: [
+    { key: 'operationAmount', label: '運用額' },
+    { key: 'todayRevenue', label: '本日収益' },
+    { key: 'referralProfit', label: '紹介利益' },
+    { key: 'titleProfit', label: 'タイトル利益' },
+    { key: 'total', label: '合計' }
   ]
 };
 
@@ -174,6 +181,12 @@ function rmGetProjectAccountRows(projectKey) {
       });
     }
     if (RM_DEMO_ACCOUNT_TREE.orca) demo = RM_DEMO_ACCOUNT_TREE.orca.slice();
+  } else if (projectKey === 'eni') {
+    if (typeof getEniInputAccounts === 'function') {
+      live = getEniInputAccounts().map(function (acc) {
+        return { id: acc.id, name: acc.username, parentId: null, depth: 0 };
+      });
+    }
   } else if (projectKey === 'cary') {
     if (typeof getCaryInputAccounts === 'function') {
       live = getCaryInputAccounts().map(function (acc) {
@@ -249,6 +262,16 @@ function rmReadStoredEntryValues(projectKey, accountId, dateKey) {
     if (ae.todayRevenue != null) {
       return { yesterdayAiProfit: null, todayAffiliateProfit: null, total: Number(ae.todayRevenue) || 0 };
     }
+  } else if (projectKey === 'eni' && entry.eniAccounts && entry.eniAccounts[accountId]) {
+    let ae = entry.eniAccounts[accountId];
+    return {
+      operationAmount: ae.operationAmount != null ? Number(ae.operationAmount) : null,
+      todayRevenue: ae.todayRevenue != null ? Number(ae.todayRevenue) : null,
+      referralProfit: ae.referralProfit != null ? Number(ae.referralProfit) : null,
+      titleProfit: ae.titleProfit != null ? Number(ae.titleProfit) : null,
+      note: ae.note || '',
+      total: typeof pdEniAccountRevenueTotal === 'function' ? pdEniAccountRevenueTotal(ae) : 0
+    };
   } else if (entry.accounts && entry.accounts[accountId]) {
     let ae = entry.accounts[accountId];
     if (!ae.projectKey || ae.projectKey === projectKey) {
@@ -1246,7 +1269,13 @@ function rmRenderCompareChart() {
   let numeric = curVals.concat(prevVals).filter(function (v) { return v != null; });
   let dataMax = numeric.length ? Math.max.apply(null, numeric) : 1;
   let axisMax = typeof niceChartAxisMax === 'function' ? niceChartAxisMax(dataMax) : Math.max(dataMax, 450);
-  let cc = { current: '#60a5fa', prev: '#64748b', label: '#7f97b3', grid: 'rgba(80,110,150,.25)', dotStroke: '#0b182b' };
+  let cc = {
+    current: typeof pjGetScopeChartColor === 'function' ? pjGetScopeChartColor(rmFilter) : '#60a5fa',
+    prev: '#64748b',
+    label: '#7f97b3',
+    grid: 'rgba(80,110,150,.25)',
+    dotStroke: '#0b182b'
+  };
 
   let w = 520;
   let h = 168;
@@ -1295,6 +1324,8 @@ function rmRenderCompareChart() {
     return '<text x="' + x.toFixed(1) + '" y="' + (h - 3) + '" text-anchor="middle" fill="' + cc.label + '" font-size="10" font-weight="700">' + d + '日</text>';
   }).join('');
 
+  el.setAttribute('data-rm-scope', rmFilter === 'all' ? 'all' : rmFilter);
+
   el.innerHTML =
     '<div class="rmCompareChartInner">' +
     '<svg class="rmCompareSvg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + w + ' ' + h + '" preserveAspectRatio="none" aria-hidden="true">' +
@@ -1302,7 +1333,7 @@ function rmRenderCompareChart() {
     curLines + lineDots(curVals, cc.current, cc.dotStroke) +
     '</svg>' +
     '<div class="rmCompareLegend">' +
-    '<span class="rmCompareLegendItem"><i class="isCurrent"></i>今月（' + rmFormatMonthLabel(y, m) + '）</span>' +
+    '<span class="rmCompareLegendItem"><i class="isCurrent" style="background:' + cc.current + '"></i>今月（' + rmFormatMonthLabel(y, m) + '）</span>' +
     '<span class="rmCompareLegendItem"><i class="isPrev"></i>前月（' + rmFormatMonthLabel(prev.y, prev.m) + '）</span>' +
     '</div></div>';
   } catch (e) {}

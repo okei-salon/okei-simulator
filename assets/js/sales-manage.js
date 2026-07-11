@@ -281,6 +281,13 @@ function smGetLiveRamAccountTree() {
   return out;
 }
 
+function smGetLiveEniAccounts() {
+  if (typeof getEniInputAccounts !== 'function') return [];
+  return getEniInputAccounts().map(function (acc) {
+    return { id: acc.id, name: acc.username, parentId: null, depth: 0 };
+  });
+}
+
 function smGetLiveOrcaAccounts() {
   if (typeof getOrcaInputAccounts !== 'function') return [];
   return getOrcaInputAccounts().map(function (acc) {
@@ -312,6 +319,7 @@ function smGetProjectAccounts(projectKey) {
   let live = [];
   if (projectKey === 'ram') live = smGetLiveRamAccountTree();
   else if (projectKey === 'orca') live = smGetLiveOrcaAccounts();
+  else if (projectKey === 'eni') live = smGetLiveEniAccounts();
   else if (projectKey === 'cary') live = smGetLiveCaryAccounts();
   let demo = SM_DEMO_SALES_ACCOUNTS[projectKey] ? SM_DEMO_SALES_ACCOUNTS[projectKey].slice() : [];
   if (typeof pfResolveManageAccounts === 'function') {
@@ -886,7 +894,13 @@ function smRenderCompareChart() {
     let numeric = curVals.concat(prevVals).filter(function (v) { return v != null; });
     let dataMax = numeric.length ? Math.max.apply(null, numeric) : 1;
     let axisMax = typeof niceChartAxisMax === 'function' ? niceChartAxisMax(dataMax) : Math.max(dataMax, 1800);
-    let cc = { current: '#60a5fa', prev: '#64748b', label: '#7f97b3', grid: 'rgba(80,110,150,.25)', dotStroke: '#0b182b' };
+    let cc = {
+      current: typeof pjGetScopeChartColor === 'function' ? pjGetScopeChartColor(smFilter) : '#60a5fa',
+      prev: '#64748b',
+      label: '#7f97b3',
+      grid: 'rgba(80,110,150,.25)',
+      dotStroke: '#0b182b'
+    };
 
     let ticks = typeof chartAxisTicks === 'function' ? chartAxisTicks(axisMax, 5) : [0, axisMax / 2, axisMax];
     let tickLabels = ticks.map(function (t) {
@@ -938,6 +952,8 @@ function smRenderCompareChart() {
       return '<text x="' + x.toFixed(1) + '" y="' + (h - 3) + '" text-anchor="middle" fill="' + cc.label + '" font-size="10" font-weight="700">' + d + '日</text>';
     }).join('');
 
+    el.setAttribute('data-sm-scope', smFilter === 'all' ? 'all' : smFilter);
+
     el.innerHTML =
       '<div class="rmCompareChartInner">' +
       '<svg class="rmCompareSvg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + w + ' ' + h + '" preserveAspectRatio="none" aria-hidden="true">' +
@@ -945,7 +961,7 @@ function smRenderCompareChart() {
       curLines + lineDots(curVals, cc.current, cc.dotStroke) +
       '</svg>' +
       '<div class="rmCompareLegend">' +
-      '<span class="rmCompareLegendItem"><i class="isCurrent"></i>今月（' + smFormatMonthLabel(y, m) + '）</span>' +
+      '<span class="rmCompareLegendItem"><i class="isCurrent" style="background:' + cc.current + '"></i>今月（' + smFormatMonthLabel(y, m) + '）</span>' +
       '<span class="rmCompareLegendItem"><i class="isPrev"></i>前月（' + smFormatMonthLabel(prev.y, prev.m) + '）</span>' +
       '</div></div>';
   } catch (e) {}

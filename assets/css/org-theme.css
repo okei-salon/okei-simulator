@@ -103,23 +103,28 @@
 }
 .orgChartPage[data-project-theme] #modeBadge,
 .orgChartPage[data-project-theme] #orcaModeBadge,
+.orgChartPage[data-project-theme] #eniModeBadge,
 .orgChartPage[data-project-theme] #accountBadge,
 .orgChartPage[data-project-theme] #orcaAccountBadge,
+.orgChartPage[data-project-theme] #eniAccountBadge,
 .orgChartPage[data-project-theme] #reflectBadge,
-.orgChartPage[data-project-theme] #orcaReflectBadge {
+.orgChartPage[data-project-theme] #orcaReflectBadge,
+.orgChartPage[data-project-theme] #eniReflectBadge {
   --org-fill: #0d1b30; border: 1px solid transparent;
   background: linear-gradient(var(--org-fill), var(--org-fill)) padding-box, var(--org-border-grad) border-box;
   box-shadow: 0 0 12px var(--org-accent-glow);
 }
 .orgChartPage[data-project-theme] .ramNavActions .tabBtn[onclick*="showAccountManage"],
 .orgChartPage[data-project-theme] .ramNavActions .tabBtn[onclick*="openAccountManager"],
-.orgChartPage[data-project-theme] .ramNavActions .tabBtn[onclick*="orcaShowAccountManage"] {
+.orgChartPage[data-project-theme] .ramNavActions .tabBtn[onclick*="orcaShowAccountManage"],
+.orgChartPage[data-project-theme] .ramNavActions .tabBtn[onclick*="eniShowAccountManage"] {
   --org-fill: #132842; border: 1px solid transparent;
   background: linear-gradient(var(--org-fill), var(--org-fill)) padding-box, var(--org-border-grad) border-box !important;
   box-shadow: 0 0 12px var(--org-accent-glow);
 }
 .orgChartPage[data-project-theme="ram"] .ramNavActions .tabBtn[onclick*="openSimulationPanel"],
-.orgChartPage[data-project-theme="orca"] .ramNavActions .tabBtn[onclick*="orcaOpenSimulationPanel"] {
+.orgChartPage[data-project-theme="orca"] .ramNavActions .tabBtn[onclick*="orcaOpenSimulationPanel"],
+.orgChartPage[data-project-theme="eni"] .ramNavActions .tabBtn[onclick*="eniOpenSimulationPanel"] {
   --org-fill: #132842; border: 1px solid transparent;
   background: linear-gradient(var(--org-fill), var(--org-fill)) padding-box, linear-gradient(135deg, #581c87 0%, #a855f7 48%, #c084fc 100%) border-box !important;
   box-shadow: 0 0 12px rgba(168, 85, 247, .28);

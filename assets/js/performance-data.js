@@ -198,7 +198,12 @@ function pdProjectHasActualData(projectKey) {
 }
 
 function pdFilterProjectsWithData(projects) {
+  let regKeys = [];
+  if (typeof pmGetRegisteredProjects === 'function') {
+    regKeys = pmGetRegisteredProjects().map(function (p) { return p.key; });
+  }
   return (projects || []).filter(function (p) {
+    if (regKeys.indexOf(p.key) >= 0) return true;
     return pdProjectHasActualData(p.key);
   });
 }
@@ -219,6 +224,12 @@ function pdHasAccountRevenueInEntry(entry, projectKey, accountId) {
     let ae = entry.orcaAccounts[accountId];
     if (ae.todayRevenue != null) return true;
     return ae.yesterdayAiProfit != null || ae.todayAffiliateProfit != null;
+  }
+  if (projectKey === 'eni' && entry.eniAccounts && entry.eniAccounts[accountId]) {
+    let ae = entry.eniAccounts[accountId];
+    return ['operationAmount', 'todayRevenue', 'referralProfit', 'titleProfit'].some(function (k) {
+      return ae[k] != null && ae[k] !== '';
+    }) || (ae.note && String(ae.note).trim());
   }
   if (projectKey === 'cary' && entry.caryAccounts && entry.caryAccounts[accountId]) {
     return entry.caryAccounts[accountId].todayReward != null;
@@ -252,6 +263,11 @@ function pdCollectRevenueAccountIds(projectKey) {
         if (pdHasAccountRevenueInEntry(entry, projectKey, id)) ids[id] = true;
       });
     }
+    if (projectKey === 'eni' && entry.eniAccounts) {
+      Object.keys(entry.eniAccounts).forEach(function (id) {
+        if (pdHasAccountRevenueInEntry(entry, projectKey, id)) ids[id] = true;
+      });
+    }
     if (entry.accounts) {
       Object.keys(entry.accounts).forEach(function (id) {
         let ae = entry.accounts[id];
@@ -279,7 +295,7 @@ function pdCollectSalesAccountIds(projectKey) {
   return Object.keys(ids);
 }
 
-var PD_PROJECT_KEYS = ['ram', 'orca', 'cary', 'genesis', 'other'];
+var PD_PROJECT_KEYS = ['ram', 'orca', 'cary', 'genesis', 'eni', 'other'];
 var PD_RAM_EXCEL_KEYS = ['kai1', 'kai2'];
 var PD_SCHEMA_VERSION = 1;
 
@@ -462,6 +478,9 @@ function pdGetProjectAccountIds(projectKey) {
   if (projectKey === 'cary' && typeof getCaryInputAccounts === 'function') {
     return getCaryInputAccounts().map(function (a) { return a.id; });
   }
+  if (projectKey === 'eni' && typeof getEniInputAccounts === 'function') {
+    return getEniInputAccounts().map(function (a) { return a.id; });
+  }
   return [];
 }
 
@@ -523,6 +542,15 @@ function pdOrcaAccountRevenueTotal(a) {
   return 0;
 }
 
+function pdEniAccountRevenueTotal(a) {
+  if (!a) return 0;
+  return pdRound(
+    (Number(a.todayRevenue) || 0) +
+    (Number(a.referralProfit) || 0) +
+    (Number(a.titleProfit) || 0)
+  );
+}
+
 function pdCreatePerformanceSnapshot() {
   ensurePerformanceLogs();
   return {
@@ -551,7 +579,7 @@ function pdRestorePerformanceSnapshot(snapshot) {
 function pdSumProjectDayRevenue(entry, projectKey, dateKey) {
   if (!entry) return 0;
   if (projectKey === 'other') {
-    let known = ['ram', 'orca', 'cary', 'genesis'];
+    let known = ['ram', 'orca', 'cary', 'genesis', 'eni'];
     let sumKnown = known.reduce(function (s, k) { return s + (Number(entry[k]) || 0); }, 0);
     let total = Number(entry.total) || 0;
     return pdRound(Math.max(0, total - sumKnown));
@@ -615,6 +643,11 @@ function pdProjectDayHasRevenue(entry, projectKey, dateKey) {
     return Object.keys(entry.caryAccounts).some(function (id) {
       let ae = entry.caryAccounts[id];
       return ae && (ae.todayReward != null || ae.operationRevenue != null);
+    });
+  }
+  if (projectKey === 'eni' && entry.eniAccounts) {
+    return Object.keys(entry.eniAccounts).some(function (id) {
+      return pdHasAccountRevenueInEntry(entry, projectKey, id);
     });
   }
   if (projectKey === 'other') {
@@ -1212,6 +1245,11 @@ function pdRecalculateRevenueEntry(entry, dateKey) {
       entry.orca += pdOrcaAccountRevenueTotal(entry.orcaAccounts[id]);
     });
   }
+  if (entry.eniAccounts) {
+    Object.keys(entry.eniAccounts).forEach(function (id) {
+      entry.eni += pdEniAccountRevenueTotal(entry.eniAccounts[id]);
+    });
+  }
   if (entry.caryAccounts) {
     Object.keys(entry.caryAccounts).forEach(function (id) {
       let ae = entry.caryAccounts[id];
@@ -1224,7 +1262,7 @@ function pdRecalculateRevenueEntry(entry, dateKey) {
     Object.keys(entry.accounts).forEach(function (id) {
       let a = entry.accounts[id];
       let pk = a.projectKey;
-      if (!pk || pk === 'ram' || pk === 'orca' || pk === 'cary') return;
+      if (!pk || pk === 'ram' || pk === 'orca' || pk === 'cary' || pk === 'eni') return;
       if (PD_PROJECT_KEYS.indexOf(pk) >= 0) {
         let rev = Number(a.todayRevenue) || 0;
         let op = Number(a.operationRevenue) || 0;
@@ -1348,6 +1386,21 @@ function pdSaveRevenueAccountEntry(dateKey, projectKey, accountId, data) {
     entry.caryAccounts[accountId] = {
       todayReward: rev,
       operationRevenue: data.operationRevenue != null ? pdRound(data.operationRevenue) : op
+    };
+  } else if (projectKey === 'eni') {
+    entry.eniAccounts = entry.eniAccounts || {};
+    entry.eniAccounts[accountId] = {
+      operationAmount: data.operationAmount != null ? pdRound(data.operationAmount) : null,
+      todayRevenue: data.todayRevenue != null ? pdRound(data.todayRevenue) : null,
+      referralProfit: data.referralProfit != null ? pdRound(data.referralProfit) : null,
+      titleProfit: data.titleProfit != null ? pdRound(data.titleProfit) : null,
+      note: typeof data.note === 'string' ? data.note : ''
+    };
+    rev = pdEniAccountRevenueTotal(entry.eniAccounts[accountId]);
+    entry.accounts[accountId] = {
+      projectKey: projectKey,
+      todayRevenue: rev,
+      operationRevenue: data.operationAmount != null ? pdRound(data.operationAmount) : 0
     };
   }
 
@@ -1743,6 +1796,13 @@ function pdStripProjectFromRevenueEntry(entry, projectKey) {
     }
     if (Number(entry.orca)) touched = true;
     entry.orca = 0;
+  } else if (projectKey === 'eni') {
+    if (entry.eniAccounts && Object.keys(entry.eniAccounts).length) {
+      delete entry.eniAccounts;
+      touched = true;
+    }
+    if (Number(entry.eni)) touched = true;
+    entry.eni = 0;
   } else if (projectKey === 'cary') {
     if (entry.caryAccounts && Object.keys(entry.caryAccounts).length) {
       delete entry.caryAccounts;
@@ -2045,6 +2105,7 @@ if (typeof window !== 'undefined') {
   window.pdGetInvestmentHistoryRecords = pdGetInvestmentHistoryRecords;
   window.pdRamAccountRevenueTotal = pdRamAccountRevenueTotal;
   window.pdOrcaAccountRevenueTotal = pdOrcaAccountRevenueTotal;
+  window.pdEniAccountRevenueTotal = pdEniAccountRevenueTotal;
   window.pdPreviewRamAccountRevenueTotal = pdPreviewRamAccountRevenueTotal;
   window.pdGetRamOperationRevenue = pdGetRamOperationRevenue;
   window.pdCreatePerformanceSnapshot = pdCreatePerformanceSnapshot;

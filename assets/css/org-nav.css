@@ -83,7 +83,7 @@
 .orgSelectCard--orca {
   background:
     linear-gradient(180deg, #13243d, #0d1b30) padding-box,
-    linear-gradient(135deg, rgba(96, 165, 250, .55), rgba(6, 182, 212, .35)) border-box;
+    linear-gradient(135deg, rgba(96, 165, 250, .55), rgba(37, 99, 235, .35)) border-box;
 }
 
 .orgSelectCard--orca::before {

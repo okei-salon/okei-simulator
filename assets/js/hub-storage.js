@@ -28,6 +28,17 @@ function hubCreateDefaultSettings() {
   };
 }
 
+function hubCreateEmptyEniOrgChart() {
+  return {
+    members: [],
+    currentData: [],
+    scenarios: [],
+    rootId: '',
+    rootAccountIds: [],
+    zoom: 1
+  };
+}
+
 function hubCreateEmptyOrcaOrgChart() {
   return {
     members: [],
@@ -48,6 +59,7 @@ function hubCreateEmptyData() {
     rootId: '',
     rootAccountIds: [],
     orcaOrgChart: hubCreateEmptyOrcaOrgChart(),
+    eniOrgChart: hubCreateEmptyEniOrgChart(),
     updatedAt: 0
   };
 }
@@ -209,6 +221,41 @@ function hubEnsureOrcaRootsOnChart(chart, settings) {
   return merged;
 }
 
+function hubExtractRawEniOrgChart(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  if (raw.eniOrgChart && typeof raw.eniOrgChart === 'object') return raw.eniOrgChart;
+  if (raw.settings && raw.settings.eniOrgChart && typeof raw.settings.eniOrgChart === 'object') {
+    return raw.settings.eniOrgChart;
+  }
+  if (Array.isArray(raw.eniMembers)) {
+    return {
+      members: raw.eniMembers,
+      currentData: Array.isArray(raw.eniCurrentData) ? raw.eniCurrentData : raw.eniMembers,
+      scenarios: Array.isArray(raw.eniScenarios) ? raw.eniScenarios : [],
+      rootId: typeof raw.eniRootId === 'string' ? raw.eniRootId : '',
+      rootAccountIds: Array.isArray(raw.eniRootAccountIds) ? raw.eniRootAccountIds : [],
+      zoom: typeof raw.eniZoom === 'number' ? raw.eniZoom : 1
+    };
+  }
+  return null;
+}
+
+function hubEniOrgChartHasMembers(chart) {
+  return !!(chart && Array.isArray(chart.members) && chart.members.length);
+}
+
+function hubMergeEniOrgCharts(incoming, preserved) {
+  let picked = hubCreateEmptyEniOrgChart();
+  [incoming, preserved].forEach(function (chart) {
+    if (hubEniOrgChartHasMembers(chart)) picked = chart;
+  });
+  return picked;
+}
+
+function hubResolveEniOrgChart(rawChart, preservedChart) {
+  return hubMergeEniOrgCharts(rawChart, preservedChart);
+}
+
 function hubExtractRawOrcaOrgChart(raw) {
   if (!raw || typeof raw !== 'object') return null;
   if (raw.orcaOrgChart && typeof raw.orcaOrgChart === 'object') return raw.orcaOrgChart;
@@ -299,6 +346,7 @@ function hubNormalizeLoadedData(raw) {
     settings.performanceInputHiddenAccounts = {};
   }
   if (!Array.isArray(settings.orcaInputAccounts)) settings.orcaInputAccounts = [];
+  if (!Array.isArray(settings.eniInputAccounts)) settings.eniInputAccounts = [];
   let normalized = {
     members: Array.isArray(raw.members) ? raw.members : base.members,
     currentData: Array.isArray(raw.currentData) ? raw.currentData : base.currentData,
@@ -307,6 +355,7 @@ function hubNormalizeLoadedData(raw) {
     rootId: typeof raw.rootId === 'string' ? raw.rootId : base.rootId,
     rootAccountIds: Array.isArray(raw.rootAccountIds) ? raw.rootAccountIds : base.rootAccountIds,
     orcaOrgChart: hubResolveOrcaOrgChart(hubExtractRawOrcaOrgChart(raw), settings),
+    eniOrgChart: hubResolveEniOrgChart(hubExtractRawEniOrgChart(raw)),
     updatedAt: typeof raw.updatedAt === 'number' ? raw.updatedAt : 0
   };
   return normalized;
@@ -321,6 +370,7 @@ function hubPackLocalData() {
     rootId: typeof rootId !== 'undefined' ? rootId : '',
     rootAccountIds: typeof rootAccountIds !== 'undefined' ? rootAccountIds : [],
     orcaOrgChart: typeof orcaPackOrgChart === 'function' ? orcaPackOrgChart() : hubCreateEmptyOrcaOrgChart(),
+    eniOrgChart: typeof eniPackOrgChart === 'function' ? eniPackOrgChart() : hubCreateEmptyEniOrgChart(),
     updatedAt: hubLocalUpdatedAt
   };
 }
@@ -343,6 +393,7 @@ function hubPackFirestorePayload(updatedAt) {
       scenarios: local.scenarios
     },
     orcaOrgChart: local.orcaOrgChart || hubCreateEmptyOrcaOrgChart(),
+    eniOrgChart: local.eniOrgChart || hubCreateEmptyEniOrgChart(),
     manageAccounts: manageAccounts,
     revenue: {
       revenueLog: revenueLog,
@@ -367,6 +418,7 @@ function hubUnpackFirestorePayload(doc) {
     rootAccountIds: org.rootAccountIds,
     scenarios: org.scenarios,
     orcaOrgChart: doc.orcaOrgChart || hubCreateEmptyOrcaOrgChart(),
+    eniOrgChart: doc.eniOrgChart || hubCreateEmptyEniOrgChart(),
     settings: mergedSettings,
     updatedAt: typeof doc.updatedAt === 'number' ? doc.updatedAt : 0
   });
@@ -396,11 +448,16 @@ function hubComputeContentHash(data) {
 
 function hubApplyData(data) {
   let preservedOrca = typeof orcaPackOrgChart === 'function' ? orcaPackOrgChart() : null;
+  let preservedEni = typeof eniPackOrgChart === 'function' ? eniPackOrgChart() : null;
   let normalized = hubNormalizeLoadedData(data);
   normalized.orcaOrgChart = hubMergeOrcaOrgCharts(
     hubExtractRawOrcaOrgChart(data) || normalized.orcaOrgChart,
     preservedOrca,
     normalized.settings
+  );
+  normalized.eniOrgChart = hubMergeEniOrgCharts(
+    hubExtractRawEniOrgChart(data) || normalized.eniOrgChart,
+    preservedEni
   );
   if (typeof clone === 'function') {
     members = clone(normalized.members);
@@ -420,6 +477,7 @@ function hubApplyData(data) {
   simMode = false;
   hubLocalUpdatedAt = normalized.updatedAt || 0;
   if (typeof orcaApplyOrgChart === 'function') orcaApplyOrgChart(normalized.orcaOrgChart);
+  if (typeof eniApplyOrgChart === 'function') eniApplyOrgChart(normalized.eniOrgChart);
   if (typeof orcaSyncAllPersonalSales === 'function') orcaSyncAllPersonalSales();
   if (typeof pfEnsureManageDisplayAccounts === 'function') pfEnsureManageDisplayAccounts();
   if (typeof pfEnsurePerformanceInputHiddenAccounts === 'function') pfEnsurePerformanceInputHiddenAccounts();

@@ -184,7 +184,7 @@ function pmExecuteDeleteProject(key) {
   closeModal();
   delete pmDraftState.projects[key];
   pmDraftState.order = (pmDraftState.order || []).filter(function (k) { return k !== key; });
-  if (typeof pdDeleteProjectData === 'function') pdDeleteProjectData(key);
+  if (key !== 'eni' && typeof pdDeleteProjectData === 'function') pdDeleteProjectData(key);
   pmCommitProjectMaster(pmReadDraftState());
   pmDraftSnapshot = pmSerializeMasterState(pmReadDraftState());
   pmRenderProjectSettingsList();
