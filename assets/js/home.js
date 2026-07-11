@@ -2404,7 +2404,7 @@ function openPortfolioNav() {
 function syncMobileNav(page) {
   let nav = document.getElementById('mobileBottomNav');
   if (!nav) return;
-  let map = { home: 'home', ram: 'ram', orgSelect: 'ram', orcaOrg: 'ram', portfolio: 'portfolio', revenueManage: 'portfolio', salesManage: 'portfolio', settings: 'settings', accountManage: 'ram' };
+  let map = { home: 'home', ram: 'ram', orgSelect: 'ram', orcaOrg: 'ram', orcaAccountManage: 'ram', portfolio: 'portfolio', revenueManage: 'portfolio', salesManage: 'portfolio', settings: 'settings', accountManage: 'ram' };
   let active = map[page] || '';
   nav.querySelectorAll('[data-nav]').forEach(function (btn) {
     btn.classList.toggle('isActive', btn.getAttribute('data-nav') === active);

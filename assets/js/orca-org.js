@@ -477,14 +477,36 @@ function orcaRender() {
   if (banner) banner.classList.toggle('isVisible', orcaSimMode);
   var canvas = document.getElementById('orcaCanvas');
   if (canvas) canvas.style.transform = 'scale(' + orcaZoom + ')';
+  orcaRenderAccountManage();
   if (typeof hubSaveToStorage === 'function') hubSaveToStorage();
+}
+
+function orcaMemberStatsData(id) {
+  var root = id || orcaRootId;
+  if (!root || !orcaMembers.some(function (m) { return m.id === root; })) {
+    var empty = {};
+    for (var i = 0; i < ORCA_RANK_NAMES.length; i++) empty[i] = 0;
+    return { total: 0, ranks: empty };
+  }
+  var idSet = {};
+  orcaSubtreeIds(root).forEach(function (x) { idSet[x] = true; });
+  var scoped = orcaMembers.filter(function (m) { return idSet[m.id]; });
+  var ranks = {};
+  for (var r = 0; r < ORCA_RANK_NAMES.length; r++) ranks[r] = 0;
+  scoped.forEach(function (m) {
+    var rank = Number(m.rank) || 0;
+    if (rank < 0 || rank >= ORCA_RANK_NAMES.length) rank = 0;
+    ranks[rank] = (ranks[rank] || 0) + 1;
+  });
+  return { total: scoped.length, ranks: ranks };
 }
 
 function orcaRenderStats() {
   var accountBadge = document.getElementById('orcaAccountBadge');
   var reflectBadge = document.getElementById('orcaReflectBadge');
+  var stats = orcaMemberStatsData(orcaRootId);
   if (accountBadge) {
-    accountBadge.innerHTML = '👤 ' + orcaMembers.length +
+    accountBadge.innerHTML = '👤 ' + stats.total +
       ' <span class="inlineHelpQ" onclick="event.stopPropagation();orcaShowMemberStats()">?</span>';
   }
   if (reflectBadge) reflectBadge.textContent = '📊 入力反映率 ' + orcaReflectionRate() + '%';
@@ -772,10 +794,20 @@ function orcaShowDetail(id) {
 
 function orcaShowMemberStats() {
   if (typeof modalTitle === 'undefined') return;
-  var holders = orcaMembers.filter(function (m) { return (m.rank || 0) > 0; }).length;
+  var d = orcaMemberStatsData(orcaRootId);
+  var holders = 0;
+  for (var i = 1; i < ORCA_RANK_NAMES.length; i++) holders += d.ranks[i] || 0;
+  var rate = d.total ? Math.round(holders / d.total * 1000) / 10 : 0;
+  var rows = ORCA_RANK_NAMES.map(function (label, rank) {
+    return '<tr><td><span class="rank r' + rank + '">' + label + '</span></td><td>' + (d.ranks[rank] || 0) + '名</td></tr>';
+  }).join('');
   modalTitle.textContent = 'メンバー統計';
-  modalContent.innerHTML = '<div class="lineBox"><b>ORCA組織図メンバー数</b><br><br>総人数：<b>' +
-    orcaMembers.length + '件</b><br>タイトル保有者：<b>' + holders + '名</b></div>';
+  modalContent.innerHTML =
+    '<div class="lineBox"><b>👤＝現在表示中の組織図に登録されているアカウント数です。</b><br><br>' +
+    '総人数：<b>' + d.total + '件</b><br>' +
+    'タイトル保有者：<b>' + holders + '名</b><br>' +
+    'タイトル保有率：<b>' + rate + '%</b></div>' +
+    '<table class="helpTable"><tr><th>タイトル</th><th>人数</th></tr>' + rows + '</table>';
   modalBg.style.display = 'flex';
 }
 
@@ -938,8 +970,132 @@ function orcaLoadScenario(i) {
   orcaRender();
 }
 
+function orcaGetRootIdsForSummary() {
+  orcaEnsureRootAccounts();
+  var ids = orcaRootAccountIds.filter(function (id) {
+    return orcaMembers.some(function (m) { return m.id === id; });
+  });
+  if (!ids.length && orcaRootId) ids = [orcaRootId];
+  return ids;
+}
+
+function orcaSummaryFor(id) {
+  var m = orcaMembers.find(function (x) { return x.id === id; });
+  if (!m) return { id: id, name: '-', total: 0, personal: 0, ranking: 0, volume: 0 };
+  var t = orcaCalcTotals(id);
+  return {
+    id: id,
+    name: m.name,
+    total: t.total,
+    personal: t.personal,
+    ranking: t.ranking,
+    volume: t.volume
+  };
+}
+
+function orcaAllOrgSummary() {
+  var list = orcaGetRootIdsForSummary().map(orcaSummaryFor);
+  return {
+    list: list,
+    total: list.reduce(function (s, x) { return s + x.total; }, 0),
+    personal: list.reduce(function (s, x) { return s + x.personal; }, 0),
+    ranking: list.reduce(function (s, x) { return s + x.ranking; }, 0),
+    volume: list.reduce(function (s, x) { return s + x.volume; }, 0)
+  };
+}
+
+function orcaAggregateTotals() {
+  var s = orcaAllOrgSummary();
+  return {
+    total: s.total,
+    personal: s.personal,
+    ranking: s.ranking,
+    volume: s.volume
+  };
+}
+
+function orcaAggregateCardsHtml(id) {
+  var t = id ? orcaCalcTotals(id) : orcaAggregateTotals();
+  var rankingLabel =
+    '<span class="orcaCardLabel orcaCardLabel--pc">推定アフィリエイト利益</span>' +
+    '<span class="orcaCardLabel orcaCardLabel--sp">推定AF利益</span>';
+  var totalClick = id
+    ? "orcaSwitchRootAccount('" + id + "');orcaShowCardHelp('total')"
+    : 'orcaShowAggregateDetail()';
+  var personalClick = id
+    ? "orcaSwitchRootAccount('" + id + "');orcaShowCardHelp('personal')"
+    : 'orcaShowAggregateDetail()';
+  var rankingClick = id
+    ? "orcaSwitchRootAccount('" + id + "');orcaShowAffiliateDetail()"
+    : 'orcaShowAggregateDetail()';
+  var volumeClick = id
+    ? "orcaSwitchRootAccount('" + id + "');orcaShowCardHelp('volume')"
+    : 'orcaShowAggregateDetail()';
+  return '<section class="cards orcaIncomeCards">' +
+    '<div class="card total" onclick="' + totalClick + '"><div class="label">合計利益</div><div class="main">' + orcaMoney(t.total) + '/月</div></div>' +
+    '<div class="card" onclick="' + personalClick + '"><div class="label">AI収益</div><div class="main">' + orcaMoney(t.personal) + '/月</div></div>' +
+    '<div class="card" onclick="' + rankingClick + '"><div class="label">' + rankingLabel + '</div><div class="main">' + orcaMoney(t.ranking) + '/月</div></div>' +
+    '<div class="card" onclick="' + volumeClick + '"><div class="label">グループ販売</div><div class="main">' + orcaMoney(t.volume) + '</div></div>' +
+    '</section>';
+}
+
+function orcaRenderAccountManage() {
+  var content = document.getElementById('orcaAccountManageContent');
+  if (!content) return;
+  var s = orcaAllOrgSummary();
+  var rows = s.list.map(function (x) {
+    var m = orcaMembers.find(function (mem) { return mem.id === x.id; }) || {};
+    var homeLabel = m.homeVisible === false ? 'ホーム表示ON' : 'ホーム非表示';
+    return '<div class="lineBox"><b>' + orcaDisplayName(m) + '</b>' +
+      '<div class="homeToggleRow">' +
+      '<button class="btn2 smallCtl" onclick="orcaAccountManageMove(\'' + x.id + '\',-1)">↑</button>' +
+      '<button class="btn2 smallCtl" onclick="orcaAccountManageMove(\'' + x.id + '\',1)">↓</button>' +
+      '<button class="btn2 smallCtl" onclick="orcaToggleHomeVisible(\'' + x.id + '\')">' + homeLabel + '</button>' +
+      '</div>' + orcaAggregateCardsHtml(x.id) + '</div>';
+  }).join('');
+  content.innerHTML =
+    '<p class="panelTitle">全アカウント合計</p>' +
+    orcaAggregateCardsHtml('') +
+    '<p class="panelTitle" style="margin-top:16px">アカウント別</p>' +
+    (rows || '<div class="help">登録アカウントがありません。</div>');
+}
+
+function orcaShowAggregateDetail() {
+  if (typeof modalTitle === 'undefined' || typeof modalContent === 'undefined' || typeof modalBg === 'undefined') return;
+  modalTitle.textContent = '全アカウント合計';
+  modalContent.innerHTML = '<div class="explain">全アカウント合計の詳細です。個別内訳は各アカウントのカードから確認してください。</div>';
+  modalBg.style.display = 'flex';
+}
+
+function orcaToggleHomeVisible(id) {
+  var m = orcaMembers.find(function (x) { return x.id === id; });
+  if (!m) return;
+  m.homeVisible = m.homeVisible === false ? true : false;
+  if (typeof markActivity === 'function') markActivity();
+  orcaRender();
+  if (typeof showToast === 'function') {
+    showToast((m.homeVisible ? '✅ ホーム表示：' : '✅ ホーム非表示：') + orcaDisplayName(m));
+  }
+}
+
+function orcaReorderRootAccount(id, dir) {
+  orcaEnsureRootAccounts();
+  var i = orcaRootAccountIds.indexOf(id);
+  var j = i + dir;
+  if (i < 0 || j < 0 || j >= orcaRootAccountIds.length) return;
+  var tmp = orcaRootAccountIds[i];
+  orcaRootAccountIds[i] = orcaRootAccountIds[j];
+  orcaRootAccountIds[j] = tmp;
+  if (typeof markActivity === 'function') markActivity();
+  orcaRender();
+}
+
+function orcaAccountManageMove(id, dir) {
+  orcaReorderRootAccount(id, dir);
+}
+
 function orcaShowAccountManage() {
-  if (typeof showToast === 'function') showToast('ORCA集計は準備中です');
+  if (typeof showPage === 'function') showPage('orcaAccountManage');
 }
 
 function orcaSubtreeIds(id) {
