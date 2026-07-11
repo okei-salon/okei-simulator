@@ -222,10 +222,19 @@ function rmReadStoredEntryValues(projectKey, accountId, dateKey) {
     if (projectKey === 'ram') op = rmCalcRamOperationAmount(accountId, null, dateKey);
     return { operationRevenue: op, todayRevenue: rev };
   }
-  if (projectKey === 'ram' && entry.ramAccounts && entry.ramAccounts[accountId]) {
-    let ae = entry.ramAccounts[accountId];
-    if (ae.todayRevenue != null) rev = Number(ae.todayRevenue) || 0;
-    op = rmCalcRamOperationAmount(accountId, ae, dateKey);
+  if (projectKey === 'ram' && entry.ramAccounts) {
+    let found = typeof pdFindRamAccountEntry === 'function'
+      ? pdFindRamAccountEntry(entry, accountId)
+      : null;
+    if (!found && entry.ramAccounts[accountId]) {
+      found = { ae: entry.ramAccounts[accountId], storageId: accountId };
+    }
+    if (found) {
+      let ae = found.ae;
+      let storageId = found.storageId;
+      if (ae.todayRevenue != null) rev = Number(ae.todayRevenue) || 0;
+      op = rmCalcRamOperationAmount(storageId, ae, dateKey);
+    }
   } else if (projectKey === 'orca' && entry.orcaAccounts && entry.orcaAccounts[accountId]) {
     let ae = entry.orcaAccounts[accountId];
     if (ae.yesterdayAiProfit != null || ae.todayAffiliateProfit != null) {
@@ -633,14 +642,22 @@ function rmGetProjectDayAmount(entry, projectKey, dateKey) {
 
 function rmGetAccountDirectAmount(entry, projectKey, accountId, dateKey) {
   if (!entry) return null;
-  if (projectKey === 'ram' && entry.ramAccounts && entry.ramAccounts[accountId]) {
-    let ae = entry.ramAccounts[accountId];
+  if (projectKey === 'ram') {
+    let found = typeof pdFindRamAccountEntry === 'function'
+      ? pdFindRamAccountEntry(entry, accountId)
+      : null;
+    if (!found && entry.ramAccounts && entry.ramAccounts[accountId]) {
+      found = { ae: entry.ramAccounts[accountId], storageId: accountId };
+    }
+    if (!found) return null;
+    let ae = found.ae;
+    let storageId = found.storageId;
     if (ae.todayRevenue == null || ae.todayRevenue === '') return null;
     if (typeof pdRamAccountRevenueTotal === 'function' && dateKey) {
-      return pdRamAccountRevenueTotal(ae, accountId, dateKey);
+      return pdRamAccountRevenueTotal(ae, storageId, dateKey);
     }
     let op = typeof pdCalcDailyOperation === 'function' && dateKey
-      ? pdCalcDailyOperation(accountId, 'ram', dateKey) : 0;
+      ? pdCalcDailyOperation(storageId, 'ram', dateKey) : 0;
     return Math.round((op + (Number(ae.todayRevenue) || 0)) * 100) / 100;
   }
   if (projectKey === 'orca' && typeof getOrcaAccountEntry === 'function') {
@@ -815,12 +832,20 @@ function rmGetAccountBreakdown(projectKey, accountId, y, m, d) {
       let entry = typeof pdGetRevenueEntryRaw === 'function'
         ? pdGetRevenueEntryRaw(dateKey)
         : (typeof getRevenueEntry === 'function' ? getRevenueEntry(dateKey) : null);
-      if (projectKey === 'ram' && entry && entry.ramAccounts && entry.ramAccounts[accountId]) {
-        let ae = entry.ramAccounts[accountId];
-        let todayRevenue = ae.todayRevenue != null ? Number(ae.todayRevenue) : null;
-        let operation = rmCalcRamOperationAmount(accountId, ae, dateKey);
-        if (todayRevenue != null || operation != null) {
-          return { operation: operation, todayRevenue: todayRevenue };
+      if (projectKey === 'ram' && entry && entry.ramAccounts) {
+        let found = typeof pdFindRamAccountEntry === 'function'
+          ? pdFindRamAccountEntry(entry, accountId)
+          : null;
+        if (!found && entry.ramAccounts[accountId]) {
+          found = { ae: entry.ramAccounts[accountId], storageId: accountId };
+        }
+        if (found) {
+          let ae = found.ae;
+          let todayRevenue = ae.todayRevenue != null ? Number(ae.todayRevenue) : null;
+          let operation = rmCalcRamOperationAmount(found.storageId, ae, dateKey);
+          if (todayRevenue != null || operation != null) {
+            return { operation: operation, todayRevenue: todayRevenue };
+          }
         }
       }
       if (projectKey === 'orca' && entry && entry.orcaAccounts && entry.orcaAccounts[accountId]) {

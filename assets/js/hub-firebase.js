@@ -1,4 +1,4 @@
-/* OUKEI HUB Firebase Sync — Ver2.0.5
+/* OUKEI HUB Firebase Sync — Ver2.0.7
  * Google 認証後に LocalStorage / Firestore を同期
  */
 
@@ -133,7 +133,12 @@ function hubRunCloudSave(force) {
     return Promise.resolve(false);
   }
   hubCloudSaveInFlight = true;
-  return hubPushCloudDoc(force).catch(function () {
+  return hubFetchCloudDoc().then(function (cloudDoc) {
+    if (cloudDoc && typeof hubEnrichLocalOrcaFromCloud === 'function') {
+      hubEnrichLocalOrcaFromCloud(cloudDoc);
+    }
+    return hubPushCloudDoc(force);
+  }).catch(function () {
     hubSetSyncStatus('offline');
     return false;
   }).finally(function () {
@@ -161,12 +166,37 @@ function hubScheduleCloudSave(immediate) {
   }, hubCloudSaveDelayMs);
 }
 
+function hubEnrichLocalOrcaFromCloud(cloudDoc) {
+  if (!cloudDoc || typeof hubMergeOrcaOrgCharts !== 'function') return false;
+  if (typeof orcaPackOrgChart !== 'function' || typeof orcaApplyOrgChart !== 'function') return false;
+  if (typeof hubOrcaOrgChartScore !== 'function') return false;
+  let cloudUnpacked = hubUnpackFirestorePayload(cloudDoc);
+  let localOrca = orcaPackOrgChart();
+  let merged = hubMergeOrcaOrgCharts(
+    cloudUnpacked.orcaOrgChart,
+    localOrca,
+    typeof settings !== 'undefined' ? settings : cloudUnpacked.settings
+  );
+  let before = hubOrcaOrgChartScore(localOrca);
+  let after = hubOrcaOrgChartScore(merged);
+  if (after.withParent <= before.withParent && after.members <= before.members) return false;
+  orcaApplyOrgChart(merged);
+  if (typeof orcaSyncAllPersonalSales === 'function') orcaSyncAllPersonalSales();
+  if (typeof hubSaveToStorage === 'function') hubSaveToStorage({ localOnly: true });
+  if (typeof orcaRender === 'function') orcaRender();
+  return true;
+}
+
 function hubApplyCloudDataIfNewer(cloudDoc, localUpdatedAt) {
   if (!cloudDoc) return false;
   let unpacked = hubUnpackFirestorePayload(cloudDoc);
   let cloudUpdatedAt = unpacked.updatedAt || 0;
   let localTs = typeof localUpdatedAt === 'number' ? localUpdatedAt : 0;
+  let localOrca = typeof orcaPackOrgChart === 'function' ? orcaPackOrgChart() : null;
   if (cloudUpdatedAt > localTs) {
+    unpacked.orcaOrgChart = typeof hubMergeOrcaOrgCharts === 'function'
+      ? hubMergeOrcaOrgCharts(unpacked.orcaOrgChart, localOrca, unpacked.settings)
+      : unpacked.orcaOrgChart;
     hubApplyData(unpacked);
     if (typeof pmEnsureProjectMaster === 'function') pmEnsureProjectMaster();
     if (typeof pmEnsureFxSettings === 'function') pmEnsureFxSettings();
@@ -196,6 +226,9 @@ function hubSyncHubData() {
   let localUpdatedAt = (local.data && local.data.updatedAt) || 0;
 
   return hubFetchCloudDoc().then(function (cloudDoc) {
+    if (cloudDoc) hubEnrichLocalOrcaFromCloud(cloudDoc);
+    local = hubLoadFromStorage();
+    localUpdatedAt = (local.data && local.data.updatedAt) || 0;
     let result = hubApplyCloudDataIfNewer(cloudDoc, localUpdatedAt);
     if (result === 'push') {
       return hubRunCloudSave(true);
@@ -231,6 +264,8 @@ if (typeof window !== 'undefined') {
     hubSaveToStorage({ immediate: true });
   };
   window.hubSyncHubData = hubSyncHubData;
+  window.hubFetchCloudDoc = hubFetchCloudDoc;
+  window.hubEnrichLocalOrcaFromCloud = hubEnrichLocalOrcaFromCloud;
   window.hubDeleteCloudData = hubDeleteCloudData;
   window.hubSetSyncStatus = hubSetSyncStatus;
   window.hubInitFirebaseServices = hubInitFirebaseServices;

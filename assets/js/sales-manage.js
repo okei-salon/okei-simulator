@@ -421,7 +421,12 @@ function smGetAccountDaySalesFromLog(accountId, projectKey, y, m, d) {
   if (smIsFutureSalesDay(y, m, d)) return null;
   if (!smDayHasSalesEntry(y, m, d)) return null;
   let entry = smGetPerformanceEntry(y, m, d);
-  if (!entry || !entry.accounts || !entry.accounts[accountId]) return null;
+  if (!entry || !entry.accounts) return null;
+  if (projectKey === 'ram' && typeof pdFindRamSalesAccountEntry === 'function') {
+    let found = pdFindRamSalesAccountEntry(entry, accountId);
+    if (found && found.ae.todaySales != null) return Number(found.ae.todaySales) || 0;
+  }
+  if (!entry.accounts[accountId]) return null;
   let ae = entry.accounts[accountId];
   if (ae.projectKey && ae.projectKey !== projectKey) return null;
   if (ae.todaySales != null) return Number(ae.todaySales) || 0;

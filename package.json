@@ -7,7 +7,11 @@
     "serve": "npm run dev",
     "deploy": "firebase deploy",
     "deploy:hosting": "firebase deploy --only hosting",
-    "deploy:rules": "firebase deploy --only firestore:rules"
+    "deploy:rules": "firebase deploy --only firestore:rules",
+    "validate:hub": "python3 tools/hub_validate_unified.py merge-output/OUKEI_HUB_KAI2_UNIFIED_v2_20260711.hub",
+    "fetch:orca-firestore": "python3 scripts/fetch-orca-from-firestore.py",
+    "embed:orca-hub": "python3 tools/hub_embed_orca_org.py",
+    "verify:hub-restore": "node scripts/verify-restore-hub.mjs"
   },
   "devDependencies": {
     "firebase-tools": "^13.29.1"

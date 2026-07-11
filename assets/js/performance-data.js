@@ -947,6 +947,59 @@ function pdImportOrcaRevenueRecords(records) {
   return { imported: imported, dates: Object.keys(byDate).length };
 }
 
+var PD_KAI2_EXCEL_KEY = 'kai2';
+
+function pdNormalizeRamUsername(value) {
+  let s = String(value || '').replace(/^@/, '').trim();
+  if (s.normalize) s = s.normalize('NFKC');
+  return s.toLowerCase();
+}
+
+function pdIsKai2RamAccount(accountId) {
+  if (!accountId) return false;
+  if (pdNormalizeRamUsername(accountId) === PD_KAI2_EXCEL_KEY) return true;
+  if (typeof members === 'undefined') return false;
+  let m = members.find(function (x) { return x.id === accountId; });
+  if (!m) return false;
+  let tokens = [pdNormalizeRamUsername(m.username), pdNormalizeRamUsername(m.name)];
+  return tokens.some(function (t) {
+    return t === 'kai2' || t === '甲斐2';
+  });
+}
+
+function pdGetKai2ReadOnlyLookupIds(accountId) {
+  let ids = [accountId];
+  if (accountId !== PD_KAI2_EXCEL_KEY && pdIsKai2RamAccount(accountId)) {
+    ids.push(PD_KAI2_EXCEL_KEY);
+  }
+  return ids;
+}
+
+function pdFindRamAccountEntry(entry, accountId) {
+  if (!entry || !entry.ramAccounts || !accountId) return null;
+  let lookupIds = pdGetKai2ReadOnlyLookupIds(accountId);
+  for (let i = 0; i < lookupIds.length; i++) {
+    let ae = entry.ramAccounts[lookupIds[i]];
+    if (ae && ae.todayRevenue != null && ae.todayRevenue !== '') {
+      return { ae: ae, storageId: lookupIds[i] };
+    }
+  }
+  return null;
+}
+
+function pdFindRamSalesAccountEntry(entry, accountId) {
+  if (!entry || !entry.accounts || !accountId) return null;
+  let lookupIds = pdGetKai2ReadOnlyLookupIds(accountId);
+  for (let i = 0; i < lookupIds.length; i++) {
+    let ae = entry.accounts[lookupIds[i]];
+    if (!ae || (ae.projectKey && ae.projectKey !== 'ram')) continue;
+    if (ae.todaySales != null || (ae.totalSales != null && ae.totalSales !== '')) {
+      return { ae: ae, storageId: lookupIds[i] };
+    }
+  }
+  return null;
+}
+
 function pdResolveRamAccountIdByExcelKey(excelKey, usedIds) {
   if (!excelKey) return null;
   let key = String(excelKey).trim();
@@ -2003,6 +2056,10 @@ if (typeof window !== 'undefined') {
   window.pdClearRamExcelImportMonth = pdClearRamExcelImportMonth;
   window.pdImportOrcaRevenueRecords = pdImportOrcaRevenueRecords;
   window.pdResolveRamAccountIdByExcelKey = pdResolveRamAccountIdByExcelKey;
+  window.pdIsKai2RamAccount = pdIsKai2RamAccount;
+  window.pdGetKai2ReadOnlyLookupIds = pdGetKai2ReadOnlyLookupIds;
+  window.pdFindRamAccountEntry = pdFindRamAccountEntry;
+  window.pdFindRamSalesAccountEntry = pdFindRamSalesAccountEntry;
   window.pdSumProjectDayRevenue = pdSumProjectDayRevenue;
   window.pdProjectDayHasRevenue = pdProjectDayHasRevenue;
   window.pdIsExcelMonthImported = pdIsExcelMonthImported;

@@ -261,7 +261,10 @@ function getTodayRamRevenueEntry() {
 
 function getRamAccountEntry(entry, accountId) {
   if (!entry || !entry.ramAccounts) return null;
-  let acc = entry.ramAccounts[accountId];
+  let found = typeof pdFindRamAccountEntry === 'function'
+    ? pdFindRamAccountEntry(entry, accountId)
+    : null;
+  let acc = found ? found.ae : entry.ramAccounts[accountId];
   if (!acc) return null;
   let todayRevenue = normalizeRamRevenueNumber(acc.todayRevenue);
   if (todayRevenue === null) return null;
@@ -306,6 +309,10 @@ function getTodayRamSalesEntry() {
 
 function getRamAccountSalesEntry(entry, accountId) {
   if (!entry || !entry.accounts) return null;
+  if (typeof pdFindRamSalesAccountEntry === 'function') {
+    let found = pdFindRamSalesAccountEntry(entry, accountId);
+    if (found) return found.ae;
+  }
   return entry.accounts[accountId] || null;
 }
 

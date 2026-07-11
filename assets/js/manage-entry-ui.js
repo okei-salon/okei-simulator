@@ -359,9 +359,11 @@ function pfHasManageRevenueEntryData(projectKey, accountId) {
   return Object.keys(settings.revenueLog).some(function (key) {
     let entry = settings.revenueLog[key];
     if (!entry) return false;
-    if (projectKey === 'ram' && entry.ramAccounts && entry.ramAccounts[accountId]) {
-      let rev = entry.ramAccounts[accountId].todayRevenue;
-      return rev !== null && rev !== undefined && rev !== '';
+    if (projectKey === 'ram' && entry.ramAccounts) {
+      let found = typeof pdFindRamAccountEntry === 'function'
+        ? pdFindRamAccountEntry(entry, accountId)
+        : null;
+      if (found) return true;
     }
     if (projectKey === 'orca' && entry.orcaAccounts && entry.orcaAccounts[accountId]) {
       let ae = entry.orcaAccounts[accountId];
@@ -384,7 +386,12 @@ function pfHasManageSalesEntryData(projectKey, accountId) {
   if (typeof settings === 'undefined' || !settings.salesLog) return false;
   return Object.keys(settings.salesLog).some(function (key) {
     let entry = settings.salesLog[key];
-    if (!entry || !entry.accounts || !entry.accounts[accountId]) return false;
+    if (!entry || !entry.accounts) return false;
+    if (projectKey === 'ram' && typeof pdFindRamSalesAccountEntry === 'function') {
+      let found = pdFindRamSalesAccountEntry(entry, accountId);
+      if (found) return found.ae.todaySales != null;
+    }
+    if (!entry.accounts[accountId]) return false;
     let ae = entry.accounts[accountId];
     if (ae.projectKey && ae.projectKey !== projectKey) return false;
     return ae.todaySales != null;
