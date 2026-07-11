@@ -395,6 +395,270 @@
 .pfProjectCard--orca { border-color: rgba(6, 182, 212, .32); }
 .pfProjectCard--cary { border-color: rgba(168, 85, 247, .32); }
 
+.pfProjectCard.isClickable {
+  cursor: pointer;
+  transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease;
+}
+
+.pfProjectCard.isClickable:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 20px 44px rgba(0, 0, 0, .34);
+}
+
+.pfProjectCard.isClickable:focus-visible {
+  outline: 2px solid rgba(147, 197, 253, .75);
+  outline-offset: 2px;
+}
+
+.pfProjectCard--ram.isClickable:hover { border-color: rgba(249, 115, 22, .55); }
+.pfProjectCard--orca.isClickable:hover { border-color: rgba(6, 182, 212, .52); }
+
+.pfProjectMetrics--detail {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.pfProjectCardHint {
+  margin-top: 10px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #7f97b3;
+  text-align: center;
+}
+
+.pfProfitDetail {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.pfProfitDetailIntro {
+  margin: 0 0 12px;
+  font-size: 12px;
+  color: #9fb3b3;
+  line-height: 1.55;
+}
+
+.pfProfitDetailSection--forecast .pfProfitDetailSectionTitle {
+  color: #f8fafc;
+}
+
+.pfProfitDetailRow--emph .pfProfitDetailLabel {
+  font-size: 14px;
+}
+
+.pfProfitDetailVal--emph {
+  font-size: 18px !important;
+}
+
+.pfProfitDetail--ram .pfProfitDetailVal--emph { color: #fdba74; }
+.pfProfitDetail--orca .pfProfitDetailVal--emph { color: #67e8f9; }
+
+.pfProfitPieChartWrap {
+  display: flex;
+  justify-content: center;
+}
+
+.pfProfitPieHole {
+  position: absolute;
+  inset: 24%;
+  border-radius: 50%;
+  background: #0d1b30;
+  border: 1px solid rgba(53, 83, 117, .5);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  padding: 2px 4px;
+  text-align: center;
+  overflow: hidden;
+}
+
+.pfProfitPieCenterMain {
+  font-size: 9px;
+  font-weight: 900;
+  color: #ffffff;
+  line-height: 1.15;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.pfProfitPieCenterSub {
+  font-size: 8px;
+  font-weight: 800;
+  color: #cbd5e1;
+  line-height: 1.15;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.pfProfitPieLegendItem {
+  display: grid;
+  grid-template-columns: 12px 1fr auto;
+  gap: 8px 10px;
+  align-items: start;
+  font-size: 12px;
+}
+
+.pfProfitPieLegendValues {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  min-width: 72px;
+}
+
+.pfProfitPieLegendAmt {
+  color: #ffffff;
+  font-weight: 900;
+  white-space: nowrap;
+  line-height: 1.25;
+}
+
+.pfProfitPieLegendPct {
+  color: #ffffff;
+  font-weight: 900;
+  white-space: nowrap;
+  line-height: 1.25;
+}
+
+.pfHundredReturnRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  font-size: 12px;
+  color: #7f97b3;
+  white-space: nowrap;
+}
+
+.pfHundredReturnDone {
+  font-size: 12px;
+  font-weight: 900;
+  color: #86efac;
+}
+
+.pfHundredReturnUnknown {
+  font-size: 12px;
+  font-weight: 900;
+  color: #cbd5e1;
+}
+
+.pfHundredReturnInline {
+  font-size: 12px;
+  font-weight: 900;
+  color: #dbeafe;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pfProfitDetailSection {
+  padding: 4px 0;
+}
+
+.pfProfitDetailSectionTitle {
+  font-size: 12px;
+  font-weight: 900;
+  color: #cbd5e1;
+  margin-bottom: 8px;
+  letter-spacing: .02em;
+}
+
+.pfProfitDetail--ram .pfProfitDetailSectionTitle { color: #fdba74; }
+.pfProfitDetail--orca .pfProfitDetailSectionTitle { color: #67e8f9; }
+
+.pfProfitDetailRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px 12px;
+  padding: 7px 0;
+  border-bottom: 1px solid rgba(42, 66, 100, .45);
+}
+
+.pfProfitDetailRow:last-child { border-bottom: none; }
+
+.pfProfitDetailLabel {
+  font-size: 13px;
+  color: #9fb3cc;
+  font-weight: 700;
+}
+
+.pfProfitDetailSub {
+  font-size: 11px;
+  color: #7f97b3;
+  margin-left: 4px;
+}
+
+.pfProfitDetailVal {
+  font-size: 15px;
+  font-weight: 900;
+  color: #f8fafc;
+  margin-left: auto;
+}
+
+.pfProfitDetailDivider {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(70, 100, 140, .55), transparent);
+  margin: 10px 0;
+}
+
+.pfProfitDetailSection--chart {
+  margin-top: 8px;
+}
+
+.pfProfitPieBlock {
+  display: grid;
+  grid-template-columns: minmax(120px, 150px) 1fr;
+  gap: 14px;
+  align-items: center;
+}
+
+.pfProfitPieBlock--ram .pfProfitPieHole { border-color: #0d1b30; }
+.pfProfitPieBlock--orca .pfProfitPieHole { border-color: #0d1b30; }
+
+.pfProfitPieChart {
+  width: 132px;
+  height: 132px;
+  border-radius: 50%;
+  position: relative;
+  margin: 0 auto;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .06);
+}
+
+.pfProfitPieLegend {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.pfProfitPieSwatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.pfProfitPieLegendLabel {
+  color: #cbd5e1;
+  font-weight: 700;
+  min-width: 0;
+}
+
+.pfProfitPieEmpty {
+  padding: 28px 16px;
+  text-align: center;
+  color: #7f97b3;
+  font-size: 13px;
+  font-weight: 700;
+  border: 1px dashed rgba(70, 100, 140, .45);
+  border-radius: 12px;
+  background: rgba(8, 20, 38, .55);
+}
+
 .pfProjectCardTop {
   display: flex;
   align-items: flex-start;
@@ -1017,6 +1281,19 @@
 
   .pfLegendBar {
     display: none;
+  }
+
+  .pfProjectMetrics--detail {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .pfProfitPieBlock {
+    grid-template-columns: 1fr;
+    justify-items: center;
+  }
+
+  .pfProfitPieLegend {
+    width: 100%;
   }
 }
 

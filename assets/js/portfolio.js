@@ -59,8 +59,29 @@ var pfOperatingFormMode = 'project';
 var pfProfitEditId = null;
 var pfProfitFormAllocation = 'flat';
 
+function pfRecoveryScaleMax(rate) {
+  let r = Math.max(0, Number(rate) || 0);
+  if (r < 100) return 100;
+  return (Math.floor(r / 100) + 1) * 100;
+}
+
 function pfRecoveryFillPct(rate) {
-  return Math.max(0, Math.min(100, (rate / 200) * 100));
+  let r = Math.max(0, Number(rate) || 0);
+  let max = pfRecoveryScaleMax(r);
+  return Math.max(0, Math.min(100, (r / max) * 100));
+}
+
+function pfRecoveryMarkLeft(rate) {
+  let max = pfRecoveryScaleMax(rate);
+  if (max <= 100) return null;
+  return (100 / max) * 100;
+}
+
+function pfRecoveryScaleHtml(rate) {
+  let max = pfRecoveryScaleMax(rate);
+  let labels = [];
+  for (let i = 0; i <= max; i += 100) labels.push(i + '%');
+  return labels.map(function (l) { return '<span>' + l + '</span>'; }).join('');
 }
 
 function pfEscape(text) {
@@ -515,6 +536,21 @@ function pfGetEnabledProjectRows() {
     } else if (pfIsDemoMode() && mockMonth) {
       monthRev = Number(mockMonth[p.key]) || 0;
     }
+    let monthProfitUsd = monthRev;
+    let monthYield = pfFormatPredictedMonthlyYield(monthRev, operatingUsd, viewMonth.y, viewMonth.m);
+    if (p.key === 'ram') {
+      let ramAgg = pfGetRamAggregateTotals();
+      if (ramAgg) {
+        monthProfitUsd = Number(ramAgg.total) || 0;
+        monthYield = pfFormatYieldFromAmount(monthProfitUsd, operatingUsd);
+      }
+    } else if (p.key === 'orca') {
+      let orcaAgg = pfGetOrcaAggregateTotals();
+      if (orcaAgg) {
+        monthProfitUsd = Number(orcaAgg.total) || 0;
+        monthYield = pfFormatYieldFromAmount(monthProfitUsd, operatingUsd);
+      }
+    }
     let recovery = operatingUsd > 0
       ? Math.round((profitUsd / operatingUsd) * 1000) / 10
       : (pfIsDemoMode() ? mock.recovery : 0);
@@ -526,7 +562,8 @@ function pfGetEnabledProjectRows() {
       operating: pfDisplayUsd(operatingUsd, operatingUsd > 0),
       profit: pfDisplayUsd(profitUsd, profitUsd > 0 || hasRevenueLog),
       profitUsd: profitUsd,
-      monthYield: pfFormatPredictedMonthlyYield(monthRev, operatingUsd, viewMonth.y, viewMonth.m),
+      monthProfitUsd: monthProfitUsd,
+      monthYield: monthYield,
       recovery: recovery,
       recoveryDisplay: pfDisplayPct(recovery, operatingUsd > 0 && profitUsd > 0),
       fill: pfRecoveryFillPct(recovery),
@@ -718,34 +755,291 @@ function pfRenderSummaryCards() {
     '<div class="pfGoalRemain">あと ' + pfFormatYen(goal.remain) + '</div></article>';
 }
 
+function pfFormatYieldFromAmount(monthlyAmount, operatingUsd) {
+  if (!operatingUsd || operatingUsd <= 0) return '--';
+  let pct = Math.round(((Number(monthlyAmount) || 0) / operatingUsd) * 1000) / 10;
+  return pct + '%';
+}
+
+function pfCalcYieldPctValue(amount, operatingUsd) {
+  if (!operatingUsd || operatingUsd <= 0) return null;
+  return ((Number(amount) || 0) / operatingUsd) * 100;
+}
+
+function pfFormatYieldDisplay(pctValue, hasOperating) {
+  if (!hasOperating) return pfEmptyMark();
+  if (pctValue == null || isNaN(pctValue)) return '0%';
+  return (Math.round(pctValue * 10) / 10) + '%';
+}
+
+function pfFormatMonthlyUsd(amount) {
+  return pfMoneyUsd(amount) + '/月';
+}
+
+function pfFormatMonthlyUsdRounded(amount) {
+  return pfMoneyUsd(Math.round(Number(amount) || 0)) + '/月';
+}
+
+function pfGetRamAggregateTotals() {
+  if (typeof aggregateTotals !== 'function') return null;
+  return aggregateTotals();
+}
+
+function pfGetOrcaAggregateTotals() {
+  if (typeof orcaAggregateTotals !== 'function') return null;
+  return orcaAggregateTotals();
+}
+
+function pfGetProjectProfitBreakdown(projectKey, operatingUsd) {
+  operatingUsd = Number(operatingUsd) || 0;
+  let hasOperating = operatingUsd > 0;
+
+  if (projectKey === 'ram') {
+    let agg = pfGetRamAggregateTotals();
+    if (!agg) return null;
+    let personal = Math.max(0, Number(agg.personal) || 0);
+    let direct = Math.max(0, Number(agg.direct) || 0);
+    let second = Math.max(0, Number(agg.second) || 0);
+    let title = Math.max(0, Number(agg.title) || 0);
+    let referral = direct + second;
+    let predicted = Math.max(0, Number(agg.total) || 0);
+    let org = Math.max(0, predicted - personal);
+    let chartSegments = [
+      { key: 'personal', label: '個人運用利益', amount: personal, color: '#fdba74' },
+      { key: 'referral', label: '紹介報酬', amount: referral, color: '#fb923c' },
+      { key: 'title', label: 'タイトル報酬', amount: title, color: '#f97316' }
+    ];
+    return {
+      projectKey: 'ram',
+      theme: 'ram',
+      operatingUsd: operatingUsd,
+      hasOperating: hasOperating,
+      personal: personal,
+      personalYield: pfCalcYieldPctValue(personal, operatingUsd),
+      org: org,
+      orgYield: pfCalcYieldPctValue(org, operatingUsd),
+      predicted: predicted,
+      predictedYield: pfCalcYieldPctValue(predicted, operatingUsd),
+      chartSegments: chartSegments
+    };
+  }
+
+  if (projectKey === 'orca') {
+    let agg = pfGetOrcaAggregateTotals();
+    if (!agg) return null;
+    let ai = Math.max(0, Number(agg.personal) || 0);
+    let affiliate = Math.max(0, Number(agg.ranking) || 0);
+    let predicted = Math.max(0, Number(agg.total) || 0);
+    return {
+      projectKey: 'orca',
+      theme: 'orca',
+      operatingUsd: operatingUsd,
+      hasOperating: hasOperating,
+      ai: ai,
+      aiYield: pfCalcYieldPctValue(ai, operatingUsd),
+      affiliate: affiliate,
+      affiliateYield: pfCalcYieldPctValue(affiliate, operatingUsd),
+      predicted: predicted,
+      predictedYield: pfCalcYieldPctValue(predicted, operatingUsd),
+      chartSegments: [
+        { key: 'ai', label: 'AI利益', amount: ai, color: '#67e8f9' },
+        { key: 'affiliate', label: 'アフィリエイト利益', amount: affiliate, color: '#06b6d4' }
+      ]
+    };
+  }
+
+  return null;
+}
+
+function pfRenderProfitPieChart(segments, theme, predicted, predictedYield, hasOperating) {
+  let positive = (segments || []).filter(function (s) { return (Number(s.amount) || 0) > 0; });
+  let total = positive.reduce(function (sum, s) { return sum + (Number(s.amount) || 0); }, 0);
+  if (total <= 0) {
+    return '<div class="pfProfitPieEmpty">利益データがありません</div>';
+  }
+  let start = 0;
+  let stops = positive.map(function (s) {
+    let pct = ((Number(s.amount) || 0) / total) * 100;
+    let end = start + pct;
+    let stop = s.color + ' ' + start + '% ' + end + '%';
+    start = end;
+    return stop;
+  });
+  let legend = positive.map(function (s) {
+    let amt = Number(s.amount) || 0;
+    let share = Math.round((amt / total) * 1000) / 10;
+    return '<div class="pfProfitPieLegendItem">' +
+      '<i class="pfProfitPieSwatch" style="background:' + s.color + '"></i>' +
+      '<span class="pfProfitPieLegendLabel">' + pfEscape(s.label) + '</span>' +
+      '<div class="pfProfitPieLegendValues">' +
+      '<span class="pfProfitPieLegendAmt">' + pfFormatMonthlyUsd(amt) + '</span>' +
+      '<span class="pfProfitPieLegendPct">' + share + '%</span>' +
+      '</div></div>';
+  }).join('');
+  return '<div class="pfProfitPieBlock pfProfitPieBlock--' + theme + '">' +
+    '<div class="pfProfitPieChartWrap">' +
+    '<div class="pfProfitPieChart" style="background:conic-gradient(' + stops.join(', ') + ')" aria-hidden="true">' +
+    '<div class="pfProfitPieHole">' +
+    '<span class="pfProfitPieCenterMain">' + pfFormatMonthlyUsdRounded(predicted) + '</span>' +
+    '<span class="pfProfitPieCenterSub">' + pfFormatYieldDisplay(predictedYield, hasOperating) + '</span>' +
+    '</div></div></div>' +
+    '<div class="pfProfitPieLegend">' + legend + '</div></div>';
+}
+
+function pfRenderForecastSection(breakdown) {
+  return '<section class="pfProfitDetailSection pfProfitDetailSection--forecast">' +
+    '<div class="pfProfitDetailSectionTitle">予測</div>' +
+    '<div class="pfProfitDetailRow pfProfitDetailRow--emph"><span class="pfProfitDetailLabel">予測月利益</span>' +
+    '<b class="pfProfitDetailVal pfProfitDetailVal--emph">' + pfFormatMonthlyUsd(breakdown.predicted) + '</b></div>' +
+    '<div class="pfProfitDetailRow pfProfitDetailRow--emph"><span class="pfProfitDetailLabel">予測月利</span>' +
+    '<b class="pfProfitDetailVal pfProfitDetailVal--emph">' + pfFormatYieldDisplay(breakdown.predictedYield, breakdown.hasOperating) + '</b></div>' +
+    '</section>';
+}
+
+function pfRenderProjectProfitDetailBody(breakdown) {
+  if (!breakdown) {
+    return '<div class="explain">集計データを取得できませんでした。</div>';
+  }
+  let divider = '<div class="pfProfitDetailDivider"></div>';
+  let pie = '<section class="pfProfitDetailSection pfProfitDetailSection--chart">' +
+    '<div class="pfProfitDetailSectionTitle">予測月利益の内訳</div>' +
+    pfRenderProfitPieChart(
+      breakdown.chartSegments,
+      breakdown.theme,
+      breakdown.predicted,
+      breakdown.predictedYield,
+      breakdown.hasOperating
+    ) +
+    '</section>';
+
+  if (breakdown.projectKey === 'ram') {
+    return '<div class="pfProfitDetail pfProfitDetail--ram">' +
+      '<section class="pfProfitDetailSection">' +
+      '<div class="pfProfitDetailSectionTitle">個人運用</div>' +
+      '<div class="pfProfitDetailRow"><span class="pfProfitDetailLabel">個人運用利益</span>' +
+      '<b class="pfProfitDetailVal">' + pfFormatMonthlyUsd(breakdown.personal) + '</b></div>' +
+      '<div class="pfProfitDetailRow"><span class="pfProfitDetailLabel">個人運用月利</span>' +
+      '<b class="pfProfitDetailVal">' + pfFormatYieldDisplay(breakdown.personalYield, breakdown.hasOperating) + '</b></div>' +
+      '</section>' + divider +
+      '<section class="pfProfitDetailSection">' +
+      '<div class="pfProfitDetailSectionTitle">組織</div>' +
+      '<div class="pfProfitDetailRow"><span class="pfProfitDetailLabel">組織利益</span>' +
+      '<span class="pfProfitDetailSub">（紹介・タイトル報酬）</span>' +
+      '<b class="pfProfitDetailVal">' + pfFormatMonthlyUsd(breakdown.org) + '</b></div>' +
+      '<div class="pfProfitDetailRow"><span class="pfProfitDetailLabel">組織月利</span>' +
+      '<b class="pfProfitDetailVal">' + pfFormatYieldDisplay(breakdown.orgYield, breakdown.hasOperating) + '</b></div>' +
+      '</section>' + divider +
+      pfRenderForecastSection(breakdown) + pie + '</div>';
+  }
+
+  return '<div class="pfProfitDetail pfProfitDetail--orca">' +
+    '<section class="pfProfitDetailSection">' +
+    '<div class="pfProfitDetailSectionTitle">AI運用</div>' +
+    '<div class="pfProfitDetailRow"><span class="pfProfitDetailLabel">AI利益</span>' +
+    '<b class="pfProfitDetailVal">' + pfFormatMonthlyUsd(breakdown.ai) + '</b></div>' +
+    '<div class="pfProfitDetailRow"><span class="pfProfitDetailLabel">AI運用月利</span>' +
+    '<b class="pfProfitDetailVal">' + pfFormatYieldDisplay(breakdown.aiYield, breakdown.hasOperating) + '</b></div>' +
+    '</section>' + divider +
+    '<section class="pfProfitDetailSection">' +
+    '<div class="pfProfitDetailSectionTitle">アフィリエイト</div>' +
+    '<div class="pfProfitDetailRow"><span class="pfProfitDetailLabel">アフィリエイト利益</span>' +
+    '<b class="pfProfitDetailVal">' + pfFormatMonthlyUsd(breakdown.affiliate) + '</b></div>' +
+    '<div class="pfProfitDetailRow"><span class="pfProfitDetailLabel">アフィリエイト月利</span>' +
+    '<b class="pfProfitDetailVal">' + pfFormatYieldDisplay(breakdown.affiliateYield, breakdown.hasOperating) + '</b></div>' +
+    '</section>' + divider +
+    pfRenderForecastSection(breakdown) + pie + '</div>';
+}
+
+function pfRenderHundredPctReturnHtml(row) {
+  let operating = Number(row.operatingUsd) || 0;
+  let cumulativeProfit = Number(row.profitUsd) || 0;
+  let recovery = Number(row.recovery) || 0;
+  let monthProfit = Number(row.monthProfitUsd) || 0;
+  let achieved = recovery >= 100 || (operating > 0 && cumulativeProfit >= operating);
+  if (achieved) {
+    return '<div class="pfHundredReturnRow">' +
+      '<span>100%利回りまで</span>' +
+      '<b class="pfHundredReturnDone">達成済み ✅</b></div>';
+  }
+  if (monthProfit <= 0) {
+    return '<div class="pfHundredReturnRow">' +
+      '<span>100%利回りまで</span>' +
+      '<b class="pfHundredReturnUnknown">計算できません</b></div>';
+  }
+  let remaining = Math.max(0, operating - cumulativeProfit);
+  let dailyProfit = monthProfit / 30;
+  let daysLeft = Math.max(1, Math.ceil(remaining / dailyProfit));
+  let target = new Date();
+  target.setDate(target.getDate() + daysLeft);
+  let dateStr = target.getFullYear() + '/' +
+    String(target.getMonth() + 1).padStart(2, '0') + '/' +
+    String(target.getDate()).padStart(2, '0');
+  return '<div class="pfHundredReturnRow">' +
+    '<span>100%利回りまで</span>' +
+    '<b class="pfHundredReturnInline">あと' + daysLeft + '日（' + dateStr + '予定）</b></div>';
+}
+
+function pfOpenProjectProfitDetail(projectKey) {
+  if (projectKey !== 'ram' && projectKey !== 'orca') return;
+  if (typeof modalTitle === 'undefined' || typeof modalContent === 'undefined' || typeof modalBg === 'undefined') return;
+  let rows = pfGetEnabledProjectRows();
+  let row = rows.find(function (r) { return r.key === projectKey; });
+  let operatingUsd = row ? row.operatingUsd : pfGetLiveOperatingUsd(projectKey);
+  let breakdown = pfGetProjectProfitBreakdown(projectKey, operatingUsd);
+  let projectName = row ? row.name : (projectKey === 'ram' ? 'RAM' : 'ORCA');
+  modalTitle.textContent = projectName + ' — 利益構成・月利詳細';
+  modalContent.innerHTML = pfRenderProjectProfitDetailBody(breakdown);
+  modalBg.style.display = 'flex';
+}
+
 var PF_MOCK_SUMMARY_DATA = {
   monthly: { value: '$12,840', sub: '(¥1,999,200)', trend: '+8.2%' }
 };
 
 function pfRenderProjectCard(row) {
+  let isDetailCard = row.key === 'ram' || row.key === 'orca';
+  let cardClass = 'pfProjectCard pfProjectCard--' + row.key + (isDetailCard ? ' isClickable' : '');
+  let cardAttrs = 'class="' + cardClass + '"';
+  if (isDetailCard) {
+    cardAttrs += ' role="button" tabindex="0" onclick="pfOpenProjectProfitDetail(\'' + row.key + '\')" ' +
+      'onkeydown="if(event.key===\'Enter\'||event.key===\' \'){pfOpenProjectProfitDetail(\'' + row.key + '\');event.preventDefault()}"';
+  }
   let icon = typeof pjRenderProjectIcon === 'function'
     ? pjRenderProjectIcon(row.key, 'pfProjectCardIcon')
     : (typeof renderHomeProjIcon === 'function'
       ? renderHomeProjIcon(row.key, 'pfProjectCardIcon')
       : '<span class="pfProjectCardIcon"></span>');
-  return '<article class="pfProjectCard pfProjectCard--' + row.key + '">' +
+  let monthProfitMetric = '';
+  if (isDetailCard) {
+    monthProfitMetric = '<div class="pfProjectMetric"><span class="pfProjectMetricLabel">予測月利益</span><span class="pfProjectMetricVal isProfit">' +
+      pfFormatMonthlyUsd(row.monthProfitUsd || 0) + '</span></div>';
+  }
+  let recoveryMarkLeft = pfRecoveryMarkLeft(row.recovery);
+  return '<article ' + cardAttrs + '>' +
     '<div class="pfProjectCardGlow"></div>' +
     '<div class="pfProjectCardTop">' +
     '<div class="pfProjectCardBrand">' + icon +
     '<div><h3 class="pfProjectCardName">' + pfEscape(row.name) + '</h3>' +
     '<p class="pfProjectStart">開始日 ' + pfEscape(row.start) + '</p></div></div>' +
     '<span class="pfStatusBadge pfStatusBadge--' + row.statusCls + '">' + pfEscape(row.status) + '</span></div>' +
-    '<div class="pfProjectMetrics">' +
+    '<div class="pfProjectMetrics' + (isDetailCard ? ' pfProjectMetrics--detail' : '') + '">' +
     '<div class="pfProjectMetric"><span class="pfProjectMetricLabel">運用額</span><span class="pfProjectMetricVal">' + row.operating + '</span></div>' +
     '<div class="pfProjectMetric"><span class="pfProjectMetricLabel">累計利益</span><span class="pfProjectMetricVal isProfit">' + row.profit + '</span></div>' +
+    monthProfitMetric +
     '<div class="pfProjectMetric"><span class="pfProjectMetricLabel">予測月利</span><span class="pfProjectMetricVal isYield">' + pfEscape(row.monthYield || '--') + '</span></div>' +
-    '<div class="pfProjectMetric"><span class="pfProjectMetricLabel">達成率</span><span class="pfProjectMetricVal isRecovery">' + (row.recoveryDisplay || row.recovery + '%') + '</span></div>' +
+    '<div class="pfProjectMetric"><span class="pfProjectMetricLabel">累計利回り</span><span class="pfProjectMetricVal isRecovery">' + (row.recoveryDisplay || row.recovery + '%') + '</span></div>' +
     '</div>' +
     '<div class="pfRecoveryBlock">' +
-    '<div class="pfRecoveryLabel"><span>達成率</span><b>' + (row.recoveryDisplay || row.recovery + '%') + '</b></div>' +
-    '<div class="pfRecoveryTrack"><div class="pfRecoveryFill" style="width:' + row.fill + '%"></div><i class="pfRecoveryMark"></i></div>' +
-    '<div class="pfRecoveryScale"><span>0%</span><span>100%</span><span>200%</span></div></div>' +
-    '<div class="pfRecoveryDateRow"><span>回収予定日</span><b>' + pfEscape(row.recoveryDate) + '</b></div>' +
+    '<div class="pfRecoveryLabel"><span>累計利回り</span><b>' + (row.recoveryDisplay || row.recovery + '%') + '</b></div>' +
+    '<div class="pfRecoveryTrack"><div class="pfRecoveryFill" style="width:' + row.fill + '%"></div>' +
+    (recoveryMarkLeft != null
+      ? '<i class="pfRecoveryMark" style="left:' + recoveryMarkLeft + '%"></i>'
+      : '') +
+    '</div>' +
+    '<div class="pfRecoveryScale">' + pfRecoveryScaleHtml(row.recovery) + '</div></div>' +
+    (isDetailCard ? pfRenderHundredPctReturnHtml(row) :
+      '<div class="pfRecoveryDateRow"><span>回収予定日</span><b>' + pfEscape(row.recoveryDate) + '</b></div>') +
+    (isDetailCard ? '<div class="pfProjectCardHint">タップで利益構成・月利詳細</div>' : '') +
     '</article>';
 }
 
@@ -1639,3 +1933,5 @@ function renderPortfolio() {
   pfRenderAllocation();
   pfRenderStackedBars();
 }
+
+window.pfOpenProjectProfitDetail = pfOpenProjectProfitDetail;
