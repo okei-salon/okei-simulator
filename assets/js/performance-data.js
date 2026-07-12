@@ -2015,6 +2015,16 @@ function pdDeleteProjectData(projectKey) {
   ensurePerformanceLogs();
   let changed = false;
 
+  if (projectKey === 'orca' && typeof hubMarkExplicitOrcaDelete === 'function') {
+    let ids = [];
+    if (Array.isArray(settings.orcaInputAccounts)) {
+      settings.orcaInputAccounts.forEach(function (a) {
+        if (a && a.id) ids.push(a.id);
+      });
+    }
+    hubMarkExplicitOrcaDelete(ids);
+  }
+
   Object.keys(settings.revenueLog).forEach(function (dateKey) {
     let entry = settings.revenueLog[dateKey];
     if (!entry || !pdStripProjectFromRevenueEntry(entry, projectKey)) return;

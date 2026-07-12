@@ -376,10 +376,17 @@ function aimBuildEniMemberFromInput(acc, parentId) {
 
 function aimClearRemovedOrgAccountId(projectKey, accountId) {
   if (!accountId || typeof settings === 'undefined') return;
-  if (projectKey === 'orca' && Array.isArray(settings.removedOrcaOrgAccountIds)) {
-    settings.removedOrcaOrgAccountIds = settings.removedOrcaOrgAccountIds.filter(function (id) {
-      return id !== accountId;
-    });
+  if (projectKey === 'orca') {
+    if (typeof hubClearRemovedOrcaOrgAccountIds === 'function') {
+      hubClearRemovedOrcaOrgAccountIds(settings, [accountId]);
+    } else if (Array.isArray(settings.removedOrcaOrgAccountIds)) {
+      settings.removedOrcaOrgAccountIds = settings.removedOrcaOrgAccountIds.filter(function (id) {
+        return id !== accountId;
+      });
+      if (settings.removedOrcaOrgAccountIdTimes && settings.removedOrcaOrgAccountIdTimes[accountId]) {
+        delete settings.removedOrcaOrgAccountIdTimes[accountId];
+      }
+    }
   }
   if (projectKey === 'ram' && Array.isArray(settings.removedRamOrgAccountIds)) {
     settings.removedRamOrgAccountIds = settings.removedRamOrgAccountIds.filter(function (id) {
@@ -563,6 +570,9 @@ function aimDeleteInputAccountFully(projectKey, accountId) {
     aimRemoveOrgMembersOnly(projectKey, [accountId]);
   } else {
     aimRecordRemovedOrgAccountIds(projectKey, [accountId]);
+  }
+  if (projectKey === 'orca' && typeof hubMarkExplicitOrcaDelete === 'function') {
+    hubMarkExplicitOrcaDelete(subtree);
   }
   let removed = 0;
   subtree.forEach(function (id) {

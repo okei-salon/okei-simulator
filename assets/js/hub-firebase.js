@@ -106,25 +106,410 @@ function hubFetchCloudDoc() {
   });
 }
 
-function hubPushCloudDoc(force) {
+/** Session flag: real ORCA account/project delete may empty cloud ORCA. */
+var hubExplicitOrcaDeletePending = false;
+var hubExplicitOrcaDeleteIds = null;
+var hubExplicitOrcaDeleteAt = 0;
+
+function hubMarkExplicitOrcaDelete(ids) {
+  hubExplicitOrcaDeletePending = true;
+  hubExplicitOrcaDeleteAt = Date.now();
+  hubExplicitOrcaDeleteIds = Array.isArray(ids) ? ids.filter(Boolean) : [];
+}
+
+function hubClearExplicitOrcaDelete() {
+  hubExplicitOrcaDeletePending = false;
+  hubExplicitOrcaDeleteIds = null;
+  hubExplicitOrcaDeleteAt = 0;
+}
+
+function hubCloneJson(value) {
+  return value == null ? value : JSON.parse(JSON.stringify(value));
+}
+
+function hubCountOrcaInFirestorePayload(payload) {
+  let settings = (payload && payload.settings) || {};
+  let accounts = Array.isArray(settings.orcaInputAccounts) ? settings.orcaInputAccounts.length : 0;
+  let revenueDays = 0;
+  let salesDays = 0;
+  let investmentIds = 0;
+  let revenueLog = (payload && payload.revenue && payload.revenue.revenueLog) || {};
+  Object.keys(revenueLog).forEach(function (dk) {
+    let oa = revenueLog[dk] && revenueLog[dk].orcaAccounts;
+    if (oa && Object.keys(oa).length) revenueDays += 1;
+  });
+  let salesLog = (payload && payload.revenue && payload.revenue.salesLog) || {};
+  Object.keys(salesLog).forEach(function (dk) {
+    let acc = salesLog[dk] && salesLog[dk].accounts;
+    if (!acc) return;
+    let hit = Object.keys(acc).some(function (id) {
+      return acc[id] && acc[id].projectKey === 'orca';
+    });
+    if (hit) salesDays += 1;
+  });
+  let inv = settings.investmentHistory || {};
+  Object.keys(inv).forEach(function (id) {
+    let entry = inv[id];
+    if (entry && (entry.projectKey === 'orca' || String(id).indexOf('orca_') === 0)) {
+      investmentIds += 1;
+    }
+  });
+  return {
+    accounts: accounts,
+    revenueDays: revenueDays,
+    salesDays: salesDays,
+    investmentIds: investmentIds,
+    total: accounts + revenueDays + salesDays + investmentIds
+  };
+}
+
+function hubIsOrcaFirestorePayloadEmpty(counts) {
+  return !counts || (
+    counts.accounts === 0 &&
+    counts.revenueDays === 0 &&
+    counts.salesDays === 0 &&
+    counts.investmentIds === 0
+  );
+}
+
+function hubCloudHasLiveOrca(cloudDoc) {
+  return !hubIsOrcaFirestorePayloadEmpty(hubCountOrcaInFirestorePayload(cloudDoc || {}));
+}
+
+/**
+ * Allow emptying cloud ORCA only for explicit delete (session flag) or
+ * fresh per-id tombstone times newer than cloud.updatedAt for every cloud-live account.
+ */
+function hubAllowExplicitOrcaEmptyWipe(payload, cloudDoc) {
+  if (hubExplicitOrcaDeletePending) return true;
+  if (!cloudDoc) return true;
+  let cloudSettings = cloudDoc.settings || {};
+  let cloudAccounts = Array.isArray(cloudSettings.orcaInputAccounts) ? cloudSettings.orcaInputAccounts : [];
+  if (!cloudAccounts.length) {
+    return !hubCloudHasLiveOrca(cloudDoc);
+  }
+  let removed = (payload && payload.settings && payload.settings.removedOrcaOrgAccountIds) || [];
+  let times = (payload && payload.settings && payload.settings.removedOrcaOrgAccountIdTimes) || {};
+  let cloudUpdatedAt = Number(cloudDoc.updatedAt) || 0;
+  return cloudAccounts.every(function (acc) {
+    if (!acc || !acc.id) return true;
+    let t = Number(times[acc.id]) || 0;
+    return removed.indexOf(acc.id) >= 0 && t > cloudUpdatedAt;
+  });
+}
+
+function hubPreserveCloudOrcaIntoPayload(payload, cloudDoc) {
+  if (!payload || !cloudDoc) return payload;
+  let out = payload;
+  let cloudSettings = cloudDoc.settings || {};
+  out.settings = out.settings || {};
+  out.settings.orcaInputAccounts = hubCloneJson(cloudSettings.orcaInputAccounts || []);
+
+  let liveIds = {};
+  (out.settings.orcaInputAccounts || []).forEach(function (acc) {
+    if (acc && acc.id) liveIds[acc.id] = true;
+  });
+  if (Array.isArray(out.settings.removedOrcaOrgAccountIds)) {
+    out.settings.removedOrcaOrgAccountIds = out.settings.removedOrcaOrgAccountIds.filter(function (id) {
+      return !liveIds[id];
+    });
+  }
+  if (out.settings.removedOrcaOrgAccountIdTimes && typeof out.settings.removedOrcaOrgAccountIdTimes === 'object') {
+    Object.keys(liveIds).forEach(function (id) {
+      if (Object.prototype.hasOwnProperty.call(out.settings.removedOrcaOrgAccountIdTimes, id)) {
+        delete out.settings.removedOrcaOrgAccountIdTimes[id];
+      }
+    });
+  }
+
+  out.settings.investmentHistory = out.settings.investmentHistory || {};
+  let cloudInv = cloudSettings.investmentHistory || {};
+  Object.keys(cloudInv).forEach(function (id) {
+    let entry = cloudInv[id];
+    if (!entry) return;
+    if (entry.projectKey === 'orca' || String(id).indexOf('orca_') === 0) {
+      out.settings.investmentHistory[id] = hubCloneJson(entry);
+    }
+  });
+
+  out.revenue = out.revenue || { revenueLog: {}, salesLog: {} };
+  out.revenue.revenueLog = out.revenue.revenueLog || {};
+  out.revenue.salesLog = out.revenue.salesLog || {};
+  let cloudRev = (cloudDoc.revenue && cloudDoc.revenue.revenueLog) || {};
+  Object.keys(cloudRev).forEach(function (dk) {
+    let cEntry = cloudRev[dk];
+    if (!cEntry || !cEntry.orcaAccounts || !Object.keys(cEntry.orcaAccounts).length) return;
+    let pEntry = out.revenue.revenueLog[dk];
+    if (!pEntry || typeof pEntry !== 'object') {
+      pEntry = {};
+      out.revenue.revenueLog[dk] = pEntry;
+    }
+    pEntry.orcaAccounts = hubCloneJson(cEntry.orcaAccounts);
+    if (cEntry.orca != null) pEntry.orca = cEntry.orca;
+    pEntry.accounts = pEntry.accounts || {};
+    Object.keys(cEntry.accounts || {}).forEach(function (id) {
+      let ae = cEntry.accounts[id];
+      if (ae && ae.projectKey === 'orca') pEntry.accounts[id] = hubCloneJson(ae);
+    });
+  });
+  let cloudSales = (cloudDoc.revenue && cloudDoc.revenue.salesLog) || {};
+  Object.keys(cloudSales).forEach(function (dk) {
+    let cEntry = cloudSales[dk];
+    if (!cEntry || !cEntry.accounts) return;
+    let orcaRows = {};
+    Object.keys(cEntry.accounts).forEach(function (id) {
+      let ae = cEntry.accounts[id];
+      if (ae && ae.projectKey === 'orca') orcaRows[id] = hubCloneJson(ae);
+    });
+    if (!Object.keys(orcaRows).length) return;
+    let pEntry = out.revenue.salesLog[dk];
+    if (!pEntry || typeof pEntry !== 'object') {
+      pEntry = { accounts: {} };
+      out.revenue.salesLog[dk] = pEntry;
+    }
+    pEntry.accounts = pEntry.accounts || {};
+    Object.keys(orcaRows).forEach(function (id) {
+      pEntry.accounts[id] = orcaRows[id];
+    });
+  });
+  return out;
+}
+
+function hubStripExplicitOrcaIdsFromPayload(payload, ids) {
+  if (!payload || !ids || !ids.length) return payload;
+  let drop = {};
+  ids.forEach(function (id) { if (id) drop[id] = true; });
+  let settings = payload.settings || {};
+  if (Array.isArray(settings.orcaInputAccounts)) {
+    settings.orcaInputAccounts = settings.orcaInputAccounts.filter(function (a) {
+      return !(a && a.id && drop[a.id]);
+    });
+  }
+  if (!Array.isArray(settings.removedOrcaOrgAccountIds)) settings.removedOrcaOrgAccountIds = [];
+  ids.forEach(function (id) {
+    if (id && settings.removedOrcaOrgAccountIds.indexOf(id) < 0) {
+      settings.removedOrcaOrgAccountIds.push(id);
+    }
+  });
+  settings.removedOrcaOrgAccountIdTimes = settings.removedOrcaOrgAccountIdTimes || {};
+  let now = Date.now();
+  ids.forEach(function (id) {
+    if (!id) return;
+    if (!settings.removedOrcaOrgAccountIdTimes[id]) settings.removedOrcaOrgAccountIdTimes[id] = now;
+  });
+  if (settings.investmentHistory && typeof settings.investmentHistory === 'object') {
+    Object.keys(drop).forEach(function (id) { delete settings.investmentHistory[id]; });
+  }
+  let revenueLog = payload.revenue && payload.revenue.revenueLog;
+  if (revenueLog) {
+    Object.keys(revenueLog).forEach(function (dk) {
+      let entry = revenueLog[dk];
+      if (!entry) return;
+      if (entry.orcaAccounts) {
+        Object.keys(drop).forEach(function (id) { delete entry.orcaAccounts[id]; });
+      }
+      if (entry.accounts) {
+        Object.keys(drop).forEach(function (id) {
+          if (entry.accounts[id] && entry.accounts[id].projectKey === 'orca') delete entry.accounts[id];
+        });
+      }
+    });
+  }
+  let salesLog = payload.revenue && payload.revenue.salesLog;
+  if (salesLog) {
+    Object.keys(salesLog).forEach(function (dk) {
+      let entry = salesLog[dk];
+      if (!entry || !entry.accounts) return;
+      Object.keys(drop).forEach(function (id) {
+        if (entry.accounts[id] && entry.accounts[id].projectKey === 'orca') delete entry.accounts[id];
+      });
+    });
+  }
+  return payload;
+}
+
+/**
+ * Final ORCA safety gate before Firestore set().
+ * Blocks destructive empty ORCA overwrites unless explicit delete is allowed.
+ */
+function hubGuardOrcaPayloadBeforePush(payload, cloudDoc, callerHint) {
+  let cloudCounts = hubCountOrcaInFirestorePayload(cloudDoc || {});
+  let payloadCountsBefore = hubCountOrcaInFirestorePayload(payload || {});
+  let freshTombstoneAll = hubAllowExplicitOrcaEmptyWipe(payload, cloudDoc) && !hubExplicitOrcaDeletePending;
+  let wouldDestroy =
+    hubCloudHasLiveOrca(cloudDoc) &&
+    hubIsOrcaFirestorePayloadEmpty(payloadCountsBefore);
+  let finalPayload = payload;
+  let action = 'allow';
+  let blocked = false;
+
+  if (wouldDestroy) {
+    if (hubExplicitOrcaDeletePending) {
+      // Keep unrelated cloud ORCA; remove only explicitly deleted ids.
+      finalPayload = hubPreserveCloudOrcaIntoPayload(hubCloneJson(payload), cloudDoc);
+      finalPayload = hubStripExplicitOrcaIdsFromPayload(
+        finalPayload,
+        hubExplicitOrcaDeleteIds && hubExplicitOrcaDeleteIds.length
+          ? hubExplicitOrcaDeleteIds
+          : []
+      );
+      action = 'allow_explicit_orca_delete';
+      blocked = false;
+    } else if (freshTombstoneAll) {
+      // All cloud-live accounts have fresh local tombstone times → full empty OK.
+      action = 'allow_explicit_orca_delete';
+      blocked = false;
+    } else {
+      finalPayload = hubPreserveCloudOrcaIntoPayload(payload, cloudDoc);
+      action = 'block_preserve_cloud_orca';
+      blocked = true;
+    }
+  }
+
+  let payloadCountsAfter = hubCountOrcaInFirestorePayload(finalPayload || {});
+  let caller = callerHint || '';
+  try {
+    let stack = new Error().stack || '';
+    let lines = String(stack).split('\n').map(function (l) { return l.trim(); }).filter(Boolean);
+    caller = caller || lines.slice(0, 6).join(' | ');
+  } catch (e) {}
+
+  let log = {
+    tag: '[hubOrcaPushGuard]',
+    caller: caller,
+    cloudOrca: cloudCounts,
+    payloadOrcaBefore: payloadCountsBefore,
+    payloadOrcaAfter: payloadCountsAfter,
+    explicitOrcaDelete: !!hubExplicitOrcaDeletePending,
+    explicitOrcaDeleteIds: hubExplicitOrcaDeleteIds,
+    explicitOrcaDeleteAt: hubExplicitOrcaDeleteAt,
+    explicitAllowed: !!(hubExplicitOrcaDeletePending || freshTombstoneAll),
+    wouldDestroy: !!wouldDestroy,
+    action: action,
+    writeAllowed: true,
+    orcaEmptyWipeBlocked: blocked
+  };
+  try {
+    console.log(log.tag, log);
+  } catch (e) {}
+
+  return {
+    payload: finalPayload,
+    blocked: blocked,
+    action: action,
+    log: log,
+    cloudCounts: cloudCounts,
+    payloadCounts: payloadCountsAfter
+  };
+}
+
+function hubApplyPreservedOrcaPayloadLocally(payload) {
+  if (!payload || typeof settings === 'undefined') return;
+  let s = payload.settings || {};
+  if (Array.isArray(s.orcaInputAccounts)) {
+    settings.orcaInputAccounts = hubCloneJson(s.orcaInputAccounts);
+  }
+  if (Array.isArray(s.removedOrcaOrgAccountIds)) {
+    settings.removedOrcaOrgAccountIds = s.removedOrcaOrgAccountIds.slice();
+  }
+  if (s.removedOrcaOrgAccountIdTimes && typeof s.removedOrcaOrgAccountIdTimes === 'object') {
+    settings.removedOrcaOrgAccountIdTimes = hubCloneJson(s.removedOrcaOrgAccountIdTimes);
+  }
+  if (s.investmentHistory && typeof s.investmentHistory === 'object') {
+    settings.investmentHistory = settings.investmentHistory || {};
+    Object.keys(s.investmentHistory).forEach(function (id) {
+      let entry = s.investmentHistory[id];
+      if (entry && (entry.projectKey === 'orca' || String(id).indexOf('orca_') === 0)) {
+        settings.investmentHistory[id] = hubCloneJson(entry);
+      }
+    });
+  }
+  if (payload.revenue) {
+    if (!settings.revenueLog || typeof settings.revenueLog !== 'object') settings.revenueLog = {};
+    if (!settings.salesLog || typeof settings.salesLog !== 'object') settings.salesLog = {};
+    let rev = payload.revenue.revenueLog || {};
+    Object.keys(rev).forEach(function (dk) {
+      let src = rev[dk];
+      if (!src || !src.orcaAccounts) return;
+      let dst = settings.revenueLog[dk] || {};
+      dst.orcaAccounts = hubCloneJson(src.orcaAccounts);
+      if (src.orca != null) dst.orca = src.orca;
+      dst.accounts = dst.accounts || {};
+      Object.keys(src.accounts || {}).forEach(function (id) {
+        let ae = src.accounts[id];
+        if (ae && ae.projectKey === 'orca') dst.accounts[id] = hubCloneJson(ae);
+      });
+      settings.revenueLog[dk] = dst;
+    });
+    let sales = payload.revenue.salesLog || {};
+    Object.keys(sales).forEach(function (dk) {
+      let src = sales[dk];
+      if (!src || !src.accounts) return;
+      let dst = settings.salesLog[dk] || { accounts: {} };
+      dst.accounts = dst.accounts || {};
+      Object.keys(src.accounts).forEach(function (id) {
+        let ae = src.accounts[id];
+        if (ae && ae.projectKey === 'orca') dst.accounts[id] = hubCloneJson(ae);
+      });
+      settings.salesLog[dk] = dst;
+    });
+  }
+  if (typeof hubSaveToStorage === 'function') hubSaveToStorage({ localOnly: true });
+}
+
+function hubPushCloudDoc(force, cloudDocOpt, callerHint) {
   if (typeof hubIsCloudWriteEnabled === 'function' && !hubIsCloudWriteEnabled()) {
     if (typeof hubRenderLocalDevStatus === 'function') hubRenderLocalDevStatus();
     return Promise.resolve(false);
   }
   if (!hubFirebaseReady || !hubFirebaseUid) return Promise.resolve(false);
-  let payload = hubPackFirestorePayload(Date.now());
-  let hash = hubComputeContentHash(hubUnpackFirestorePayload(payload));
-  if (!force && hash === hubLastPushedHash) {
-    hubSetSyncStatus('done');
-    return Promise.resolve(false);
-  }
   let ref = hubFirestoreDocRef();
   if (!ref) return Promise.resolve(false);
   hubSetSyncStatus('syncing');
-  return ref.set(payload).then(function () {
-    hubLastPushedHash = hash;
-    hubSetSyncStatus('done');
-    return true;
+
+  let loadCloud = cloudDocOpt
+    ? Promise.resolve(cloudDocOpt)
+    : hubFetchCloudDoc();
+
+  return loadCloud.then(function (cloudDoc) {
+    let payload = hubPackFirestorePayload(Date.now());
+    let guarded = hubGuardOrcaPayloadBeforePush(
+      payload,
+      cloudDoc,
+      callerHint || 'hubPushCloudDoc'
+    );
+    payload = guarded.payload;
+    if (guarded.blocked || guarded.action === 'allow_explicit_orca_delete') {
+      hubApplyPreservedOrcaPayloadLocally(payload);
+    }
+
+    let hash = hubComputeContentHash(hubUnpackFirestorePayload(payload));
+    if (!force && hash === hubLastPushedHash) {
+      hubSetSyncStatus('done');
+      return false;
+    }
+
+    console.log('[hubOrcaPushGuard] ref.set about to write', {
+      cloudOrca: guarded.cloudCounts,
+      payloadOrca: guarded.payloadCounts,
+      explicitOrcaDelete: !!hubExplicitOrcaDeletePending,
+      action: guarded.action,
+      writeAllowed: true,
+      orcaEmptyWipeBlocked: !!guarded.blocked,
+      caller: (guarded.log && guarded.log.caller) || callerHint || 'hubPushCloudDoc'
+    });
+
+    return ref.set(payload).then(function () {
+      hubLastPushedHash = hash;
+      if (guarded.action === 'allow_explicit_orca_delete') {
+        hubClearExplicitOrcaDelete();
+      }
+      hubSetSyncStatus('done');
+      return true;
+    });
+  }).catch(function (err) {
+    hubSetSyncStatus('offline');
+    throw err;
   });
 }
 
@@ -199,7 +584,7 @@ function hubRunCloudSave(force) {
   hubCloudSaveInFlight = true;
   return hubFetchCloudDoc().then(function (cloudDoc) {
     if (cloudDoc) hubEnrichLocalFromCloud(cloudDoc);
-    return hubPushCloudDoc(force);
+    return hubPushCloudDoc(force, cloudDoc, 'hubRunCloudSave');
   }).catch(function () {
     hubSetSyncStatus('offline');
     return false;
@@ -315,6 +700,11 @@ if (typeof window !== 'undefined') {
   };
   window.hubSyncHubData = hubSyncHubData;
   window.hubFetchCloudDoc = hubFetchCloudDoc;
+  window.hubPushCloudDoc = hubPushCloudDoc;
+  window.hubMarkExplicitOrcaDelete = hubMarkExplicitOrcaDelete;
+  window.hubClearExplicitOrcaDelete = hubClearExplicitOrcaDelete;
+  window.hubGuardOrcaPayloadBeforePush = hubGuardOrcaPayloadBeforePush;
+  window.hubCountOrcaInFirestorePayload = hubCountOrcaInFirestorePayload;
   window.hubEnrichLocalFromCloud = hubEnrichLocalFromCloud;
   window.hubEnrichLocalOrcaFromCloud = hubEnrichLocalOrcaFromCloud;
   window.hubDeleteCloudData = hubDeleteCloudData;
