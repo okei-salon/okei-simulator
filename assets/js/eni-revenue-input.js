@@ -1,8 +1,14 @@
 /* OUKEI HUB ENI Revenue Input — USDT balance + totalPerformance model */
 
 let eniSavePending = null;
+let eniRegisterInFlight = false;
+let eniRegisterCooldownUntil = 0;
+let eniFocusAccountId = '';
 
 function ensureEniInputAccounts() {
+  if (typeof settings === 'undefined' || !settings || typeof settings !== 'object') {
+    throw new Error('settings が初期化されていません');
+  }
   if (!Array.isArray(settings.eniInputAccounts)) settings.eniInputAccounts = [];
 }
 
@@ -149,14 +155,6 @@ function renderEniInputAccountCard(acc, existing) {
     '</div></section>';
 }
 
-function renderEniInputFooter() {
-  return '<div class="ramInputFooterStack">' +
-    '<button type="button" class="ramInputBtnSave" onclick="saveEniRevenueInput()">保存</button>' +
-    '<button type="button" class="btn2 ramInputBtnAdd" onclick="openEniAddAccountForm()">アカウント追加</button>' +
-    '<button type="button" class="btn2 ramInputBtnAdd" onclick="openRevenueProjectSelect()">プロジェクト選択に戻る</button>' +
-    '</div>';
-}
-
 function bindEniInputListeners() {
   getEniInputAccounts().forEach(function (acc) {
     ['eniUsdt_', 'eniWithdraw_', 'eniTotalPerf_', 'eniOp_'].forEach(function (prefix) {
@@ -289,8 +287,11 @@ function persistEniRevenueEntry(eniAccounts) {
   });
 }
 
-function openEniRevenueInput() {
+function openEniRevenueInput(opts) {
+  opts = opts || {};
   eniSavePending = null;
+  if (opts.focusAccountId) eniFocusAccountId = String(opts.focusAccountId);
+  eniRestoreModalFooter();
   let accounts = getEniInputAccounts();
   modalTitle.textContent = 'ENI 実績入力';
 
@@ -300,6 +301,7 @@ function openEniRevenueInput() {
       '<p class="help">「アカウント追加」からENIアカウントを登録してください。</p></div>' +
       renderEniInputFooter();
     modalBg.style.display = 'flex';
+    bindEniModalActionButtons();
     return;
   }
 
@@ -312,97 +314,279 @@ function openEniRevenueInput() {
     }).join('') + '</div>' + renderEniInputFooter();
   modalBg.style.display = 'flex';
   bindEniInputListeners();
+  bindEniModalActionButtons();
   accounts.forEach(function (acc) { updateEniDerivedPreview(acc.id); });
 
   setTimeout(function () {
-    let focusEl = accounts.map(function (acc) {
-      return document.getElementById('eniUsdt_' + acc.id);
-    }).find(function (el) { return el && el.value === ''; });
-    if (focusEl) focusEl.focus();
+    let focusId = eniFocusAccountId;
+    eniFocusAccountId = '';
+    let focusEl = null;
+    if (focusId) {
+      let card = (modalContent && typeof modalContent.querySelector === 'function')
+        ? modalContent.querySelector('.ramInputAccount[data-acc="' + focusId + '"]')
+        : null;
+      if (card && typeof card.scrollIntoView === 'function') {
+        card.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      }
+      focusEl = document.getElementById('eniUsdt_' + focusId);
+      if (card && card.classList && typeof card.classList.add === 'function') {
+        card.classList.add('isSelected');
+      }
+    }
+    if (!focusEl) {
+      focusEl = accounts.map(function (acc) {
+        return document.getElementById('eniUsdt_' + acc.id);
+      }).find(function (el) { return el && el.value === ''; });
+    }
+    if (focusEl && typeof focusEl.focus === 'function') focusEl.focus();
   }, 80);
 }
 
 function saveEniRevenueInput() {
-  let collected = collectEniRevenueFromForm();
-  if (collected.errors && collected.errors.length) {
-    alert(collected.errors[0]);
-    return;
-  }
-  if (!Object.keys(collected.eniAccounts).length) {
-    alert('保存する内容がありません。USDT残高と総実績を入力してください。');
-    return;
-  }
+  try {
+    let collected = collectEniRevenueFromForm();
+    if (collected.errors && collected.errors.length) {
+      alert(collected.errors[0]);
+      return;
+    }
+    if (!Object.keys(collected.eniAccounts).length) {
+      alert('保存する内容がありません。USDT残高と総実績を入力してください。');
+      return;
+    }
 
-  let warnings = eniBuildSaveWarnings(collected.eniAccounts);
-  if (warnings.length) {
-    let msg = warnings.join('\n\n') + '\n\n内容を確認のうえ保存しますか？';
-    if (!confirm(msg)) return;
-  }
+    let warnings = eniBuildSaveWarnings(collected.eniAccounts);
+    if (warnings.length) {
+      let msg = warnings.join('\n\n') + '\n\n内容を確認のうえ保存しますか？';
+      if (!confirm(msg)) return;
+    }
 
-  if (typeof aimPersistInputAccountMetaFromForm === 'function') {
-    aimPersistInputAccountMetaFromForm('eni');
+    if (typeof aimPersistInputAccountMetaFromForm === 'function') {
+      aimPersistInputAccountMetaFromForm('eni');
+    }
+    persistEniRevenueEntry(collected.eniAccounts);
+    if (typeof persistHubSettings === 'function') persistHubSettings();
+    if (typeof render === 'function') render();
+    if (typeof refreshHomeAfterRevenueSave === 'function') refreshHomeAfterRevenueSave();
+    if (typeof showPage === 'function') showPage('home');
+    if (typeof closeModal === 'function') closeModal();
+    if (typeof showToast === 'function') showToast('✅ 保存しました');
+  } catch (err) {
+    console.error('[eni]', err);
+    alert('保存できませんでした。時間をおいて再度お試しください。');
   }
-  persistEniRevenueEntry(collected.eniAccounts);
-  if (typeof persistHubSettings === 'function') persistHubSettings();
-  if (typeof render === 'function') render();
-  if (typeof refreshHomeAfterRevenueSave === 'function') refreshHomeAfterRevenueSave();
-  if (typeof showPage === 'function') showPage('home');
-  if (typeof closeModal === 'function') closeModal();
-  if (typeof showToast === 'function') showToast('✅ 保存しました');
 }
 
-function openEniAddAccountForm() {
-  modalTitle.textContent = 'ENI アカウント追加';
-  modalContent.innerHTML =
-    '<p class="help">ユーザー名と現在の運用額を登録します。日次のUSDT残高・総実績は実績入力画面で入力します。</p>' +
-    '<label>ユーザー名</label><input id="eniNewUsername" type="text" placeholder="例：account1">' +
-    '<label>現在の運用額（USDT）</label><input id="eniNewInvestment" type="number" step="any" min="0" placeholder="例：5000">' +
-    '<div class="ramInputFooterStack">' +
-    '<button type="button" class="ramInputBtnSave" onclick="registerEniAccount()">このアカウントを登録</button>' +
-    '<button type="button" class="btn2 ramInputBtnAdd" onclick="openEniRevenueInput()">入力画面に戻る</button>' +
+function bindEniModalActionButtons() {
+  // Revenue input screen buttons (still in modalBody)
+  let saveBtn = document.getElementById('eniSaveRevenueBtn');
+  if (saveBtn && saveBtn.dataset.eniBound !== '1') {
+    saveBtn.dataset.eniBound = '1';
+    saveBtn.addEventListener('click', function (ev) {
+      if (ev && typeof ev.preventDefault === 'function') ev.preventDefault();
+      saveEniRevenueInput();
+    });
+  }
+  let addBtn = document.getElementById('eniOpenAddAccountBtn');
+  if (addBtn && addBtn.dataset.eniBound !== '1') {
+    addBtn.dataset.eniBound = '1';
+    addBtn.addEventListener('click', function (ev) {
+      if (ev && typeof ev.preventDefault === 'function') ev.preventDefault();
+      openEniAddAccountForm();
+    });
+  }
+}
+
+function eniGetModalFooter() {
+  return document.querySelector('#modalBg .modalFooter');
+}
+
+function eniCaptureModalFooterDefault() {
+  if (typeof pfCaptureModalFooterDefault === 'function') {
+    pfCaptureModalFooterDefault();
+    return;
+  }
+  let footer = eniGetModalFooter();
+  if (footer && !window.__eniFooterDefaultHtml) {
+    window.__eniFooterDefaultHtml = footer.innerHTML;
+  }
+}
+
+function eniRestoreModalFooter() {
+  if (typeof pfRestoreModalFooter === 'function') {
+    pfRestoreModalFooter();
+    return;
+  }
+  let footer = eniGetModalFooter();
+  if (footer && window.__eniFooterDefaultHtml) {
+    footer.innerHTML = window.__eniFooterDefaultHtml;
+  }
+  if (footer) footer.style.display = '';
+}
+
+function renderEniInputFooter() {
+  return '<div class="ramInputFooterStack">' +
+    '<button type="button" class="ramInputBtnSave" id="eniSaveRevenueBtn">保存</button>' +
+    '<button type="button" class="btn2 ramInputBtnAdd" id="eniOpenAddAccountBtn">アカウント追加</button>' +
+    '<button type="button" class="btn2 ramInputBtnAdd" onclick="openRevenueProjectSelect()">プロジェクト選択に戻る</button>' +
     '</div>';
-  modalBg.style.display = 'flex';
-  setTimeout(function () {
-    let el = document.getElementById('eniNewUsername');
-    if (el) el.focus();
-  }, 80);
+}
+
+function eniShowRegisterError(message) {
+  let box = document.getElementById('eniRegisterError');
+  if (!box) return;
+  box.textContent = message || 'アカウントを登録できませんでした。時間をおいて再度お試しください。';
+  box.classList.remove('hidden');
+  box.style.display = 'block';
+}
+
+function eniClearRegisterError() {
+  let box = document.getElementById('eniRegisterError');
+  if (!box) return;
+  box.textContent = '';
+  box.classList.add('hidden');
+  box.style.display = '';
 }
 
 function registerEniAccount() {
-  let username = (document.getElementById('eniNewUsername')?.value || '').trim().replace(/^@/, '');
-  let investmentRaw = document.getElementById('eniNewInvestment')?.value;
+  // Absorb duplicate pointerup/touchend/click delivery (Safari often skips click).
+  let now = Date.now();
+  if (eniRegisterInFlight) return;
+  if (now < eniRegisterCooldownUntil) return;
+  eniRegisterCooldownUntil = now + 1200;
+
+  eniClearRegisterError();
+
+  let usernameEl = document.getElementById('eniNewUsername');
+  let investmentEl = document.getElementById('eniNewInvestment');
+  let username = ((usernameEl && usernameEl.value) || '').trim().replace(/^@/, '');
+  let investmentRaw = investmentEl ? String(investmentEl.value || '').trim() : '';
   let investment = Number(investmentRaw);
+
   if (!username) {
-    alert('ユーザー名を入力してください。');
+    eniRegisterCooldownUntil = 0;
+    eniShowRegisterError('ユーザー名を入力してください。');
     return;
   }
   if (investmentRaw === '' || !isFinite(investment) || investment < 0) {
-    alert('現在の運用額は0以上の数値で入力してください。');
+    eniRegisterCooldownUntil = 0;
+    eniShowRegisterError('現在の運用額は0以上の数値で入力してください。');
     return;
   }
-  if (!confirm('このアカウントを登録しますか？')) return;
 
-  let id = 'eni_' + Date.now();
-  ensureEniInputAccounts();
-  settings.eniInputAccounts.push({
-    id: id,
-    username: username,
-    name: username,
-    investment: investment
-  });
+  // Register button is the explicit action; avoid native confirm() (Safari can return false).
+  eniRegisterInFlight = true;
 
-  if (typeof pdAddInvestmentRecord === 'function') {
-    pdAddInvestmentRecord(id, 'eni', todayKey(), investment, 'initial');
-  } else if (typeof pdSetManualOperatingAmount === 'function') {
-    pdSetManualOperatingAmount(id, 'eni', todayKey(), investment);
+  try {
+    let id = 'eni_' + Date.now();
+    ensureEniInputAccounts();
+    settings.eniInputAccounts.push({
+      id: id,
+      username: username,
+      name: username,
+      investment: investment
+    });
+
+    let dateKey = typeof todayKey === 'function' ? todayKey() : '';
+    if (typeof pdAddInvestmentRecord === 'function' && dateKey) {
+      pdAddInvestmentRecord(id, 'eni', dateKey, investment, 'initial');
+    } else if (typeof pdSetManualOperatingAmount === 'function' && dateKey) {
+      pdSetManualOperatingAmount(id, 'eni', dateKey, investment);
+    }
+
+    if (typeof persistHubSettings === 'function') {
+      persistHubSettings();
+    } else if (typeof hubSaveToStorage === 'function') {
+      hubSaveToStorage();
+    }
+
+    if (typeof markActivity === 'function') markActivity();
+    if (typeof render === 'function') render();
+
+    eniFocusAccountId = id;
+    eniRestoreModalFooter();
+    openEniRevenueInput({ focusAccountId: id });
+    if (typeof showToast === 'function') showToast('✅ アカウントを登録しました');
+  } catch (err) {
+    eniRegisterInFlight = false;
+    eniRegisterCooldownUntil = 0;
+    console.error('[eniRegister]', err);
+    eniShowRegisterError('アカウントを登録できませんでした。時間をおいて再度お試しください。');
+    return;
   }
 
-  if (typeof persistHubSettings === 'function') persistHubSettings();
-  if (typeof markActivity === 'function') markActivity();
-  if (typeof render === 'function') render();
-  openEniRevenueInput();
-  if (typeof showToast === 'function') showToast('✅ アカウントを登録しました');
+  eniRegisterInFlight = false;
 }
+
+// Expose immediately (same global pattern as RAM/ORCA function declarations in home.js).
+window.registerEniAccount = registerEniAccount;
+
+function eniBindAddAccountFooterEvents() {
+  let registerBtn = document.getElementById('eniRegisterAccountBtn');
+  let backBtn = document.getElementById('eniAddBackBtn');
+
+  function onRegisterEvent(ev) {
+    if (ev && ev.type === 'pointerup' && ev.pointerType === 'mouse' && ev.button != null && ev.button !== 0) {
+      return;
+    }
+    if (ev && (ev.type === 'touchend' || ev.type === 'pointerup')) {
+      if (typeof ev.preventDefault === 'function') {
+        try { ev.preventDefault(); } catch (err) { /* ignore */ }
+      }
+    }
+    registerEniAccount();
+  }
+
+  if (registerBtn && registerBtn.dataset.eniBound !== '1') {
+    registerBtn.dataset.eniBound = '1';
+    // Prefer pointerup/touchend; Safari may skip click on this control.
+    registerBtn.addEventListener('pointerup', onRegisterEvent, { passive: false });
+    registerBtn.addEventListener('touchend', onRegisterEvent, { passive: false });
+    registerBtn.addEventListener('click', onRegisterEvent);
+  }
+
+  if (backBtn && backBtn.dataset.eniBound !== '1') {
+    backBtn.dataset.eniBound = '1';
+    backBtn.addEventListener('click', function (ev) {
+      if (ev && typeof ev.preventDefault === 'function') ev.preventDefault();
+      eniRestoreModalFooter();
+      openEniRevenueInput();
+    });
+  }
+}
+
+function openEniAddAccountForm() {
+  // Layout: Ver2.0.12-style modalFooter row (戻る | 登録 | 閉じる). Body = fields only.
+  eniRegisterInFlight = false;
+  eniRegisterCooldownUntil = 0;
+  eniCaptureModalFooterDefault();
+  modalTitle.textContent = 'ENI アカウント追加';
+  modalContent.innerHTML =
+    '<p class="help">ユーザー名と現在の運用額を登録します。日次のUSDT残高・総実績は実績入力画面で入力します。</p>' +
+    '<p class="help hidden" id="eniRegisterError" style="color:#fca5a5;font-weight:800;"></p>' +
+    '<label>ユーザー名</label>' +
+    '<input id="eniNewUsername" type="text" placeholder="例：account1">' +
+    '<label>現在の運用額（USDT）</label>' +
+    '<input id="eniNewInvestment" type="number" step="any" min="0" inputmode="decimal" placeholder="例：5000">';
+
+  let footer = eniGetModalFooter();
+  if (footer) {
+    footer.style.display = 'flex';
+    footer.innerHTML =
+      '<button type="button" class="btn2" id="eniAddBackBtn">入力画面に戻る</button>' +
+      '<button type="button" class="ramInputBtnSave" id="eniRegisterAccountBtn"' +
+      ' onclick="window.registerEniAccount && window.registerEniAccount()">このアカウントを登録</button>' +
+      '<button type="button" class="btn2" onclick="closeModal()">閉じる</button>';
+  }
+
+  modalBg.style.display = 'flex';
+  eniBindAddAccountFooterEvents();
+  setTimeout(function () {
+    let el = document.getElementById('eniNewUsername');
+    if (el && typeof el.focus === 'function') el.focus();
+  }, 80);
+}
+
+window.openEniAddAccountForm = openEniAddAccountForm;
 
 if (typeof window !== 'undefined') {
   window.getEniInputAccounts = getEniInputAccounts;
