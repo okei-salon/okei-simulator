@@ -16,6 +16,7 @@
     "embed:orca-hub": "python3 tools/hub_embed_orca_org.py",
     "verify:hub-restore": "node scripts/verify-restore-hub.mjs",
     "verify:eni-optin": "node scripts/verify-eni-optin.mjs",
+    "verify:eni-performance": "node scripts/verify-eni-performance-input.mjs",
     "verify:hub-sync": "node scripts/verify-hub-sync-merge.mjs",
     "verify:orca-account-delete": "node scripts/verify-orca-account-full-delete.mjs",
     "verify:local-dev-mode": "node scripts/verify-local-dev-mode.mjs"

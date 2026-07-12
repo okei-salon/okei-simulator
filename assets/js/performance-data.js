@@ -226,10 +226,7 @@ function pdHasAccountRevenueInEntry(entry, projectKey, accountId) {
     return ae.yesterdayAiProfit != null || ae.todayAffiliateProfit != null;
   }
   if (projectKey === 'eni' && entry.eniAccounts && entry.eniAccounts[accountId]) {
-    let ae = entry.eniAccounts[accountId];
-    return ['operationAmount', 'todayRevenue', 'referralProfit', 'titleProfit'].some(function (k) {
-      return ae[k] != null && ae[k] !== '';
-    }) || (ae.note && String(ae.note).trim());
+    return pdIsEniAccountEntryPresent(entry.eniAccounts[accountId]);
   }
   if (projectKey === 'cary' && entry.caryAccounts && entry.caryAccounts[accountId]) {
     return entry.caryAccounts[accountId].todayReward != null;
@@ -697,13 +694,225 @@ function pdOrcaAccountRevenueTotal(a) {
   return 0;
 }
 
+function pdRoundEni(n) {
+  return Math.round((Number(n) || 0) * 10000) / 10000;
+}
+
+function pdIsEniAccountEntryPresent(ae) {
+  if (!ae || typeof ae !== 'object') return false;
+  if (['usdtBalance', 'totalPerformance', 'dailyProfit', 'dailySales', 'operationAmount'].some(function (k) {
+    return ae[k] != null && ae[k] !== '';
+  })) return true;
+  // Legacy ENI fields (pre USDT / totalPerformance model)
+  if (['todayRevenue', 'referralProfit', 'titleProfit'].some(function (k) {
+    return ae[k] != null && ae[k] !== '';
+  })) return true;
+  return !!(ae.note && String(ae.note).trim());
+}
+
 function pdEniAccountRevenueTotal(a) {
   if (!a) return 0;
-  return pdRound(
-    (Number(a.todayRevenue) || 0) +
-    (Number(a.referralProfit) || 0) +
-    (Number(a.titleProfit) || 0)
-  );
+  if (a.dailyProfit != null && a.dailyProfit !== '') return pdRoundEni(a.dailyProfit);
+  // Legacy: todayRevenue + referral + title
+  if (a.referralProfit != null || a.titleProfit != null) {
+    return pdRound(
+      (Number(a.todayRevenue) || 0) +
+      (Number(a.referralProfit) || 0) +
+      (Number(a.titleProfit) || 0)
+    );
+  }
+  if (a.todayRevenue != null && a.todayRevenue !== '') return pdRoundEni(a.todayRevenue);
+  return 0;
+}
+
+function pdGetEniPreviousAccountEntry(accountId, dateKey) {
+  if (!accountId || !dateKey) return null;
+  ensurePerformanceLogs();
+  let keys = pdListRevenueDateKeys().filter(function (k) { return k < dateKey; });
+  for (let i = keys.length - 1; i >= 0; i--) {
+    let entry = settings.revenueLog[keys[i]];
+    let ae = entry && entry.eniAccounts ? entry.eniAccounts[accountId] : null;
+    if (!pdIsEniAccountEntryPresent(ae)) continue;
+    // Prefer new-model entries for previous USDT / totalPerformance.
+    if (ae.usdtBalance == null && ae.totalPerformance == null &&
+        (ae.referralProfit != null || ae.titleProfit != null) &&
+        ae.dailyProfit == null) {
+      continue;
+    }
+    return { dateKey: keys[i], entry: ae };
+  }
+  return null;
+}
+
+/**
+ * ENI daily metrics from raw inputs + previous saved entry (not calendar yesterday).
+ * First entry: dailyProfit = withdrawal only; dailySales = totalPerformance.
+ * Later: profit = usdt - prevUsdt + withdrawal; sales = totalPerf - prevTotalPerf.
+ */
+function pdCalcEniDailyMetrics(accountId, dateKey, raw) {
+  raw = raw || {};
+  let usdt = pdRoundEni(raw.usdtBalance);
+  let withdrawal = pdRoundEni(raw.withdrawalAmount == null || raw.withdrawalAmount === '' ? 0 : raw.withdrawalAmount);
+  let totalPerf = pdRoundEni(raw.totalPerformance);
+  let prev = pdGetEniPreviousAccountEntry(accountId, dateKey);
+  if (!prev) {
+    return {
+      dailyProfit: withdrawal,
+      dailySales: totalPerf,
+      prevUsdtBalance: 0,
+      prevTotalPerformance: 0,
+      prevDateKey: null,
+      isFirst: true
+    };
+  }
+  let prevUsdt = pdRoundEni(prev.entry.usdtBalance);
+  let prevTotal = prev.entry.totalPerformance != null && prev.entry.totalPerformance !== ''
+    ? pdRoundEni(prev.entry.totalPerformance)
+    : 0;
+  return {
+    dailyProfit: pdRoundEni(usdt - prevUsdt + withdrawal),
+    dailySales: pdRoundEni(totalPerf - prevTotal),
+    prevUsdtBalance: prevUsdt,
+    prevTotalPerformance: prevTotal,
+    prevDateKey: prev.dateKey,
+    isFirst: false
+  };
+}
+
+function pdWriteEniSalesDay(dateKey, accountId, totalPerformance, dailySales) {
+  if (!dateKey || !accountId) return null;
+  let entry = pdGetSalesEntryRaw(dateKey) || {};
+  entry.accounts = entry.accounts || {};
+  entry.accounts[accountId] = {
+    projectKey: 'eni',
+    todaySales: pdRoundEni(dailySales),
+    totalSales: pdRoundEni(totalPerformance),
+    salesSource: 'eni-total-performance'
+  };
+  entry = pdRecalculateSalesEntry(entry);
+  pdWriteSalesEntry(dateKey, entry);
+  pdNotifyPerformanceChanged({ type: 'sales', dateKey: dateKey, projectKey: 'eni', accountId: accountId });
+  return entry.accounts[accountId];
+}
+
+function pdApplyEniAccountComputedFields(accountId, dateKey, ae) {
+  if (!ae || (ae.usdtBalance == null && ae.totalPerformance == null)) return ae;
+  let calc = pdCalcEniDailyMetrics(accountId, dateKey, {
+    usdtBalance: ae.usdtBalance,
+    withdrawalAmount: ae.withdrawalAmount,
+    totalPerformance: ae.totalPerformance
+  });
+  ae.dailyProfit = calc.dailyProfit;
+  ae.dailySales = calc.dailySales;
+  ae.todayRevenue = calc.dailyProfit;
+  ae.projectType = 'eni';
+  ae.schemaVersion = ae.schemaVersion != null ? ae.schemaVersion : 1;
+  ae.updatedAt = new Date().toISOString();
+  if (!ae.createdAt) ae.createdAt = ae.updatedAt;
+  return ae;
+}
+
+/** Recalculate dailyProfit / dailySales for account from fromDateKey onward (inclusive). */
+function pdRecalculateEniAccountFrom(accountId, fromDateKey) {
+  if (!accountId || !fromDateKey) return 0;
+  ensurePerformanceLogs();
+  let keys = pdListRevenueDateKeys().filter(function (k) { return k >= fromDateKey; });
+  let touched = 0;
+  keys.forEach(function (dateKey) {
+    let entry = settings.revenueLog[dateKey];
+    if (!entry || !entry.eniAccounts || !entry.eniAccounts[accountId]) return;
+    let ae = entry.eniAccounts[accountId];
+    if (ae.usdtBalance == null && ae.totalPerformance == null) return;
+    ae = pdApplyEniAccountComputedFields(accountId, dateKey, ae);
+    entry.eniAccounts[accountId] = ae;
+    entry.accounts = entry.accounts || {};
+    entry.accounts[accountId] = {
+      projectKey: 'eni',
+      todayRevenue: ae.dailyProfit,
+      operationRevenue: ae.operationAmount != null ? pdRoundEni(ae.operationAmount) : 0
+    };
+    entry = pdRecalculateRevenueEntry(entry, dateKey);
+    pdWriteRevenueEntry(dateKey, entry);
+    pdWriteEniSalesDay(dateKey, accountId, ae.totalPerformance, ae.dailySales);
+    touched += 1;
+  });
+  if (touched) pdPersist();
+  return touched;
+}
+
+/**
+ * Save ENI performance for one account/day using USDT balance + totalPerformance model.
+ * Recalculates this day and all later days for the account.
+ */
+function pdSaveEniPerformanceEntry(dateKey, accountId, raw, opts) {
+  opts = opts || {};
+  if (!dateKey || !accountId) return null;
+  raw = raw || {};
+  ensurePerformanceLogs();
+
+  let prevEntry = null;
+  let existingDay = pdGetRevenueEntryRaw(dateKey);
+  if (existingDay && existingDay.eniAccounts && existingDay.eniAccounts[accountId]) {
+    prevEntry = existingDay.eniAccounts[accountId];
+  }
+
+  let calc = pdCalcEniDailyMetrics(accountId, dateKey, raw);
+  let nowIso = new Date().toISOString();
+  let payload = {
+    projectType: 'eni',
+    operationAmount: raw.operationAmount != null && raw.operationAmount !== ''
+      ? pdRoundEni(raw.operationAmount)
+      : null,
+    usdtBalance: pdRoundEni(raw.usdtBalance),
+    withdrawalAmount: pdRoundEni(raw.withdrawalAmount == null || raw.withdrawalAmount === '' ? 0 : raw.withdrawalAmount),
+    totalPerformance: pdRoundEni(raw.totalPerformance),
+    dailyProfit: calc.dailyProfit,
+    dailySales: calc.dailySales,
+    todayRevenue: calc.dailyProfit,
+    schemaVersion: 1,
+    createdAt: (prevEntry && prevEntry.createdAt) ? prevEntry.createdAt : nowIso,
+    updatedAt: nowIso
+  };
+
+  let entry = existingDay || {};
+  entry.eniAccounts = entry.eniAccounts || {};
+  entry.eniAccounts[accountId] = payload;
+  entry.accounts = entry.accounts || {};
+  entry.accounts[accountId] = {
+    projectKey: 'eni',
+    todayRevenue: payload.dailyProfit,
+    operationRevenue: payload.operationAmount != null ? payload.operationAmount : 0
+  };
+  entry = pdRecalculateRevenueEntry(entry, dateKey);
+  pdWriteRevenueEntry(dateKey, entry);
+  pdWriteEniSalesDay(dateKey, accountId, payload.totalPerformance, payload.dailySales);
+
+  if (payload.operationAmount != null && typeof pdSetManualOperatingAmount === 'function') {
+    pdSetManualOperatingAmount(accountId, 'eni', dateKey, payload.operationAmount, { skipPersist: true });
+  }
+
+  if (Array.isArray(settings.eniInputAccounts)) {
+    settings.eniInputAccounts.forEach(function (acc) {
+      if (acc && acc.id === accountId && payload.operationAmount != null) {
+        acc.investment = payload.operationAmount;
+      }
+    });
+  }
+
+  if (!opts.skipChain) {
+    // Recompute later days whose diffs depend on this day's raw totals.
+    let laterKeys = pdListRevenueDateKeys().filter(function (k) { return k > dateKey; });
+    if (laterKeys.length) {
+      pdRecalculateEniAccountFrom(accountId, laterKeys[0]);
+    } else {
+      pdPersist();
+    }
+  } else {
+    pdPersist();
+  }
+
+  pdNotifyPerformanceChanged({ type: 'revenue', dateKey: dateKey, projectKey: 'eni', accountId: accountId });
+  return { payload: payload, calc: calc };
 }
 
 function pdCreatePerformanceSnapshot() {
@@ -1543,6 +1752,10 @@ function pdSaveRevenueAccountEntry(dateKey, projectKey, accountId, data) {
       operationRevenue: data.operationRevenue != null ? pdRound(data.operationRevenue) : op
     };
   } else if (projectKey === 'eni') {
+    // Prefer dedicated ENI save path when new-model fields are present.
+    if (data.usdtBalance != null || data.totalPerformance != null) {
+      return pdSaveEniPerformanceEntry(dateKey, accountId, data, { skipChain: !!data.skipChain });
+    }
     entry.eniAccounts = entry.eniAccounts || {};
     entry.eniAccounts[accountId] = {
       operationAmount: data.operationAmount != null ? pdRound(data.operationAmount) : null,
@@ -2342,6 +2555,12 @@ if (typeof window !== 'undefined') {
   window.pdRamAccountRevenueTotal = pdRamAccountRevenueTotal;
   window.pdOrcaAccountRevenueTotal = pdOrcaAccountRevenueTotal;
   window.pdEniAccountRevenueTotal = pdEniAccountRevenueTotal;
+  window.pdRoundEni = pdRoundEni;
+  window.pdIsEniAccountEntryPresent = pdIsEniAccountEntryPresent;
+  window.pdGetEniPreviousAccountEntry = pdGetEniPreviousAccountEntry;
+  window.pdCalcEniDailyMetrics = pdCalcEniDailyMetrics;
+  window.pdSaveEniPerformanceEntry = pdSaveEniPerformanceEntry;
+  window.pdRecalculateEniAccountFrom = pdRecalculateEniAccountFrom;
   window.pdPreviewRamAccountRevenueTotal = pdPreviewRamAccountRevenueTotal;
   window.pdGetRamOperationRevenue = pdGetRamOperationRevenue;
   window.pdCreatePerformanceSnapshot = pdCreatePerformanceSnapshot;

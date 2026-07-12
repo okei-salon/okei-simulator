@@ -17,10 +17,11 @@ var RM_ACCOUNT_DETAIL_DEFS = {
   ],
   eni: [
     { key: 'operationAmount', label: '運用額' },
-    { key: 'todayRevenue', label: '本日収益' },
-    { key: 'referralProfit', label: '紹介利益' },
-    { key: 'titleProfit', label: 'タイトル利益' },
-    { key: 'total', label: '合計' }
+    { key: 'usdtBalance', label: 'USDT残高' },
+    { key: 'withdrawalAmount', label: '出金額' },
+    { key: 'totalPerformance', label: '総実績' },
+    { key: 'dailyProfit', label: '本日の利益' },
+    { key: 'dailySales', label: '本日売上' }
   ]
 };
 
@@ -296,6 +297,12 @@ function rmReadStoredEntryValues(projectKey, accountId, dateKey) {
     let ae = entry.eniAccounts[accountId];
     return {
       operationAmount: ae.operationAmount != null ? Number(ae.operationAmount) : null,
+      usdtBalance: ae.usdtBalance != null ? Number(ae.usdtBalance) : null,
+      withdrawalAmount: ae.withdrawalAmount != null ? Number(ae.withdrawalAmount) : null,
+      totalPerformance: ae.totalPerformance != null ? Number(ae.totalPerformance) : null,
+      dailyProfit: ae.dailyProfit != null ? Number(ae.dailyProfit) : null,
+      dailySales: ae.dailySales != null ? Number(ae.dailySales) : null,
+      // legacy fallbacks
       todayRevenue: ae.todayRevenue != null ? Number(ae.todayRevenue) : null,
       referralProfit: ae.referralProfit != null ? Number(ae.referralProfit) : null,
       titleProfit: ae.titleProfit != null ? Number(ae.titleProfit) : null,
@@ -421,68 +428,92 @@ function rmSaveOrcaRevenueEntry() {
 function rmOpenEniRevenueEntryModal(accountId, accountName, dateVal) {
   let stored = rmReadStoredEntryValues('eni', accountId, dateVal);
   let opVal = stored.operationAmount != null ? stored.operationAmount : '';
-  let revVal = stored.todayRevenue != null ? stored.todayRevenue : '';
-  let refVal = stored.referralProfit != null ? stored.referralProfit : '';
-  let titleVal = stored.titleProfit != null ? stored.titleProfit : '';
-  let totalVal = stored.total != null
-    ? stored.total
-    : (typeof pdEniAccountRevenueTotal === 'function'
-      ? pdEniAccountRevenueTotal({
-        todayRevenue: revVal,
-        referralProfit: refVal,
-        titleProfit: titleVal
-      })
-      : 0);
+  let usdtVal = stored.usdtBalance != null ? stored.usdtBalance : '';
+  let withdrawVal = stored.withdrawalAmount != null ? stored.withdrawalAmount : '';
+  let totalPerfVal = stored.totalPerformance != null ? stored.totalPerformance : '';
+  let prev = typeof pdGetEniPreviousAccountEntry === 'function'
+    ? pdGetEniPreviousAccountEntry(accountId, dateVal)
+    : null;
+  let prevUsdt = prev ? (Number(prev.entry.usdtBalance) || 0) : 0;
+  let prevTotal = prev && prev.entry.totalPerformance != null
+    ? (Number(prev.entry.totalPerformance) || 0)
+    : 0;
+  let calc = typeof pdCalcEniDailyMetrics === 'function' && usdtVal !== '' && totalPerfVal !== ''
+    ? pdCalcEniDailyMetrics(accountId, dateVal, {
+      usdtBalance: usdtVal,
+      withdrawalAmount: withdrawVal === '' ? 0 : withdrawVal,
+      totalPerformance: totalPerfVal
+    })
+    : { dailyProfit: stored.dailyProfit, dailySales: stored.dailySales };
+
   let body =
     '<input type="hidden" id="rmEntryProjectKey" value="eni">' +
     '<input type="hidden" id="rmEntryAccountId" value="' + pfEscapeAttr(accountId) + '">' +
     pfEntryDateField('日付', 'rmEntryDate', dateVal) +
     pfEntryReadonlyField('プロジェクト', 'ENI') +
     pfEntryReadonlyField('アカウント', accountName || accountId) +
-    pfEntryNumberField('運用額（$）', 'rmEntryEniOperation', opVal,
-      'ENIの運用額を記録します。合計には含めません。') +
-    pfEntryNumberField('本日収益（$）', 'rmEntryEniRevenue', revVal,
-      '実績入力した本日収益をそのまま記録します。') +
-    pfEntryNumberField('紹介利益（$）', 'rmEntryEniReferral', refVal,
-      '紹介利益を記録します。') +
-    pfEntryNumberField('タイトル利益（$）', 'rmEntryEniTitle', titleVal,
-      'タイトル利益を記録します。') +
-    '<label class="pfEntryLabel">本日のENI合計（$）</label>' +
-    '<input type="text" id="rmEntryEniTotal" class="pfEntryInput pfEntryInput--readonly" value="' +
-    String(typeof money === 'function' ? money(totalVal) : ('$' + totalVal)).replace(/"/g, '&quot;') +
+    pfEntryNumberField('現在の運用額（USDT）', 'rmEntryEniOperation', opVal,
+      'ENIでステーキング中の金額です。') +
+    pfEntryNumberField('本日のUSDT残高', 'rmEntryEniUsdt', usdtVal,
+      '前回: ' + (prev ? (prevUsdt + ' USDT') : '0 USDT（初回）')) +
+    pfEntryNumberField('本日の出金額（USDT）', 'rmEntryEniWithdraw', withdrawVal,
+      '出金した日のみ。未入力は0です。') +
+    pfEntryNumberField('総実績', 'rmEntryEniTotalPerf', totalPerfVal,
+      '前回: ' + (prev ? String(prevTotal) : '0（初回）')) +
+    '<label class="pfEntryLabel">本日の利益（自動）</label>' +
+    '<input type="text" id="rmEntryEniDailyProfit" class="pfEntryInput pfEntryInput--readonly" value="' +
+    String(calc.dailyProfit != null ? calc.dailyProfit : '—').replace(/"/g, '&quot;') +
+    '" readonly>' +
+    '<label class="pfEntryLabel">本日売上（自動）</label>' +
+    '<input type="text" id="rmEntryEniDailySales" class="pfEntryInput pfEntryInput--readonly" value="' +
+    String(calc.dailySales != null ? calc.dailySales : '—').replace(/"/g, '&quot;') +
     '" readonly>';
   pfOpenEntryModal('実績入力', body, 'rmSaveEniRevenueEntry');
-  ['rmEntryEniRevenue', 'rmEntryEniReferral', 'rmEntryEniTitle'].forEach(function (id) {
+  ['rmEntryEniUsdt', 'rmEntryEniWithdraw', 'rmEntryEniTotalPerf', 'rmEntryDate'].forEach(function (id) {
     let el = document.getElementById(id);
-    if (el) el.addEventListener('input', rmUpdateEniEntryModalTotal);
+    if (el) el.addEventListener('input', rmUpdateEniEntryModalDerived);
+    if (el) el.addEventListener('change', rmUpdateEniEntryModalDerived);
   });
 }
 
-function rmUpdateEniEntryModalTotal() {
-  let revEl = document.getElementById('rmEntryEniRevenue');
-  let refEl = document.getElementById('rmEntryEniReferral');
-  let titleEl = document.getElementById('rmEntryEniTitle');
-  let totalEl = document.getElementById('rmEntryEniTotal');
-  let payload = {
-    todayRevenue: revEl && revEl.value !== '' ? Number(revEl.value) || 0 : 0,
-    referralProfit: refEl && refEl.value !== '' ? Number(refEl.value) || 0 : 0,
-    titleProfit: titleEl && titleEl.value !== '' ? Number(titleEl.value) || 0 : 0
-  };
-  let total = typeof pdEniAccountRevenueTotal === 'function'
-    ? pdEniAccountRevenueTotal(payload)
-    : Math.round((payload.todayRevenue + payload.referralProfit + payload.titleProfit) * 100) / 100;
-  if (totalEl) {
-    totalEl.value = typeof money === 'function' ? money(total) : ('$' + total);
+function rmUpdateEniEntryModalDerived() {
+  let accountIdEl = document.getElementById('rmEntryAccountId');
+  let dateEl = document.getElementById('rmEntryDate');
+  let usdtEl = document.getElementById('rmEntryEniUsdt');
+  let withdrawEl = document.getElementById('rmEntryEniWithdraw');
+  let totalEl = document.getElementById('rmEntryEniTotalPerf');
+  let profitEl = document.getElementById('rmEntryEniDailyProfit');
+  let salesEl = document.getElementById('rmEntryEniDailySales');
+  if (!accountIdEl || !profitEl || !salesEl) return;
+  let accountId = accountIdEl.value;
+  let dateKey = dateEl && dateEl.value
+    ? dateEl.value
+    : (typeof todayKey === 'function' ? todayKey() : '');
+  let usdt = rmReadEntryNumber(usdtEl);
+  let totalPerf = rmReadEntryNumber(totalEl);
+  let withdraw = rmReadEntryNumber(withdrawEl);
+  if (withdraw == null) withdraw = 0;
+  if (usdt == null || totalPerf == null || typeof pdCalcEniDailyMetrics !== 'function') {
+    profitEl.value = '—';
+    salesEl.value = '—';
+    return;
   }
+  let calc = pdCalcEniDailyMetrics(accountId, dateKey, {
+    usdtBalance: usdt,
+    withdrawalAmount: withdraw,
+    totalPerformance: totalPerf
+  });
+  profitEl.value = String(calc.dailyProfit) + ' USDT';
+  salesEl.value = String(calc.dailySales);
 }
 
 function rmSaveEniRevenueEntry() {
   let dateEl = document.getElementById('rmEntryDate');
   let accountIdEl = document.getElementById('rmEntryAccountId');
   let opEl = document.getElementById('rmEntryEniOperation');
-  let revEl = document.getElementById('rmEntryEniRevenue');
-  let refEl = document.getElementById('rmEntryEniReferral');
-  let titleEl = document.getElementById('rmEntryEniTitle');
+  let usdtEl = document.getElementById('rmEntryEniUsdt');
+  let withdrawEl = document.getElementById('rmEntryEniWithdraw');
+  let totalEl = document.getElementById('rmEntryEniTotalPerf');
   if (!accountIdEl) return;
 
   let accountId = accountIdEl.value;
@@ -490,16 +521,51 @@ function rmSaveEniRevenueEntry() {
     ? dateEl.value
     : (typeof todayKey === 'function' ? todayKey() : '');
 
+  let usdt = rmReadEntryNumber(usdtEl);
+  let totalPerf = rmReadEntryNumber(totalEl);
+  let withdraw = rmReadEntryNumber(withdrawEl);
+  let op = rmReadEntryNumber(opEl);
+  if (withdraw == null) withdraw = 0;
+
+  if (usdt == null || usdt < 0 || totalPerf == null || totalPerf < 0) {
+    alert('USDT残高と総実績は0以上の数値で入力してください。');
+    return;
+  }
+  if (op != null && op < 0) {
+    alert('現在の運用額は0以上の数値で入力してください。');
+    return;
+  }
+  if (withdraw < 0) {
+    alert('出金額は0以上の数値で入力してください。');
+    return;
+  }
+
+  let raw = {
+    operationAmount: op != null ? op : 0,
+    usdtBalance: usdt,
+    withdrawalAmount: withdraw,
+    totalPerformance: totalPerf
+  };
+  let calc = typeof pdCalcEniDailyMetrics === 'function'
+    ? pdCalcEniDailyMetrics(accountId, dateKey, raw)
+    : { isFirst: true, prevTotalPerformance: 0, prevUsdtBalance: 0 };
+  let warnings = [];
+  if (!calc.isFirst && raw.totalPerformance < calc.prevTotalPerformance) {
+    warnings.push('本日の総実績が前回の総実績を下回っています。入力内容をご確認ください。');
+  }
+  if (!calc.isFirst && raw.usdtBalance < calc.prevUsdtBalance) {
+    warnings.push('USDT残高が前回より減少しています。出金額の入力漏れがないか確認してください。');
+  }
+  if (warnings.length && !confirm(warnings.join('\n\n') + '\n\n内容を確認のうえ保存しますか？')) {
+    return;
+  }
+
   pfRegisterManageDisplayFromEntry('eni', accountId);
 
-  if (typeof pdSaveRevenueAccountEntry === 'function') {
-    pdSaveRevenueAccountEntry(dateKey, 'eni', accountId, {
-      operationAmount: rmReadEntryNumber(opEl),
-      todayRevenue: rmReadEntryNumber(revEl),
-      referralProfit: rmReadEntryNumber(refEl),
-      titleProfit: rmReadEntryNumber(titleEl),
-      note: ''
-    });
+  if (typeof pdSaveEniPerformanceEntry === 'function') {
+    pdSaveEniPerformanceEntry(dateKey, accountId, raw);
+  } else if (typeof pdSaveRevenueAccountEntry === 'function') {
+    pdSaveRevenueAccountEntry(dateKey, 'eni', accountId, raw);
   }
 
   pfCloseEntryModal();
@@ -956,7 +1022,7 @@ function rmCanEditAmountCell(dr, row) {
   if (rmFilter === 'all' || row.isEmpty || row.isTotal) return false;
   if (dr.type === 'accountHead' || dr.type === 'accountFlat') return true;
   if (dr.type === 'accountDetail') {
-    if ((row.projectKey === 'orca' || row.projectKey === 'eni') && dr.detailKey === 'total') return false;
+    if ((row.projectKey === 'orca') && dr.detailKey === 'total') return false;
     return true;
   }
   return false;
@@ -1033,16 +1099,12 @@ function rmGetAccountBreakdown(projectKey, accountId, y, m, d) {
         if (ae) {
           return {
             operationAmount: ae.operationAmount != null ? Number(ae.operationAmount) : null,
-            todayRevenue: ae.todayRevenue != null ? Number(ae.todayRevenue) : null,
-            referralProfit: ae.referralProfit != null ? Number(ae.referralProfit) : null,
-            titleProfit: ae.titleProfit != null ? Number(ae.titleProfit) : null,
-            total: typeof pdEniAccountRevenueTotal === 'function'
-              ? pdEniAccountRevenueTotal(ae)
-              : Math.round((
-                (Number(ae.todayRevenue) || 0) +
-                (Number(ae.referralProfit) || 0) +
-                (Number(ae.titleProfit) || 0)
-              ) * 100) / 100
+            usdtBalance: ae.usdtBalance != null ? Number(ae.usdtBalance) : null,
+            withdrawalAmount: ae.withdrawalAmount != null ? Number(ae.withdrawalAmount) : null,
+            totalPerformance: ae.totalPerformance != null ? Number(ae.totalPerformance) : null,
+            dailyProfit: ae.dailyProfit != null ? Number(ae.dailyProfit)
+              : (typeof pdEniAccountRevenueTotal === 'function' ? pdEniAccountRevenueTotal(ae) : null),
+            dailySales: ae.dailySales != null ? Number(ae.dailySales) : null
           };
         }
       }

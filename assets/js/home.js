@@ -96,7 +96,7 @@ function getRevenueInputProjects() {
 var REVENUE_PROJECT_META = {
   ram: { desc: '銅鉱山／本日の収益', ready: true },
   orca: { desc: '昨日AI利益＋本日AF収益', ready: true },
-  eni: { desc: '決済カード／収益入力', ready: true },
+  eni: { desc: 'USDT残高と総実績から自動計算', ready: true },
   cary: { desc: 'ブロックチェーン／報酬入力', ready: false }
 };
 
