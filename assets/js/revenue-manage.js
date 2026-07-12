@@ -300,6 +300,10 @@ function rmOpenRevenueEntryModal(projectKey, accountId, accountName, dateKey, am
     rmOpenOrcaRevenueEntryModal(accountId, accountName, dateVal);
     return;
   }
+  if (projectKey === 'eni') {
+    rmOpenEniRevenueEntryModal(accountId, accountName, dateVal);
+    return;
+  }
   let projLabel = pfGetProjectLabel(projectKey, RM_PROJECTS);
   let stored = rmReadStoredEntryValues(projectKey, accountId, dateVal);
   let opVal = stored.operationRevenue != null ? stored.operationRevenue : '';
@@ -386,6 +390,96 @@ function rmSaveOrcaRevenueEntry() {
     pdSaveRevenueAccountEntry(dateKey, 'orca', accountId, {
       yesterdayAiProfit: Number(yesterdayEl && yesterdayEl.value) || 0,
       todayAffiliateProfit: Number(affEl && affEl.value) || 0
+    });
+  }
+
+  pfCloseEntryModal();
+  if (typeof showToast === 'function') {
+    showToast('✅ 実績を保存しました');
+  }
+}
+
+function rmOpenEniRevenueEntryModal(accountId, accountName, dateVal) {
+  let stored = rmReadStoredEntryValues('eni', accountId, dateVal);
+  let opVal = stored.operationAmount != null ? stored.operationAmount : '';
+  let revVal = stored.todayRevenue != null ? stored.todayRevenue : '';
+  let refVal = stored.referralProfit != null ? stored.referralProfit : '';
+  let titleVal = stored.titleProfit != null ? stored.titleProfit : '';
+  let totalVal = stored.total != null
+    ? stored.total
+    : (typeof pdEniAccountRevenueTotal === 'function'
+      ? pdEniAccountRevenueTotal({
+        todayRevenue: revVal,
+        referralProfit: refVal,
+        titleProfit: titleVal
+      })
+      : 0);
+  let body =
+    '<input type="hidden" id="rmEntryProjectKey" value="eni">' +
+    '<input type="hidden" id="rmEntryAccountId" value="' + pfEscapeAttr(accountId) + '">' +
+    pfEntryDateField('日付', 'rmEntryDate', dateVal) +
+    pfEntryReadonlyField('プロジェクト', 'ENI') +
+    pfEntryReadonlyField('アカウント', accountName || accountId) +
+    pfEntryNumberField('運用額（$）', 'rmEntryEniOperation', opVal,
+      'ENIの運用額を記録します。合計には含めません。') +
+    pfEntryNumberField('本日収益（$）', 'rmEntryEniRevenue', revVal,
+      '実績入力した本日収益をそのまま記録します。') +
+    pfEntryNumberField('紹介利益（$）', 'rmEntryEniReferral', refVal,
+      '紹介利益を記録します。') +
+    pfEntryNumberField('タイトル利益（$）', 'rmEntryEniTitle', titleVal,
+      'タイトル利益を記録します。') +
+    '<label class="pfEntryLabel">本日のENI合計（$）</label>' +
+    '<input type="text" id="rmEntryEniTotal" class="pfEntryInput pfEntryInput--readonly" value="' +
+    String(typeof money === 'function' ? money(totalVal) : ('$' + totalVal)).replace(/"/g, '&quot;') +
+    '" readonly>';
+  pfOpenEntryModal('実績入力', body, 'rmSaveEniRevenueEntry');
+  ['rmEntryEniRevenue', 'rmEntryEniReferral', 'rmEntryEniTitle'].forEach(function (id) {
+    let el = document.getElementById(id);
+    if (el) el.addEventListener('input', rmUpdateEniEntryModalTotal);
+  });
+}
+
+function rmUpdateEniEntryModalTotal() {
+  let revEl = document.getElementById('rmEntryEniRevenue');
+  let refEl = document.getElementById('rmEntryEniReferral');
+  let titleEl = document.getElementById('rmEntryEniTitle');
+  let totalEl = document.getElementById('rmEntryEniTotal');
+  let payload = {
+    todayRevenue: revEl && revEl.value !== '' ? Number(revEl.value) || 0 : 0,
+    referralProfit: refEl && refEl.value !== '' ? Number(refEl.value) || 0 : 0,
+    titleProfit: titleEl && titleEl.value !== '' ? Number(titleEl.value) || 0 : 0
+  };
+  let total = typeof pdEniAccountRevenueTotal === 'function'
+    ? pdEniAccountRevenueTotal(payload)
+    : Math.round((payload.todayRevenue + payload.referralProfit + payload.titleProfit) * 100) / 100;
+  if (totalEl) {
+    totalEl.value = typeof money === 'function' ? money(total) : ('$' + total);
+  }
+}
+
+function rmSaveEniRevenueEntry() {
+  let dateEl = document.getElementById('rmEntryDate');
+  let accountIdEl = document.getElementById('rmEntryAccountId');
+  let opEl = document.getElementById('rmEntryEniOperation');
+  let revEl = document.getElementById('rmEntryEniRevenue');
+  let refEl = document.getElementById('rmEntryEniReferral');
+  let titleEl = document.getElementById('rmEntryEniTitle');
+  if (!accountIdEl) return;
+
+  let accountId = accountIdEl.value;
+  let dateKey = dateEl && dateEl.value
+    ? dateEl.value
+    : (typeof todayKey === 'function' ? todayKey() : '');
+
+  pfRegisterManageDisplayFromEntry('eni', accountId);
+
+  if (typeof pdSaveRevenueAccountEntry === 'function') {
+    pdSaveRevenueAccountEntry(dateKey, 'eni', accountId, {
+      operationAmount: rmReadEntryNumber(opEl),
+      todayRevenue: rmReadEntryNumber(revEl),
+      referralProfit: rmReadEntryNumber(refEl),
+      titleProfit: rmReadEntryNumber(titleEl),
+      note: ''
     });
   }
 
@@ -655,6 +749,7 @@ function rmGetAccountsForProject(projectKey) {
   if (projectKey === 'ram' && typeof getRamAllRootAccounts === 'function') return getRamAllRootAccounts();
   if (projectKey === 'ram' && typeof getRamInputAccounts === 'function') return getRamInputAccounts();
   if (projectKey === 'orca' && typeof getOrcaInputAccounts === 'function') return getOrcaInputAccounts();
+  if (projectKey === 'eni' && typeof getEniInputAccounts === 'function') return getEniInputAccounts();
   if (projectKey === 'cary' && typeof getCaryInputAccounts === 'function') return getCaryInputAccounts();
   if (projectKey === 'genesis' || projectKey === 'other') return [];
   return [];
@@ -700,6 +795,19 @@ function rmGetAccountDirectAmount(entry, projectKey, accountId, dateKey) {
     if (typeof calcOrcaAccountTotal === 'function') return calcOrcaAccountTotal(ae);
     if (typeof pdOrcaAccountRevenueTotal === 'function') return pdOrcaAccountRevenueTotal(ae);
     return null;
+  }
+  if (projectKey === 'eni') {
+    let ae = typeof getEniAccountEntry === 'function'
+      ? getEniAccountEntry(entry, accountId)
+      : (entry.eniAccounts && entry.eniAccounts[accountId]);
+    if (!ae) return null;
+    if (typeof pdEniAccountRevenueTotal === 'function') return pdEniAccountRevenueTotal(ae);
+    if (typeof eniAccountRevenueTotal === 'function') return eniAccountRevenueTotal(ae);
+    return Math.round((
+      (Number(ae.todayRevenue) || 0) +
+      (Number(ae.referralProfit) || 0) +
+      (Number(ae.titleProfit) || 0)
+    ) * 100) / 100;
   }
   if (projectKey === 'cary' && typeof getCaryAccountEntry === 'function') {
     let ae = getCaryAccountEntry(entry, accountId);
@@ -783,7 +891,7 @@ function rmGetTableRows() {
 }
 
 function rmSupportsAccountDetail(projectKey) {
-  return projectKey === 'ram' || projectKey === 'orca';
+  return projectKey === 'ram' || projectKey === 'orca' || projectKey === 'eni';
 }
 
 function rmAccountExpandKey(projectKey, accountId) {
@@ -829,7 +937,7 @@ function rmCanEditAmountCell(dr, row) {
   if (rmFilter === 'all' || row.isEmpty || row.isTotal) return false;
   if (dr.type === 'accountHead' || dr.type === 'accountFlat') return true;
   if (dr.type === 'accountDetail') {
-    if (row.projectKey === 'orca' && dr.detailKey === 'total') return false;
+    if ((row.projectKey === 'orca' || row.projectKey === 'eni') && dr.detailKey === 'total') return false;
     return true;
   }
   return false;
@@ -858,6 +966,9 @@ function rmGetAccountBreakdown(projectKey, accountId, y, m, d) {
     todayRevenue: null,
     yesterdayAiProfit: null,
     todayAffiliateProfit: null,
+    operationAmount: null,
+    referralProfit: null,
+    titleProfit: null,
     total: null
   };
   try {
@@ -894,6 +1005,26 @@ function rmGetAccountBreakdown(projectKey, accountId, y, m, d) {
         }
         if (ae.todayRevenue != null) {
           return { yesterdayAiProfit: null, todayAffiliateProfit: null, total: Number(ae.todayRevenue) || 0 };
+        }
+      }
+      if (projectKey === 'eni' && entry && entry.eniAccounts && entry.eniAccounts[accountId]) {
+        let ae = typeof getEniAccountEntry === 'function'
+          ? getEniAccountEntry(entry, accountId)
+          : entry.eniAccounts[accountId];
+        if (ae) {
+          return {
+            operationAmount: ae.operationAmount != null ? Number(ae.operationAmount) : null,
+            todayRevenue: ae.todayRevenue != null ? Number(ae.todayRevenue) : null,
+            referralProfit: ae.referralProfit != null ? Number(ae.referralProfit) : null,
+            titleProfit: ae.titleProfit != null ? Number(ae.titleProfit) : null,
+            total: typeof pdEniAccountRevenueTotal === 'function'
+              ? pdEniAccountRevenueTotal(ae)
+              : Math.round((
+                (Number(ae.todayRevenue) || 0) +
+                (Number(ae.referralProfit) || 0) +
+                (Number(ae.titleProfit) || 0)
+              ) * 100) / 100
+          };
         }
       }
     }
@@ -1627,6 +1758,7 @@ if (typeof window !== 'undefined') {
   window.rmToggleAccountDetail = rmToggleAccountDetail;
   window.rmSaveRevenueEntry = rmSaveRevenueEntry;
   window.rmSaveOrcaRevenueEntry = rmSaveOrcaRevenueEntry;
+  window.rmSaveEniRevenueEntry = rmSaveEniRevenueEntry;
   window.rmSaveRevenueEntryDummy = rmSaveRevenueEntryDummy;
 }
 
