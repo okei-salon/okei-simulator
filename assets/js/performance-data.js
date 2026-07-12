@@ -319,6 +319,12 @@ function ensurePerformanceLogs() {
       pdPersist();
     }
   }
+  if (settings.performanceMeta.ramOperatingRepairVersion !== 1) {
+    settings.performanceMeta.ramOperatingRepairVersion = 1;
+    if (pdRepairRamOperatingRecords()) {
+      pdPersist();
+    }
+  }
 }
 
 function pdEnsureInvestmentHistory() {
@@ -401,7 +407,8 @@ function pdMigrateLegacyInvestment(accountId, projectKey) {
   store.records = records.sort(function (a, b) { return a.dateKey.localeCompare(b.dateKey); });
 }
 
-function pdAddInvestmentRecord(accountId, projectKey, dateKey, amount, type) {
+function pdAddInvestmentRecord(accountId, projectKey, dateKey, amount, type, opts) {
+  opts = opts || {};
   amount = Number(amount) || 0;
   if (!accountId || !projectKey || !dateKey || amount <= 0) return;
   let acc = pdGetInvestmentAccount(accountId, projectKey);
@@ -410,10 +417,11 @@ function pdAddInvestmentRecord(accountId, projectKey, dateKey, amount, type) {
   });
   acc.records.push({ dateKey: dateKey, amount: amount, type: type });
   acc.records.sort(function (a, b) { return a.dateKey.localeCompare(b.dateKey); });
-  pdPersist();
+  if (!opts.skipPersist) pdPersist();
 }
 
-function pdRemoveInvestmentRecord(accountId, projectKey, dateKey, type) {
+function pdRemoveInvestmentRecord(accountId, projectKey, dateKey, type, opts) {
+  opts = opts || {};
   if (!accountId || !projectKey || !dateKey) return;
   pdEnsureInvestmentHistory();
   let acc = settings.investmentHistory[accountId];
@@ -422,7 +430,7 @@ function pdRemoveInvestmentRecord(accountId, projectKey, dateKey, type) {
   acc.records = acc.records.filter(function (r) {
     return !(r.dateKey === dateKey && r.type === type);
   });
-  if (acc.records.length !== before) pdPersist();
+  if (acc.records.length !== before && !opts.skipPersist) pdPersist();
 }
 
 function pdGetOperatingUsdAsOf(accountId, projectKey, dateKey) {
@@ -430,10 +438,127 @@ function pdGetOperatingUsdAsOf(accountId, projectKey, dateKey) {
   pdMigrateLegacyInvestment(accountId, projectKey);
   pdEnsureInvestmentHistory();
   let acc = settings.investmentHistory[accountId];
-  if (!acc || !acc.records) return 0;
-  return pdRound(acc.records
+  if (!acc || !acc.records || !acc.records.length) return 0;
+  let eligible = acc.records
     .filter(function (r) { return r.dateKey <= dateKey; })
+    .sort(function (a, b) { return a.dateKey.localeCompare(b.dateKey); });
+  let manualRec = null;
+  for (let i = eligible.length - 1; i >= 0; i--) {
+    if (eligible[i].type === 'manual') {
+      manualRec = eligible[i];
+      break;
+    }
+  }
+  if (manualRec) {
+    let total = Number(manualRec.amount) || 0;
+    eligible.forEach(function (r) {
+      if (r.type === 'additional' && r.dateKey >= manualRec.dateKey) {
+        total += Number(r.amount) || 0;
+      }
+    });
+    return pdRound(total);
+  }
+  return pdRound(eligible
+    .filter(function (r) { return r.type === 'initial' || r.type === 'additional'; })
     .reduce(function (sum, r) { return sum + (Number(r.amount) || 0); }, 0));
+}
+
+function pdGetOperatingBaseBeforeAdditional(accountId, projectKey, dateKey) {
+  let total = pdGetOperatingUsdAsOf(accountId, projectKey, dateKey);
+  let add = pdGetAdditionalInvestmentForDate(accountId, projectKey, dateKey);
+  return pdRound(total - add);
+}
+
+function pdSetManualOperatingAmount(accountId, projectKey, dateKey, baseAmount, opts) {
+  opts = opts || {};
+  baseAmount = pdRound(Number(baseAmount) || 0);
+  if (!accountId || !projectKey || !dateKey) return;
+  let acc = pdGetInvestmentAccount(accountId, projectKey);
+  acc.records = acc.records.filter(function (r) { return r.type !== 'initial'; });
+  acc.records = acc.records.filter(function (r) { return !(r.dateKey === dateKey && r.type === 'manual'); });
+  if (baseAmount > 0) {
+    acc.records.push({ dateKey: dateKey, amount: baseAmount, type: 'manual' });
+  }
+  acc.records.sort(function (a, b) { return a.dateKey.localeCompare(b.dateKey); });
+  if (!opts.skipPersist) pdPersist();
+}
+
+function pdSyncRamMemberInvestment(accountId, dateKey) {
+  if (typeof members === 'undefined') return;
+  let m = members.find(function (x) { return x.id === accountId; });
+  if (!m) return;
+  m.investment = pdGetOperatingUsdAsOf(accountId, 'ram', dateKey);
+}
+
+function pdRecalculateAllRevenueEntries() {
+  ensurePerformanceLogs();
+  Object.keys(settings.revenueLog).forEach(function (dateKey) {
+    settings.revenueLog[dateKey] = pdRecalculateRevenueEntry(settings.revenueLog[dateKey], dateKey);
+  });
+}
+
+function pdRepairRamOperatingRecords() {
+  pdEnsureInvestmentHistory();
+  let fixed = false;
+  Object.keys(settings.investmentHistory).forEach(function (accountId) {
+    let acc = settings.investmentHistory[accountId];
+    if (!acc || acc.projectKey !== 'ram' || !acc.records || !acc.records.length) return;
+    if (acc.records.some(function (r) { return r.type === 'manual'; })) return;
+    let initials = acc.records.filter(function (r) { return r.type === 'initial'; });
+    if (initials.length <= 1) return;
+    let legacy = pdGetLegacyBaseInvestment(accountId, 'ram');
+    let target = legacy > 0 ? legacy : Number(initials[0].amount) || 0;
+    if (pdIsKai2RamAccount(accountId)) target = legacy > 0 ? legacy : 300;
+    let earliest = initials.map(function (r) { return r.dateKey; }).sort()[0];
+    acc.records = acc.records.filter(function (r) { return r.type !== 'initial'; });
+    acc.records.push({ dateKey: earliest, amount: target, type: 'manual' });
+    acc.records.sort(function (a, b) { return a.dateKey.localeCompare(b.dateKey); });
+    fixed = true;
+  });
+  if (fixed) {
+    let dateKey = typeof todayKey === 'function' ? todayKey() : '';
+    Object.keys(settings.investmentHistory).forEach(function (accountId) {
+      let acc = settings.investmentHistory[accountId];
+      if (acc && acc.projectKey === 'ram') pdSyncRamMemberInvestment(accountId, dateKey);
+    });
+    pdRecalculateAllRevenueEntries();
+  }
+  return fixed;
+}
+
+function pdSyncRamSaveOperatingFromForm(ramOperating, ramAccounts, dateKey) {
+  if (!dateKey) return;
+  let ids = {};
+  if (ramOperating) Object.keys(ramOperating).forEach(function (id) { ids[id] = true; });
+  if (ramAccounts) Object.keys(ramAccounts).forEach(function (id) { ids[id] = true; });
+  let changed = false;
+  Object.keys(ids).forEach(function (id) {
+    let addInv = ramAccounts && ramAccounts[id] != null
+      ? Number(ramAccounts[id].addInvestment) || 0
+      : pdGetAdditionalInvestmentForDate(id, 'ram', dateKey);
+    if (ramOperating && ramOperating[id] != null && ramOperating[id] !== '') {
+      let finalOp = Number(ramOperating[id]) || 0;
+      let currentTotal = pdGetOperatingUsdAsOf(id, 'ram', dateKey);
+      if (Math.abs(finalOp - currentTotal) > 0.001) {
+        pdSetManualOperatingAmount(id, 'ram', dateKey, finalOp - addInv, { skipPersist: true });
+        changed = true;
+      }
+    }
+    if (ramAccounts && ramAccounts[id] != null) {
+      let add = Number(ramAccounts[id].addInvestment) || 0;
+      if (add > 0) {
+        pdAddInvestmentRecord(id, 'ram', dateKey, add, 'additional', { skipPersist: true });
+      } else {
+        pdRemoveInvestmentRecord(id, 'ram', dateKey, 'additional', { skipPersist: true });
+      }
+      changed = true;
+    }
+  });
+  if (changed) {
+    Object.keys(ids).forEach(function (id) { pdSyncRamMemberInvestment(id, dateKey); });
+    pdRecalculateAllRevenueEntries();
+    pdPersist();
+  }
 }
 
 function pdGetAdditionalInvestmentForDate(accountId, projectKey, dateKey) {
@@ -493,7 +618,11 @@ function pdGetProjectOperatingUsd(projectKey, dateKey) {
   return pdRound(total);
 }
 
-function pdSyncRamSaveInvestments(ramAccounts, dateKey) {
+function pdSyncRamSaveInvestments(ramAccounts, dateKey, ramOperating) {
+  if (typeof pdSyncRamSaveOperatingFromForm === 'function') {
+    pdSyncRamSaveOperatingFromForm(ramOperating, ramAccounts, dateKey);
+    return;
+  }
   if (!ramAccounts || !dateKey) return;
   Object.keys(ramAccounts).forEach(function (id) {
     let add = Number(ramAccounts[id].addInvestment) || 0;
@@ -522,12 +651,17 @@ function pdRamAccountRevenueTotal(ae, accountId, dateKey) {
   return pdRound(op + rev);
 }
 
-function pdPreviewRamAccountRevenueTotal(accountId, todayRevenue, addInvestment, dateKey) {
+function pdPreviewRamAccountRevenueTotal(accountId, todayRevenue, addInvestment, dateKey, operatingOverride) {
   let rev = Number(todayRevenue) || 0;
-  let base = pdGetOperatingUsdAsOf(accountId, 'ram', dateKey);
   let storedAdd = pdGetAdditionalInvestmentForDate(accountId, 'ram', dateKey);
   let pendingAdd = addInvestment != null ? Number(addInvestment) || 0 : storedAdd;
-  let operating = base - storedAdd + pendingAdd;
+  let operating;
+  if (operatingOverride != null && operatingOverride !== '' && !isNaN(Number(operatingOverride))) {
+    operating = Number(operatingOverride) || 0;
+  } else {
+    let base = pdGetOperatingUsdAsOf(accountId, 'ram', dateKey);
+    operating = base - storedAdd + pendingAdd;
+  }
   let op = typeof calcRamOperatingProfit === 'function' ? calcRamOperatingProfit(operating) : 0;
   return pdRound(op + rev);
 }
@@ -2097,6 +2231,11 @@ if (typeof window !== 'undefined') {
   window.pdGetRevenueEntryRaw = pdGetRevenueEntryRaw;
   window.pdGetSalesEntryRaw = pdGetSalesEntryRaw;
   window.pdGetOperatingUsdAsOf = pdGetOperatingUsdAsOf;
+  window.pdGetOperatingBaseBeforeAdditional = pdGetOperatingBaseBeforeAdditional;
+  window.pdSetManualOperatingAmount = pdSetManualOperatingAmount;
+  window.pdSyncRamSaveOperatingFromForm = pdSyncRamSaveOperatingFromForm;
+  window.pdRecalculateAllRevenueEntries = pdRecalculateAllRevenueEntries;
+  window.pdRepairRamOperatingRecords = pdRepairRamOperatingRecords;
   window.pdGetProjectOperatingUsd = pdGetProjectOperatingUsd;
   window.pdCalcDailyOperation = pdCalcDailyOperation;
   window.pdAddInvestmentRecord = pdAddInvestmentRecord;

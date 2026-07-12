@@ -16,7 +16,8 @@
     "embed:orca-hub": "python3 tools/hub_embed_orca_org.py",
     "verify:hub-restore": "node scripts/verify-restore-hub.mjs",
     "verify:eni-optin": "node scripts/verify-eni-optin.mjs",
-    "verify:hub-sync": "node scripts/verify-hub-sync-merge.mjs"
+    "verify:hub-sync": "node scripts/verify-hub-sync-merge.mjs",
+    "verify:ram-operating": "node scripts/verify-ram-operating.mjs"
   },
   "devDependencies": {
     "firebase-tools": "^13.29.1"

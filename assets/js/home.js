@@ -246,6 +246,62 @@ function calcRamEffectiveInvestment(baseInvestment, addInvestment) {
   return (Number(baseInvestment) || 0) + (add > 0 ? add : 0);
 }
 
+var ramOperatingManualOverride = {};
+
+function getRamEffectiveOperatingFromForm(accountId, dateKey) {
+  let opEl = document.getElementById('ramOp_' + accountId);
+  if (opEl && opEl.value !== '' && !isNaN(Number(opEl.value))) {
+    return Number(opEl.value) || 0;
+  }
+  let addEl = document.getElementById('ramAddInv_' + accountId);
+  let add = addEl && addEl.value !== '' ? Number(addEl.value) || 0 : 0;
+  if (typeof pdGetOperatingBaseBeforeAdditional === 'function') {
+    return pdGetOperatingBaseBeforeAdditional(accountId, 'ram', dateKey) + add;
+  }
+  if (typeof pdGetOperatingUsdAsOf === 'function') {
+    let storedAdd = typeof pdGetAdditionalInvestmentForDate === 'function'
+      ? pdGetAdditionalInvestmentForDate(accountId, 'ram', dateKey)
+      : 0;
+    return pdGetOperatingUsdAsOf(accountId, 'ram', dateKey) - storedAdd + add;
+  }
+  return add;
+}
+
+function collectRamOperatingFromForm() {
+  let out = {};
+  getRamInputAccounts().forEach(function (acc) {
+    let el = document.getElementById('ramOp_' + acc.id);
+    if (el && el.value !== '' && !isNaN(Number(el.value))) {
+      out[acc.id] = Number(el.value);
+    }
+  });
+  return out;
+}
+
+function hasRamOperatingChange(ramOperating, dateKey) {
+  if (!ramOperating) return false;
+  return getRamInputAccounts().some(function (acc) {
+    let next = ramOperating[acc.id];
+    if (next == null || isNaN(Number(next))) return false;
+    let prev = typeof pdGetOperatingUsdAsOf === 'function'
+      ? pdGetOperatingUsdAsOf(acc.id, 'ram', dateKey)
+      : acc.investment;
+    return Math.abs(Number(next) - Number(prev)) > 0.001;
+  });
+}
+
+function hasRamAddInvestmentChange(ramAccounts, dateKey) {
+  if (!ramAccounts) return false;
+  return getRamInputAccounts().some(function (acc) {
+    let next = ramAccounts[acc.id];
+    if (!next) return false;
+    let prev = typeof pdGetAdditionalInvestmentForDate === 'function'
+      ? pdGetAdditionalInvestmentForDate(acc.id, 'ram', dateKey)
+      : 0;
+    return (Number(next.addInvestment) || 0) !== prev;
+  });
+}
+
 function normalizeRamRevenueNumber(val) {
   if (val === null || val === undefined || val === '') return null;
   let n = Number(val);
@@ -391,6 +447,14 @@ function ramInputDiffersFromSaved(collected, existing) {
       let prevAdd = typeof pdGetAdditionalInvestmentForDate === 'function'
         ? pdGetAdditionalInvestmentForDate(acc.id, 'ram', todayKey())
         : (prev ? Number(prev.addInvestment) || 0 : 0);
+      let nextOpEl = document.getElementById('ramOp_' + acc.id);
+      let nextOp = nextOpEl && nextOpEl.value !== '' && !isNaN(Number(nextOpEl.value))
+        ? Number(nextOpEl.value)
+        : null;
+      let prevOp = typeof pdGetOperatingUsdAsOf === 'function'
+        ? pdGetOperatingUsdAsOf(acc.id, 'ram', todayKey())
+        : acc.investment;
+      if (nextOp != null && Math.abs(nextOp - prevOp) > 0.001) return true;
       if (!(isNaN(nextRev) && isNaN(prevRev))) {
         if (isNaN(nextRev) !== isNaN(prevRev)) return true;
         if (nextRev !== prevRev) return true;
@@ -422,6 +486,7 @@ function collectRamInputFromForm() {
   let ramAccounts = {};
   let totalRam = 0;
   let dateKey = todayKey();
+  let ramOperating = collectRamOperatingFromForm();
 
   accounts.forEach(function (acc) {
     let revEl = document.getElementById('ramTodayRev_' + acc.id);
@@ -431,12 +496,13 @@ function collectRamInputFromForm() {
       ? pdGetAdditionalInvestmentForDate(acc.id, 'ram', dateKey)
       : (prev ? prev.addInvestment : 0);
     let addInvestment = addEl && addEl.value !== '' ? Number(addEl.value) || 0 : prevAdd;
+    let operatingOverride = ramOperating[acc.id];
     let hasInput = revEl && revEl.value !== '' && !isNaN(Number(revEl.value));
     if (hasInput) {
       let todayRevenue = Number(revEl.value) || 0;
       ramAccounts[acc.id] = { todayRevenue: todayRevenue, addInvestment: addInvestment };
       if (typeof pdPreviewRamAccountRevenueTotal === 'function') {
-        totalRam += pdPreviewRamAccountRevenueTotal(acc.id, todayRevenue, addInvestment, dateKey);
+        totalRam += pdPreviewRamAccountRevenueTotal(acc.id, todayRevenue, addInvestment, dateKey, operatingOverride);
       } else if (typeof pdRamAccountRevenueTotal === 'function') {
         totalRam += pdRamAccountRevenueTotal(ramAccounts[acc.id], acc.id, dateKey);
       } else {
@@ -448,25 +514,33 @@ function collectRamInputFromForm() {
         addInvestment: addInvestment
       };
       if (typeof pdPreviewRamAccountRevenueTotal === 'function') {
-        totalRam += pdPreviewRamAccountRevenueTotal(acc.id, prev.todayRevenue, addInvestment, dateKey);
+        totalRam += pdPreviewRamAccountRevenueTotal(acc.id, prev.todayRevenue, addInvestment, dateKey, operatingOverride);
       } else if (typeof pdRamAccountRevenueTotal === 'function') {
         totalRam += pdRamAccountRevenueTotal(ramAccounts[acc.id], acc.id, dateKey);
       } else {
         totalRam += prev.todayRevenue;
       }
+    } else if (addInvestment !== prevAdd) {
+      ramAccounts[acc.id] = { addInvestment: addInvestment };
     }
   });
 
-  return { ramAccounts: ramAccounts, totalRam: totalRam, ramSales: collectRamSalesFromForm() };
+  return { ramAccounts: ramAccounts, totalRam: totalRam, ramSales: collectRamSalesFromForm(), ramOperating: ramOperating };
 }
 
-function persistRamRevenueEntry(ramAccounts, totalRam) {
+function persistRamRevenueEntry(ramAccounts, totalRam, ramOperating) {
   let dateKey = todayKey();
   if (typeof pdSyncRamSaveInvestments === 'function') {
-    pdSyncRamSaveInvestments(ramAccounts, dateKey);
+    pdSyncRamSaveInvestments(ramAccounts, dateKey, ramOperating);
   }
   let existing = getRevenueEntry(dateKey) || {};
   let normalizedAccounts = normalizeRamAccountsMap(ramAccounts);
+  if (!Object.keys(normalizedAccounts).length) {
+    if (typeof pdNotifyPerformanceChanged === 'function') {
+      pdNotifyPerformanceChanged({ type: 'revenue', dateKey: dateKey });
+    }
+    return;
+  }
   if (typeof pdMergeRevenueEntry === 'function') {
     pdMergeRevenueEntry(dateKey, {
       ramAccounts: normalizedAccounts,
@@ -499,11 +573,27 @@ function escapeHtml(text) {
 }
 
 function bindRamInputListeners() {
+  ramOperatingManualOverride = {};
   getRamInputAccounts().forEach(function (acc) {
+    let opEl = document.getElementById('ramOp_' + acc.id);
     let addEl = document.getElementById('ramAddInv_' + acc.id);
     let salesEl = document.getElementById('ramTotalSales_' + acc.id);
+    if (opEl) {
+      opEl.addEventListener('input', function () {
+        ramOperatingManualOverride[acc.id] = true;
+        updateRamInputDerived(acc.id);
+      });
+    }
     if (addEl) {
       addEl.addEventListener('input', function () {
+        if (!ramOperatingManualOverride[acc.id] && opEl) {
+          let dateKey = todayKey();
+          let base = typeof pdGetOperatingBaseBeforeAdditional === 'function'
+            ? pdGetOperatingBaseBeforeAdditional(acc.id, 'ram', dateKey)
+            : (typeof pdGetOperatingUsdAsOf === 'function' ? pdGetOperatingUsdAsOf(acc.id, 'ram', dateKey) : acc.investment);
+          let add = addEl.value !== '' ? Number(addEl.value) || 0 : 0;
+          opEl.value = String(base + add);
+        }
         updateRamInputDerived(acc.id);
       });
     }
@@ -530,23 +620,10 @@ function updateRamSalesDerived(accountId) {
 function updateRamInputDerived(accountId) {
   let acc = getRamInputAccounts().find(function (a) { return a.id === accountId; });
   if (!acc) return;
-  let addEl = document.getElementById('ramAddInv_' + accountId);
-  let addRaw = addEl ? String(addEl.value).trim() : '';
-  let add = addRaw !== '' ? Number(addRaw) || 0 : 0;
   let dateKey = todayKey();
-  let previewOperating = typeof calcRamEffectiveInvestment === 'function'
-    ? calcRamEffectiveInvestment(
-      typeof pdGetOperatingUsdAsOf === 'function' ? pdGetOperatingUsdAsOf(acc.id, 'ram', dateKey) : acc.investment,
-      add
-    )
-    : acc.investment + add;
-  let effectiveInv = typeof pdGetOperatingUsdAsOf === 'function'
-    ? pdGetOperatingUsdAsOf(acc.id, 'ram', dateKey) + add
-    : previewOperating;
-  let invEl = document.getElementById('ramInv_' + accountId);
+  let effectiveInv = getRamEffectiveOperatingFromForm(accountId, dateKey);
   let rateEl = document.getElementById('ramRate_' + accountId);
   let profitEl = document.getElementById('ramProfit_' + accountId);
-  if (invEl) invEl.textContent = num(effectiveInv) + 'ドル';
   if (rateEl) rateEl.textContent = formatDailyRateLabel(effectiveInv);
   if (profitEl) profitEl.textContent = money(calcRamOperatingProfit(effectiveInv));
 }
@@ -640,7 +717,7 @@ function renderRamInputAccountCard(acc, existing) {
     '</div>' +
     '<div class="ramInputRows">' +
     '<div class="ramInputRow ramInputRow--readonly"><span class="ramInputLabel">ユーザー名</span><span class="ramInputVal">' + escapeHtml(acc.username) + '</span></div>' +
-    '<div class="ramInputRow ramInputRow--readonly"><span class="ramInputLabel">現在運用額</span><span class="ramInputVal" id="ramInv_' + acc.id + '">' + num(effectiveInv) + 'ドル</span></div>' +
+    '<div class="ramInputRow"><span class="ramInputLabel">現在運用額</span><div class="ramInputField"><input type="number" step="1" min="0" id="ramOp_' + acc.id + '" class="ramInputOptional" inputmode="decimal" placeholder="0" value="' + effectiveInv + '"><span class="ramInputUnit">ドル</span><span class="ramInputHint">誤りがあれば修正して保存</span></div></div>' +
     '<div class="ramInputRow ramInputRow--readonly"><span class="ramInputLabel">日利</span><span class="ramInputVal" id="ramRate_' + acc.id + '">' + formatDailyRateLabel(effectiveInv) + '</span></div>' +
     '<div class="ramInputRow"><span class="ramInputLabel">追加投資額</span><div class="ramInputField"><input type="number" step="1" min="0" id="ramAddInv_' + acc.id + '" class="ramInputOptional" placeholder="0" value="' + addInv + '"><span class="ramInputUnit">ドル</span><span class="ramInputHint">追加投資があった時のみ入力</span></div></div>' +
     '<div class="ramInputRow ramInputRow--readonly"><span class="ramInputLabel">運用</span><span class="ramInputVal ramInputVal--gold" id="ramProfit_' + acc.id + '">' + money(calcRamOperatingProfit(effectiveInv)) + '</span></div>' +
@@ -1620,7 +1697,7 @@ function openRamRevenueInput() {
 
   modalContent.innerHTML =
     renderRamInputProgress(existing) +
-    '<p class="help ramInputLead">毎日入力するのは「本日収益」と「総売上」です。総売上と前回保存値の差額が本日売上として自動反映されます。</p>' +
+    '<p class="help ramInputLead">「現在運用額」は誤りがあれば修正できます。追加投資があった日は「追加投資額」を入力すると運用額に自動加算されます。毎日入力するのは「本日収益」と「総売上」です。</p>' +
     '<div class="ramInputList">' + cards + '</div>' +
     renderRamInputFooter();
 
@@ -1649,8 +1726,8 @@ function refreshHomeAfterRevenueSave() {
 }
 
 function executeRamSave(collected) {
-  if (collected.ramAccounts && Object.keys(collected.ramAccounts).length) {
-    persistRamRevenueEntry(collected.ramAccounts, collected.totalRam);
+  if (collected.ramAccounts || collected.ramOperating) {
+    persistRamRevenueEntry(collected.ramAccounts || {}, collected.totalRam || 0, collected.ramOperating);
   }
   if (collected.ramSales && Object.keys(collected.ramSales).length) {
     persistRamSalesFromTotals(collected.ramSales, todayKey());
@@ -1738,10 +1815,15 @@ function confirmRamOverwriteSave() {
 
 function saveTodayRevenue() {
   let collected = collectRamInputFromForm();
-  let hasRevenue = Object.keys(collected.ramAccounts).length;
+  let hasRevenue = Object.keys(collected.ramAccounts).some(function (id) {
+    let a = collected.ramAccounts[id];
+    return a && a.todayRevenue != null && a.todayRevenue !== '';
+  });
   let hasSales = collected.ramSales && Object.keys(collected.ramSales).length;
-  if (!hasRevenue && !hasSales) {
-    alert('保存する内容がありません。「本日収益」または「総売上」を入力してください。');
+  let hasOperating = hasRamOperatingChange(collected.ramOperating || {}, todayKey());
+  let hasAddInvestment = hasRamAddInvestmentChange(collected.ramAccounts, todayKey());
+  if (!hasRevenue && !hasSales && !hasOperating && !hasAddInvestment) {
+    alert('保存する内容がありません。「現在運用額」「本日収益」または「総売上」を入力してください。');
     return;
   }
   let dateKey = todayKey();
