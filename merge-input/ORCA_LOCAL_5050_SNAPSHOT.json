@@ -1,0 +1,945 @@
+{
+  "ok": true,
+  "uid": "HLoBjIRi7Wgt14crc82ey613Njy1",
+  "storageKey": "oukei_hub_v15_data:HLoBjIRi7Wgt14crc82ey613Njy1",
+  "exportedAt": "2026-07-12T12:41:03.177Z",
+  "orcaInputAccounts": [
+    {
+      "id": "orca_1783005565893",
+      "username": "kai1",
+      "name": "kai1",
+      "investment": 1000
+    },
+    {
+      "id": "orca_1783005577176",
+      "username": "kai2",
+      "name": "kai2",
+      "investment": 100
+    }
+  ],
+  "revenueLogOrcaOnly": {
+    "2026-06-07": {
+      "orcaAccounts": {
+        "orca_1783005565893": {
+          "importSource": "orca",
+          "todayAffiliateProfit": 0,
+          "yesterdayAiProfit": 4.1545
+        }
+      },
+      "orca": 4.15,
+      "accountsOrca": {
+        "orca_1783005565893": {
+          "operationRevenue": 0,
+          "todayRevenue": 4.1545,
+          "projectKey": "orca"
+        }
+      }
+    },
+    "2026-06-08": {
+      "orcaAccounts": {
+        "orca_1783005565893": {
+          "importSource": "orca",
+          "todayAffiliateProfit": 0,
+          "yesterdayAiProfit": 11.2019
+        }
+      },
+      "orca": 11.2,
+      "accountsOrca": {
+        "orca_1783005565893": {
+          "operationRevenue": 0,
+          "todayRevenue": 11.2019,
+          "projectKey": "orca"
+        }
+      }
+    },
+    "2026-06-09": {
+      "orcaAccounts": {
+        "orca_1783005565893": {
+          "yesterdayAiProfit": 7.2154,
+          "todayAffiliateProfit": 0,
+          "importSource": "orca"
+        }
+      },
+      "orca": 7.22,
+      "accountsOrca": {
+        "orca_1783005565893": {
+          "todayRevenue": 7.2154,
+          "operationRevenue": 0,
+          "projectKey": "orca"
+        }
+      }
+    },
+    "2026-06-10": {
+      "orcaAccounts": {
+        "orca_1783005565893": {
+          "importSource": "orca",
+          "todayAffiliateProfit": 0,
+          "yesterdayAiProfit": 5.4671
+        }
+      },
+      "orca": 5.47,
+      "accountsOrca": {
+        "orca_1783005565893": {
+          "projectKey": "orca",
+          "operationRevenue": 0,
+          "todayRevenue": 5.4671
+        }
+      }
+    },
+    "2026-06-11": {
+      "orcaAccounts": {
+        "orca_1783005565893": {
+          "importSource": "orca",
+          "yesterdayAiProfit": 10.9236,
+          "todayAffiliateProfit": 0
+        }
+      },
+      "orca": 10.92,
+      "accountsOrca": {
+        "orca_1783005565893": {
+          "todayRevenue": 10.9236,
+          "operationRevenue": 0,
+          "projectKey": "orca"
+        }
+      }
+    },
+    "2026-06-12": {
+      "orcaAccounts": {
+        "orca_1783005565893": {
+          "importSource": "orca",
+          "todayAffiliateProfit": 0,
+          "yesterdayAiProfit": 7.7177
+        }
+      },
+      "orca": 7.72,
+      "accountsOrca": {
+        "orca_1783005565893": {
+          "todayRevenue": 7.7177,
+          "operationRevenue": 0,
+          "projectKey": "orca"
+        }
+      }
+    },
+    "2026-06-13": {
+      "orcaAccounts": {
+        "orca_1783005565893": {
+          "yesterdayAiProfit": 8.1901,
+          "todayAffiliateProfit": 0,
+          "importSource": "orca"
+        }
+      },
+      "orca": 8.19,
+      "accountsOrca": {
+        "orca_1783005565893": {
+          "todayRevenue": 8.1901,
+          "operationRevenue": 0,
+          "projectKey": "orca"
+        }
+      }
+    },
+    "2026-06-14": {
+      "orcaAccounts": {
+        "orca_1783005577176": {
+          "importSource": "orca",
+          "yesterdayAiProfit": 0.3827,
+          "todayAffiliateProfit": 0
+        },
+        "orca_1783005565893": {
+          "importSource": "orca",
+          "todayAffiliateProfit": 0,
+          "yesterdayAiProfit": 7.6476
+        }
+      },
+      "orca": 8.03,
+      "accountsOrca": {
+        "orca_1783005577176": {
+          "operationRevenue": 0,
+          "todayRevenue": 0.3827,
+          "projectKey": "orca"
+        },
+        "orca_1783005565893": {
+          "projectKey": "orca",
+          "todayRevenue": 7.6476,
+          "operationRevenue": 0
+        }
+      }
+    },
+    "2026-06-15": {
+      "orcaAccounts": {
+        "orca_1783005577176": {
+          "importSource": "orca",
+          "todayAffiliateProfit": 0,
+          "yesterdayAiProfit": 0.2925
+        },
+        "orca_1783005565893": {
+          "yesterdayAiProfit": 6.3753,
+          "todayAffiliateProfit": 0,
+          "importSource": "orca"
+        }
+      },
+      "orca": 6.67,
+      "accountsOrca": {
+        "orca_1783005565893": {
+          "projectKey": "orca",
+          "operationRevenue": 0,
+          "todayRevenue": 6.3753
+        },
+        "orca_1783005577176": {
+          "projectKey": "orca",
+          "operationRevenue": 0,
+          "todayRevenue": 0.2925
+        }
+      }
+    },
+    "2026-06-16": {
+      "orcaAccounts": {
+        "orca_1783005565893": {
+          "importSource": "orca",
+          "todayAffiliateProfit": 1.396,
+          "yesterdayAiProfit": 9.4623
+        },
+        "orca_1783005577176": {
+          "importSource": "orca",
+          "todayAffiliateProfit": 0.1315,
+          "yesterdayAiProfit": 0.4654
+        }
+      },
+      "orca": 11.46,
+      "accountsOrca": {
+        "orca_1783005577176": {
+          "projectKey": "orca",
+          "todayRevenue": 0.5969,
+          "operationRevenue": 0
+        },
+        "orca_1783005565893": {
+          "operationRevenue": 0,
+          "todayRevenue": 10.8583,
+          "projectKey": "orca"
+        }
+      }
+    },
+    "2026-06-17": {
+      "orcaAccounts": {
+        "orca_1783005577176": {
+          "importSource": "orca",
+          "todayAffiliateProfit": 0.1463,
+          "yesterdayAiProfit": 0.3782
+        },
+        "orca_1783005565893": {
+          "importSource": "orca",
+          "yesterdayAiProfit": 8.26,
+          "todayAffiliateProfit": 1.424
+        }
+      },
+      "orca": 10.21,
+      "accountsOrca": {
+        "orca_1783005577176": {
+          "projectKey": "orca",
+          "todayRevenue": 0.5245,
+          "operationRevenue": 0
+        },
+        "orca_1783005565893": {
+          "projectKey": "orca",
+          "operationRevenue": 0,
+          "todayRevenue": 9.684
+        }
+      }
+    },
+    "2026-06-18": {
+      "orcaAccounts": {
+        "orca_1783005565893": {
+          "importSource": "orca",
+          "todayAffiliateProfit": 1.448,
+          "yesterdayAiProfit": 7.5776
+        },
+        "orca_1783005577176": {
+          "importSource": "orca",
+          "yesterdayAiProfit": 0.4052,
+          "todayAffiliateProfit": 0.1386
+        }
+      },
+      "orca": 9.57,
+      "accountsOrca": {
+        "orca_1783005565893": {
+          "todayRevenue": 9.0256,
+          "operationRevenue": 0,
+          "projectKey": "orca"
+        },
+        "orca_1783005577176": {
+          "projectKey": "orca",
+          "operationRevenue": 0,
+          "todayRevenue": 0.5438
+        }
+      }
+    },
+    "2026-06-19": {
+      "orcaAccounts": {
+        "orca_1783005565893": {
+          "todayAffiliateProfit": 1.406,
+          "yesterdayAiProfit": 7.9627,
+          "importSource": "orca"
+        },
+        "orca_1783005577176": {
+          "todayAffiliateProfit": 0.1485,
+          "yesterdayAiProfit": 0.3661,
+          "importSource": "orca"
+        }
+      },
+      "orca": 9.88,
+      "accountsOrca": {
+        "orca_1783005577176": {
+          "projectKey": "orca",
+          "todayRevenue": 0.5146,
+          "operationRevenue": 0
+        },
+        "orca_1783005565893": {
+          "operationRevenue": 0,
+          "todayRevenue": 9.3687,
+          "projectKey": "orca"
+        }
+      }
+    },
+    "2026-06-20": {
+      "orcaAccounts": {
+        "orca_1783005565893": {
+          "todayAffiliateProfit": 51.398,
+          "yesterdayAiProfit": 7.8575,
+          "importSource": "orca"
+        },
+        "orca_1783005577176": {
+          "yesterdayAiProfit": 0.3871,
+          "todayAffiliateProfit": 0.1342,
+          "importSource": "orca"
+        }
+      },
+      "orca": 59.78,
+      "accountsOrca": {
+        "orca_1783005577176": {
+          "projectKey": "orca",
+          "todayRevenue": 0.5213,
+          "operationRevenue": 0
+        },
+        "orca_1783005565893": {
+          "operationRevenue": 0,
+          "todayRevenue": 59.2555,
+          "projectKey": "orca"
+        }
+      }
+    },
+    "2026-06-21": {
+      "orcaAccounts": {
+        "orca_1783005565893": {
+          "importSource": "orca",
+          "yesterdayAiProfit": 7.0859,
+          "todayAffiliateProfit": 2.446
+        },
+        "orca_1783005577176": {
+          "todayAffiliateProfit": 0.1419,
+          "yesterdayAiProfit": 0.3947,
+          "importSource": "orca"
+        }
+      },
+      "orca": 10.07,
+      "accountsOrca": {
+        "orca_1783005577176": {
+          "operationRevenue": 0,
+          "todayRevenue": 0.5366,
+          "projectKey": "orca"
+        },
+        "orca_1783005565893": {
+          "todayRevenue": 9.5319,
+          "operationRevenue": 0,
+          "projectKey": "orca"
+        }
+      }
+    },
+    "2026-06-22": {
+      "orcaAccounts": {
+        "orca_1783005577176": {
+          "yesterdayAiProfit": 0.3706,
+          "todayAffiliateProfit": 0.1447,
+          "importSource": "orca"
+        },
+        "orca_1783005565893": {
+          "yesterdayAiProfit": 8.6819,
+          "todayAffiliateProfit": 2.504,
+          "importSource": "orca"
+        }
+      },
+      "orca": 11.7,
+      "accountsOrca": {
+        "orca_1783005577176": {
+          "projectKey": "orca",
+          "todayRevenue": 0.5153,
+          "operationRevenue": 0
+        },
+        "orca_1783005565893": {
+          "projectKey": "orca",
+          "operationRevenue": 0,
+          "todayRevenue": 11.1859
+        }
+      }
+    },
+    "2026-06-23": {
+      "orcaAccounts": {
+        "orca_1783005565893": {
+          "yesterdayAiProfit": 7.9102,
+          "todayAffiliateProfit": 2.358,
+          "importSource": "orca"
+        },
+        "orca_1783005577176": {
+          "importSource": "orca",
+          "todayAffiliateProfit": 0.1359,
+          "yesterdayAiProfit": 0.4081
+        }
+      },
+      "orca": 10.81,
+      "accountsOrca": {
+        "orca_1783005577176": {
+          "projectKey": "orca",
+          "operationRevenue": 0,
+          "todayRevenue": 0.544
+        },
+        "orca_1783005565893": {
+          "projectKey": "orca",
+          "todayRevenue": 10.2682,
+          "operationRevenue": 0
+        }
+      }
+    },
+    "2026-06-24": {
+      "orcaAccounts": {
+        "orca_1783005577176": {
+          "yesterdayAiProfit": 0.3767,
+          "todayAffiliateProfit": 0.1496,
+          "importSource": "orca"
+        },
+        "orca_1783005565893": {
+          "yesterdayAiProfit": 7.77,
+          "todayAffiliateProfit": 2.536,
+          "importSource": "orca"
+        }
+      },
+      "orca": 10.83,
+      "accountsOrca": {
+        "orca_1783005577176": {
+          "projectKey": "orca",
+          "todayRevenue": 0.5263,
+          "operationRevenue": 0
+        },
+        "orca_1783005565893": {
+          "projectKey": "orca",
+          "todayRevenue": 10.306,
+          "operationRevenue": 0
+        }
+      }
+    },
+    "2026-06-25": {
+      "orcaAccounts": {
+        "orca_1783005565893": {
+          "yesterdayAiProfit": 8.1726,
+          "todayAffiliateProfit": 2.394,
+          "importSource": "orca"
+        },
+        "orca_1783005577176": {
+          "todayAffiliateProfit": 0.1381,
+          "yesterdayAiProfit": 0.3886,
+          "importSource": "orca"
+        }
+      },
+      "orca": 11.09,
+      "accountsOrca": {
+        "orca_1783005565893": {
+          "operationRevenue": 0,
+          "todayRevenue": 10.5666,
+          "projectKey": "orca"
+        },
+        "orca_1783005577176": {
+          "todayRevenue": 0.5267,
+          "operationRevenue": 0,
+          "projectKey": "orca"
+        }
+      }
+    },
+    "2026-06-26": {
+      "orcaAccounts": {
+        "orca_1783005577176": {
+          "importSource": "orca",
+          "yesterdayAiProfit": 0.4021,
+          "todayAffiliateProfit": 0.1425
+        },
+        "orca_1783005565893": {
+          "importSource": "orca",
+          "todayAffiliateProfit": 2.488,
+          "yesterdayAiProfit": 7.5427
+        }
+      },
+      "orca": 10.58,
+      "accountsOrca": {
+        "orca_1783005577176": {
+          "operationRevenue": 0,
+          "todayRevenue": 0.5446,
+          "projectKey": "orca"
+        },
+        "orca_1783005565893": {
+          "projectKey": "orca",
+          "operationRevenue": 0,
+          "todayRevenue": 10.0307
+        }
+      }
+    },
+    "2026-06-27": {
+      "orcaAccounts": {
+        "orca_1783005565893": {
+          "importSource": "orca",
+          "yesterdayAiProfit": 8.0151,
+          "todayAffiliateProfit": 2.47
+        },
+        "orca_1783005577176": {
+          "yesterdayAiProfit": 0.3647,
+          "todayAffiliateProfit": 0.1474,
+          "importSource": "orca"
+        }
+      },
+      "orca": 11,
+      "accountsOrca": {
+        "orca_1783005565893": {
+          "projectKey": "orca",
+          "operationRevenue": 0,
+          "todayRevenue": 10.4851
+        },
+        "orca_1783005577176": {
+          "todayRevenue": 0.5121,
+          "operationRevenue": 0,
+          "projectKey": "orca"
+        }
+      }
+    },
+    "2026-06-28": {
+      "orcaAccounts": {
+        "orca_1783005565893": {
+          "todayAffiliateProfit": 2.374,
+          "yesterdayAiProfit": 7.8227,
+          "importSource": "orca"
+        },
+        "orca_1783005577176": {
+          "todayAffiliateProfit": 0.1337,
+          "yesterdayAiProfit": 0.3841,
+          "importSource": "orca"
+        }
+      },
+      "orca": 10.71,
+      "accountsOrca": {
+        "orca_1783005565893": {
+          "todayRevenue": 10.1967,
+          "operationRevenue": 0,
+          "projectKey": "orca"
+        },
+        "orca_1783005577176": {
+          "operationRevenue": 0,
+          "todayRevenue": 0.5178,
+          "projectKey": "orca"
+        }
+      }
+    },
+    "2026-06-29": {
+      "orcaAccounts": {
+        "orca_1783005565893": {
+          "yesterdayAiProfit": 8.0676,
+          "todayAffiliateProfit": 2.43,
+          "importSource": "orca"
+        },
+        "orca_1783005577176": {
+          "yesterdayAiProfit": 0.4112,
+          "todayAffiliateProfit": 0.1408,
+          "importSource": "orca"
+        }
+      },
+      "orca": 11.05,
+      "accountsOrca": {
+        "orca_1783005577176": {
+          "todayRevenue": 0.552,
+          "operationRevenue": 0,
+          "projectKey": "orca"
+        },
+        "orca_1783005565893": {
+          "projectKey": "orca",
+          "operationRevenue": 0,
+          "todayRevenue": 10.4976
+        }
+      }
+    },
+    "2026-06-30": {
+      "orcaAccounts": {
+        "orca_1783005565893": {
+          "todayAffiliateProfit": 2.566,
+          "yesterdayAiProfit": 7.3151,
+          "importSource": "orca"
+        },
+        "orca_1783005577176": {
+          "importSource": "orca",
+          "todayAffiliateProfit": 0.1507,
+          "yesterdayAiProfit": 0.4067
+        }
+      },
+      "orca": 10.44,
+      "accountsOrca": {
+        "orca_1783005565893": {
+          "projectKey": "orca",
+          "todayRevenue": 9.8811,
+          "operationRevenue": 0
+        },
+        "orca_1783005577176": {
+          "operationRevenue": 0,
+          "todayRevenue": 0.5574,
+          "projectKey": "orca"
+        }
+      }
+    },
+    "2026-07-01": {
+      "orcaAccounts": {
+        "orca_1783005577176": {
+          "todayAffiliateProfit": 0.1491,
+          "yesterdayAiProfit": 0.3871,
+          "importSource": "orca"
+        },
+        "orca_1783005565893": {
+          "importSource": "orca",
+          "yesterdayAiProfit": 7.8576,
+          "todayAffiliateProfit": 2.462
+        }
+      },
+      "orca": 10.86,
+      "accountsOrca": {
+        "orca_1783005577176": {
+          "todayRevenue": 0.5362,
+          "operationRevenue": 0,
+          "projectKey": "orca"
+        },
+        "orca_1783005565893": {
+          "projectKey": "orca",
+          "operationRevenue": 0,
+          "todayRevenue": 10.3196
+        }
+      }
+    },
+    "2026-07-02": {
+      "orcaAccounts": {
+        "orca_1783005565893": {
+          "yesterdayAiProfit": 6.2862,
+          "todayAffiliateProfit": 2.446,
+          "importSource": "orca"
+        },
+        "orca_1783005577176": {
+          "todayAffiliateProfit": 0.1419,
+          "yesterdayAiProfit": 0.3947,
+          "importSource": "orca"
+        }
+      },
+      "orca": 9.27,
+      "accountsOrca": {
+        "orca_1783005577176": {
+          "todayRevenue": 0.5366,
+          "operationRevenue": 0,
+          "projectKey": "orca"
+        },
+        "orca_1783005565893": {
+          "projectKey": "orca",
+          "todayRevenue": 8.7322,
+          "operationRevenue": 0
+        }
+      }
+    },
+    "2026-07-03": {
+      "orcaAccounts": {
+        "orca_1783005577176": {
+          "todayAffiliateProfit": 0.144,
+          "yesterdayAiProfit": 0.394
+        },
+        "orca_1783005565893": {
+          "yesterdayAiProfit": 8.102,
+          "todayAffiliateProfit": 2.504
+        }
+      },
+      "orca": 11.14,
+      "accountsOrca": {}
+    },
+    "2026-07-04": {
+      "orcaAccounts": {
+        "orca_1783005577176": {
+          "yesterdayAiProfit": 0.35,
+          "todayAffiliateProfit": 0.15
+        },
+        "orca_1783005565893": {
+          "todayAffiliateProfit": 2.36,
+          "yesterdayAiProfit": 7.82
+        }
+      },
+      "orca": 10.68,
+      "accountsOrca": {
+        "orca_1783005577176": {
+          "todayRevenue": 0.5,
+          "operationRevenue": 0,
+          "projectKey": "orca"
+        },
+        "orca_1783005565893": {
+          "projectKey": "orca",
+          "operationRevenue": 0,
+          "todayRevenue": 10.18
+        }
+      }
+    },
+    "2026-07-05": {
+      "orcaAccounts": {
+        "orca_1783005577176": {
+          "yesterdayAiProfit": 0.357,
+          "todayAffiliateProfit": 0.131
+        },
+        "orca_1783005565893": {
+          "yesterdayAiProfit": 7.855,
+          "todayAffiliateProfit": 2.328
+        }
+      },
+      "orca": 10.67,
+      "accountsOrca": {}
+    },
+    "2026-07-06": {
+      "orcaAccounts": {
+        "orca_1783005577176": {
+          "yesterdayAiProfit": 0.383,
+          "todayAffiliateProfit": 0.14
+        },
+        "orca_1783005565893": {
+          "todayAffiliateProfit": 2.417,
+          "yesterdayAiProfit": 7.729
+        }
+      },
+      "orca": 10.67,
+      "accountsOrca": {}
+    },
+    "2026-07-07": {
+      "orcaAccounts": {
+        "orca_1783005577176": {
+          "yesterdayAiProfit": 0.409,
+          "todayAffiliateProfit": 0.15
+        },
+        "orca_1783005565893": {
+          "todayAffiliateProfit": 2.507,
+          "yesterdayAiProfit": 7.6
+        }
+      },
+      "orca": 10.67,
+      "accountsOrca": {}
+    },
+    "2026-07-08": {
+      "orcaAccounts": {
+        "orca_1783005565893": {
+          "todayAffiliateProfit": 2.301,
+          "yesterdayAiProfit": 7.614
+        },
+        "orca_1783005577176": {
+          "todayAffiliateProfit": 0.131,
+          "yesterdayAiProfit": 0.357
+        }
+      },
+      "orca": 10.4,
+      "accountsOrca": {}
+    },
+    "2026-07-09": {
+      "orcaAccounts": {
+        "orca_1783005577176": {
+          "todayAffiliateProfit": 0.146,
+          "yesterdayAiProfit": 0.398
+        },
+        "orca_1783005565893": {
+          "yesterdayAiProfit": 7.579,
+          "todayAffiliateProfit": 2.461
+        }
+      },
+      "orca": 10.58,
+      "accountsOrca": {}
+    },
+    "2026-07-10": {
+      "orcaAccounts": {
+        "orca_1783005565893": {
+          "todayAffiliateProfit": 2.27,
+          "yesterdayAiProfit": 7.07
+        },
+        "orca_1783005577176": {
+          "yesterdayAiProfit": 0.365,
+          "todayAffiliateProfit": 0.134
+        }
+      },
+      "orca": 9.84,
+      "accountsOrca": {}
+    },
+    "2026-07-11": {
+      "orcaAccounts": {
+        "orca_1783005577176": {
+          "yesterdayAiProfit": 0.347,
+          "todayAffiliateProfit": 0.127
+        },
+        "orca_1783005565893": {
+          "todayAffiliateProfit": 2.235,
+          "yesterdayAiProfit": 7.39
+        }
+      },
+      "orca": 10.1,
+      "accountsOrca": {}
+    }
+  },
+  "salesLogOrcaOnly": {
+    "2026-07-05": {
+      "accounts": {
+        "orca_1783005565893": {
+          "todaySales": 0,
+          "projectKey": "orca"
+        }
+      }
+    },
+    "2026-07-06": {
+      "accounts": {
+        "orca_1783005577176": {
+          "todaySales": 0,
+          "projectKey": "orca"
+        }
+      }
+    },
+    "2026-07-07": {
+      "accounts": {
+        "orca_1783005577176": {
+          "projectKey": "orca",
+          "todaySales": 13200
+        },
+        "orca_1783005565893": {
+          "projectKey": "orca",
+          "todaySales": 8100
+        }
+      }
+    },
+    "2026-07-08": {
+      "accounts": {
+        "orca_1783005577176": {
+          "todaySales": 0,
+          "salesSource": "manual",
+          "totalSales": 13200,
+          "projectKey": "orca"
+        },
+        "orca_1783005565893": {
+          "totalSales": 8100,
+          "projectKey": "orca",
+          "salesSource": "manual",
+          "todaySales": 0
+        }
+      }
+    },
+    "2026-07-09": {
+      "accounts": {
+        "orca_1783005577176": {
+          "salesSource": "manual",
+          "todaySales": 0,
+          "totalSales": 13200,
+          "projectKey": "orca"
+        },
+        "orca_1783005565893": {
+          "salesSource": "manual",
+          "todaySales": 0,
+          "projectKey": "orca",
+          "totalSales": 8100
+        }
+      }
+    },
+    "2026-07-10": {
+      "accounts": {
+        "orca_1783005565893": {
+          "totalSales": 8100,
+          "projectKey": "orca",
+          "todaySales": 0,
+          "salesSource": "manual"
+        },
+        "orca_1783005577176": {
+          "projectKey": "orca",
+          "totalSales": 13200,
+          "todaySales": 0,
+          "salesSource": "manual"
+        }
+      }
+    },
+    "2026-07-11": {
+      "accounts": {
+        "orca_1783005577176": {
+          "projectKey": "orca",
+          "totalSales": 13200,
+          "todaySales": 0,
+          "salesSource": "manual"
+        },
+        "orca_1783005565893": {
+          "projectKey": "orca",
+          "totalSales": 8100,
+          "todaySales": 0,
+          "salesSource": "manual"
+        }
+      }
+    }
+  },
+  "investmentHistoryOrcaOnly": {
+    "orca_1783005565893": {
+      "projectKey": "orca",
+      "records": [
+        {
+          "amount": 1000,
+          "type": "initial",
+          "dateKey": "2026-06-07"
+        },
+        {
+          "dateKey": "2026-07-12",
+          "amount": 1000,
+          "type": "initial"
+        }
+      ]
+    },
+    "orca_1783005577176": {
+      "records": [
+        {
+          "amount": 100,
+          "type": "initial",
+          "dateKey": "2026-06-14"
+        },
+        {
+          "dateKey": "2026-07-12",
+          "amount": 100,
+          "type": "initial"
+        }
+      ],
+      "projectKey": "orca"
+    }
+  },
+  "removedOrcaOrgAccountIds": [
+    "o1783763092815",
+    "o1783763113265",
+    "o1783763150031",
+    "orca_1783835379813",
+    "orca_1783847282266"
+  ],
+  "summary": {
+    "accountCount": 2,
+    "accountOrder": [
+      {
+        "id": "orca_1783005565893",
+        "username": "kai1",
+        "investment": 1000
+      },
+      {
+        "id": "orca_1783005577176",
+        "username": "kai2",
+        "investment": 100
+      }
+    ],
+    "revenueDays": 35,
+    "salesDays": 7,
+    "investmentIds": [
+      "orca_1783005565893",
+      "orca_1783005577176"
+    ]
+  }
+}

@@ -45,6 +45,74 @@ body.hub-local-dev {
   color: #fdba74 !important;
 }
 
+.hubVersionGuard {
+  position: fixed;
+  inset: 0;
+  z-index: 200000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(7, 17, 31, 0.88);
+  backdrop-filter: blur(6px);
+}
+
+.hubVersionGuard.hidden {
+  display: none !important;
+}
+
+.hubVersionGuardCard {
+  width: min(420px, 100%);
+  padding: 28px 24px;
+  border-radius: 18px;
+  border: 1px solid #334155;
+  background: linear-gradient(180deg, #0f172a, #111827);
+  color: #e2e8f0;
+  text-align: center;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.45);
+}
+
+.hubVersionGuardTitle {
+  margin: 0 0 12px;
+  font-size: 22px;
+  letter-spacing: 0.04em;
+}
+
+.hubVersionGuardMessage {
+  margin: 0 0 10px;
+  font-size: 16px;
+  font-weight: 700;
+  color: #fef3c7;
+}
+
+.hubVersionGuardMeta {
+  margin: 0 0 18px;
+  font-size: 11px;
+  color: #94a3b8;
+  line-height: 1.4;
+}
+
+.hubVersionGuardBtn {
+  appearance: none;
+  border: 0;
+  border-radius: 999px;
+  padding: 12px 20px;
+  background: #f59e0b;
+  color: #111827;
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.hubVersionGuardBtn:hover {
+  background: #fbbf24;
+}
+
+body.hub-version-mismatch {
+  overflow: hidden;
+}
+
+
 body:not(.hub-auth-ready) > header,
 body:not(.hub-auth-ready) > main,
 body:not(.hub-auth-ready) > nav,

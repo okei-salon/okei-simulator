@@ -3,11 +3,33 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    match /users/{userId}/{document=**} {
+    // Bump ONLY when hubData schema changes.
+    // Keep in sync with assets/hub-app-version.json and assets/js/hub-app-version.js
+    function requiredSchemaVersion() {
+      return 2;
+    }
 
-      allow read, write: if request.auth != null
-                         && request.auth.uid == userId;
+    function isOwner(userId) {
+      return request.auth != null && request.auth.uid == userId;
+    }
 
+    function hasValidSchemaVersion() {
+      // Client SDK stores whole numbers as float; accept number equality.
+      return request.resource.data.keys().hasAny(['schemaVersion'])
+        && request.resource.data.schemaVersion is number
+        && request.resource.data.schemaVersion == requiredSchemaVersion();
+    }
+
+    // hubData writes require matching schemaVersion so stale cached JS cannot overwrite.
+    match /users/{userId}/hubData/{docId} {
+      allow read: if isOwner(userId);
+      allow create, update: if isOwner(userId) && hasValidSchemaVersion();
+      allow delete: if isOwner(userId);
+    }
+
+    // Other user docs (e.g. profile) — no schemaVersion gate.
+    match /users/{userId}/profile/{docId} {
+      allow read, write: if isOwner(userId);
     }
 
   }

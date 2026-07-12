@@ -17,7 +17,11 @@ function hubIsCloudReadEnabled() {
 }
 
 function hubIsCloudWriteEnabled() {
-  return !hubIsLocalDevMode();
+  if (hubIsLocalDevMode()) return false;
+  if (typeof hubIsVersionWriteAllowed === 'function' && !hubIsVersionWriteAllowed()) {
+    return false;
+  }
+  return true;
 }
 
 function hubRenderLocalDevStatus() {

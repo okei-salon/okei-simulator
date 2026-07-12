@@ -1049,6 +1049,9 @@ function hubPackFirestorePayload(updatedAt) {
       salesLog: salesLog
     },
     settings: settingsCopy,
+    schemaVersion: (typeof hubGetEmbeddedSchemaVersion === 'function'
+      ? hubGetEmbeddedSchemaVersion()
+      : (typeof HUB_SCHEMA_VERSION === 'number' ? Number(HUB_SCHEMA_VERSION) : 0)),
     updatedAt: typeof updatedAt === 'number' ? updatedAt : Date.now()
   };
 }

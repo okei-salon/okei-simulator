@@ -1,0 +1,97 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Export ORCA snapshot (read-only)</title>
+<pre id="out">…</pre>
+<script>
+(function () {
+  function load(key) {
+    try { return JSON.parse(localStorage.getItem(key)); } catch (e) { return null; }
+  }
+  var uid = localStorage.getItem('oukei_hub_v15_uid') || '';
+  var key = uid ? ('oukei_hub_v15_data:' + uid) : 'oukei_hub_v15_data';
+  var data = load(key);
+  if (!data) {
+    document.getElementById('out').textContent = JSON.stringify({ ok: false, error: 'no data', key: key });
+    return;
+  }
+  var s = data.settings || {};
+  var rev = s.revenueLog || {};
+  var sales = s.salesLog || {};
+  var TARGET = ['orca_1783005565893', 'orca_1783005577176'];
+  var targetSet = {};
+  TARGET.forEach(function (id) { targetSet[id] = true; });
+
+  var accounts = Array.isArray(s.orcaInputAccounts) ? s.orcaInputAccounts.slice() : [];
+  // Prefer kai1 then kai2 order
+  accounts.sort(function (a, b) {
+    var ia = TARGET.indexOf(a && a.id);
+    var ib = TARGET.indexOf(b && b.id);
+    if (ia < 0) ia = 999;
+    if (ib < 0) ib = 999;
+    return ia - ib;
+  });
+  accounts = accounts.filter(function (a) { return a && targetSet[a.id]; });
+
+  var revenueLogOrcaOnly = {};
+  Object.keys(rev).sort().forEach(function (dk) {
+    var e = rev[dk];
+    if (!e || !e.orcaAccounts) return;
+    var oa = {};
+    Object.keys(e.orcaAccounts).forEach(function (id) {
+      if (targetSet[id]) oa[id] = e.orcaAccounts[id];
+    });
+    if (!Object.keys(oa).length) return;
+    var accountsOrca = {};
+    if (e.accounts) {
+      Object.keys(e.accounts).forEach(function (id) {
+        var ae = e.accounts[id];
+        if (ae && ae.projectKey === 'orca' && targetSet[id]) accountsOrca[id] = ae;
+      });
+    }
+    revenueLogOrcaOnly[dk] = {
+      orcaAccounts: oa,
+      orca: e.orca,
+      accountsOrca: accountsOrca
+    };
+  });
+
+  var salesLogOrcaOnly = {};
+  Object.keys(sales).sort().forEach(function (dk) {
+    var e = sales[dk];
+    if (!e || !e.accounts) return;
+    var accountsMap = {};
+    Object.keys(e.accounts).forEach(function (id) {
+      var ae = e.accounts[id];
+      if (ae && ae.projectKey === 'orca' && targetSet[id]) accountsMap[id] = ae;
+    });
+    if (!Object.keys(accountsMap).length) return;
+    salesLogOrcaOnly[dk] = { accounts: accountsMap };
+  });
+
+  var investmentHistoryOrcaOnly = {};
+  var inv = s.investmentHistory || {};
+  TARGET.forEach(function (id) {
+    if (inv[id]) investmentHistoryOrcaOnly[id] = inv[id];
+  });
+
+  var out = {
+    ok: true,
+    uid: uid,
+    storageKey: key,
+    exportedAt: new Date().toISOString(),
+    orcaInputAccounts: accounts,
+    revenueLogOrcaOnly: revenueLogOrcaOnly,
+    salesLogOrcaOnly: salesLogOrcaOnly,
+    investmentHistoryOrcaOnly: investmentHistoryOrcaOnly,
+    removedOrcaOrgAccountIds: s.removedOrcaOrgAccountIds || [],
+    summary: {
+      accountCount: accounts.length,
+      accountOrder: accounts.map(function (a) { return { id: a.id, username: a.username, investment: a.investment }; }),
+      revenueDays: Object.keys(revenueLogOrcaOnly).length,
+      salesDays: Object.keys(salesLogOrcaOnly).length,
+      investmentIds: Object.keys(investmentHistoryOrcaOnly)
+    }
+  };
+  document.getElementById('out').textContent = JSON.stringify(out);
+})();
+</script>

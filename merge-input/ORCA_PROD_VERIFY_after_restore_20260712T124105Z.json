@@ -1,0 +1,40 @@
+{
+  "orcaInputAccounts": [
+    {
+      "username": "kai1",
+      "id": "orca_1783005565893",
+      "name": "kai1",
+      "investment": 1000
+    },
+    {
+      "username": "kai2",
+      "id": "orca_1783005577176",
+      "name": "kai2",
+      "investment": 100
+    }
+  ],
+  "removedOrcaOrgAccountIds": [
+    "o1783763092815",
+    "o1783763113265",
+    "o1783763150031",
+    "orca_1783835379813",
+    "orca_1783845780070"
+  ],
+  "revenueDaysWithOrcaAccounts": 35,
+  "revenueAccountIds": [
+    "orca_1783005565893",
+    "orca_1783005577176"
+  ],
+  "salesDays": 7,
+  "salesAccountIds": [
+    "orca_1783005565893",
+    "orca_1783005577176"
+  ],
+  "investmentTargetIdsPresent": [
+    "orca_1783005565893",
+    "orca_1783005577176"
+  ],
+  "ramInputAccountsCount": 8,
+  "eniInputAccountsCount": 0,
+  "updatedAt": 1783860065640
+}

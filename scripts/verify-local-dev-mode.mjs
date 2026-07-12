@@ -22,6 +22,7 @@ const firebaseIgnore = read('.firebaseignore');
 const requiredGuards = [
   ['hub-dev-mode.js', 'hubIsCloudReadEnabled', devMode],
   ['hub-dev-mode.js', 'hubIsCloudWriteEnabled', devMode],
+  ['hub-dev-mode.js', 'hubIsVersionWriteAllowed', devMode],
   ['hub-firebase.js', 'hubIsCloudReadEnabled', firebase],
   ['hub-firebase.js', 'hubIsCloudWriteEnabled', firebase],
   ['hub-firebase.js', 'hubIsLocalDevMode', firebase],
