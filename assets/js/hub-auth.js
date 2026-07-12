@@ -293,9 +293,31 @@ function hubEnterApplication() {
   if (typeof render === 'function') render();
   if (typeof showPage === 'function') showPage('home');
   hubShowAppShell();
+  if (typeof hubRenderLocalDevStatus === 'function') hubRenderLocalDevStatus();
+}
+
+function hubEnterLocalDevApplication() {
+  hubAuthInitDone = true;
+  hubAuthBusy = false;
+  hubSetAuthError('');
+  if (typeof hubSetSyncStatus === 'function') hubSetSyncStatus('offline');
+  if (typeof hubRenderLocalDevStatus === 'function') hubRenderLocalDevStatus();
+  hubSetCurrentUid('');
+  let profile = typeof hubLoadLocalDevProfile === 'function' ? hubLoadLocalDevProfile() : null;
+  hubCurrentProfile = profile;
+  let devUser = { uid: 'local-dev', displayName: '開発ユーザー', email: 'dev@localhost' };
+  hubRenderAccountSummary(devUser, profile);
+  if (!profile || !profile.username) {
+    hubShowAuthScreen('profile');
+    return;
+  }
+  hubEnterApplication();
 }
 
 function hubFetchProfile() {
+  if (typeof hubIsLocalDevMode === 'function' && hubIsLocalDevMode()) {
+    return Promise.resolve(typeof hubLoadLocalDevProfile === 'function' ? hubLoadLocalDevProfile() : null);
+  }
   let ref = typeof hubProfileDocRef === 'function' ? hubProfileDocRef() : null;
   if (!ref) return Promise.resolve(null);
   return ref.get().then(function (snap) {
@@ -304,6 +326,24 @@ function hubFetchProfile() {
 }
 
 function hubSaveProfile(username, user) {
+  if (typeof hubIsLocalDevMode === 'function' && hubIsLocalDevMode()) {
+    let now = Date.now();
+    let payload = {
+      username: username,
+      displayName: '開発ユーザー',
+      email: 'dev@localhost',
+      photoURL: '',
+      lastLoginAt: now
+    };
+    payload.createdAt = (hubCurrentProfile && hubCurrentProfile.createdAt) ? hubCurrentProfile.createdAt : now;
+    if (typeof hubSaveLocalDevProfile === 'function') hubSaveLocalDevProfile(payload);
+    hubCurrentProfile = Object.assign({}, hubCurrentProfile || {}, payload);
+    hubRenderAccountSummary(
+      { uid: 'local-dev', displayName: payload.displayName, email: payload.email },
+      hubCurrentProfile
+    );
+    return Promise.resolve();
+  }
   user = user || (typeof hubGetFirebaseAuth === 'function' ? hubGetFirebaseAuth().currentUser : null);
   let ref = typeof hubProfileDocRef === 'function' ? hubProfileDocRef() : null;
   if (!ref || !user) return Promise.reject(new Error('profile unavailable'));
@@ -323,6 +363,9 @@ function hubSaveProfile(username, user) {
 }
 
 function hubTouchProfileLogin(user, profile) {
+  if (typeof hubIsLocalDevMode === 'function' && hubIsLocalDevMode()) {
+    return Promise.resolve();
+  }
   let ref = typeof hubProfileDocRef === 'function' ? hubProfileDocRef() : null;
   if (!ref || !user) return Promise.resolve();
   return ref.set({
@@ -461,6 +504,10 @@ function hubHandleAuthUser(user) {
 }
 
 function hubLoginWithGoogle() {
+  if (typeof hubIsLocalDevMode === 'function' && hubIsLocalDevMode()) {
+    hubSetAuthError('開発モードでは Google ログインは無効です。');
+    return Promise.resolve();
+  }
   if (typeof hubFirebaseConfigValid === 'function' && !hubFirebaseConfigValid()) {
     hubSetAuthError('Firebase設定が未完了です。firebase-config.js を確認してください。');
     return Promise.resolve();
@@ -485,14 +532,22 @@ function hubLoginWithGoogle() {
 }
 
 function hubSaveUsername() {
-  let auth = typeof hubGetFirebaseAuth === 'function' ? hubGetFirebaseAuth() : null;
-  let user = auth ? auth.currentUser : null;
   let input = document.getElementById('hubAccountUsernameInput');
   let check = hubValidateUsername(input ? input.value : '');
   if (!check.ok) {
     hubSetAccountInfoMessage(check.message, true);
     return;
   }
+  if (typeof hubIsLocalDevMode === 'function' && hubIsLocalDevMode()) {
+    hubSetAccountInfoMessage('');
+    hubSaveProfile(check.value).then(function () {
+      hubSetAccountInfoMessage('ユーザー名を保存しました。');
+      if (typeof showToast === 'function') showToast('✅ ユーザー名を保存しました');
+    });
+    return;
+  }
+  let auth = typeof hubGetFirebaseAuth === 'function' ? hubGetFirebaseAuth() : null;
+  let user = auth ? auth.currentUser : null;
   if (!user) {
     hubSetAccountInfoMessage('ログイン状態を確認できません。', true);
     return;
@@ -546,6 +601,13 @@ function hubCompleteProfileSetup() {
     hubSetAuthError(check.message, 'hubAuthProfileError');
     return;
   }
+  if (typeof hubIsLocalDevMode === 'function' && hubIsLocalDevMode()) {
+    hubSetAuthError('');
+    hubSaveProfile(check.value).then(function () {
+      hubEnterApplication();
+    });
+    return;
+  }
   let auth = typeof hubGetFirebaseAuth === 'function' ? hubGetFirebaseAuth() : null;
   let user = auth ? auth.currentUser : null;
   if (!user) {
@@ -564,6 +626,11 @@ function hubCompleteProfileSetup() {
 }
 
 function hubLogout() {
+  if (typeof hubIsLocalDevMode === 'function' && hubIsLocalDevMode()) {
+    if (!confirm('開発モードを終了してページを再読み込みしますか？')) return;
+    location.reload();
+    return;
+  }
   if (!confirm('ログアウトしますか？\n\n次回起動時は再度Googleログインが必要です。')) return;
   let auth = typeof hubGetFirebaseAuth === 'function' ? hubGetFirebaseAuth() : null;
   hubLastAuthUid = '';
@@ -580,6 +647,11 @@ function hubLogout() {
 }
 
 function hubInitAuth() {
+  if (typeof hubInitLocalDevMode === 'function') hubInitLocalDevMode();
+  if (typeof hubIsLocalDevMode === 'function' && hubIsLocalDevMode()) {
+    hubEnterLocalDevApplication();
+    return;
+  }
   hubShowAuthLoading('ログイン状態を確認しています…');
   hubAuthDebugSync(null);
   hubSetAuthError('');

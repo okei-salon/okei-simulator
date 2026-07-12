@@ -790,7 +790,9 @@ function hubSaveToStorage(options) {
     let now = Date.now();
     hubLocalUpdatedAt = now;
     localStorage.setItem(hubResolveStorageKey(), JSON.stringify(Object.assign(hubPackLocalData(), { updatedAt: now })));
-    if (!options.localOnly && typeof hubScheduleCloudSave === 'function') {
+    let cloudWriteOk = !options.localOnly &&
+      (typeof hubIsCloudWriteEnabled !== 'function' || hubIsCloudWriteEnabled());
+    if (cloudWriteOk && typeof hubScheduleCloudSave === 'function') {
       hubScheduleCloudSave(options.immediate === true);
     }
   } catch (e) {}

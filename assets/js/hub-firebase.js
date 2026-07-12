@@ -35,6 +35,10 @@ function hubEnsureFirebaseServices() {
 }
 
 function hubSetSyncStatus(state, message) {
+  if (typeof hubIsLocalDevMode === 'function' && hubIsLocalDevMode()) {
+    if (typeof hubRenderLocalDevStatus === 'function') hubRenderLocalDevStatus();
+    return;
+  }
   hubSyncState = state || 'offline';
   let el = document.getElementById('hubSyncStatus');
   if (!el) return;
@@ -67,6 +71,7 @@ function hubProfileDocRef() {
 }
 
 function hubInitFirebaseServices() {
+  if (typeof hubIsLocalDevMode === 'function' && hubIsLocalDevMode()) return false;
   if (hubFirebaseReady) return true;
   if (typeof firebase === 'undefined') return false;
   if (!hubFirebaseConfigValid()) return false;
@@ -91,6 +96,9 @@ function hubGetFirebaseAuth() {
 }
 
 function hubFetchCloudDoc() {
+  if (typeof hubIsCloudReadEnabled === 'function' && !hubIsCloudReadEnabled()) {
+    return Promise.resolve(null);
+  }
   let ref = hubFirestoreDocRef();
   if (!ref) return Promise.resolve(null);
   return ref.get().then(function (snap) {
@@ -100,6 +108,9 @@ function hubFetchCloudDoc() {
 }
 
 function hubPushCloudDoc(force) {
+  if (typeof hubIsCloudWriteEnabled === 'function' && !hubIsCloudWriteEnabled()) {
+    return Promise.resolve(false);
+  }
   if (!hubFirebaseReady || !hubFirebaseUid) return Promise.resolve(false);
   let payload = hubPackFirestorePayload(Date.now());
   let hash = hubComputeContentHash(hubUnpackFirestorePayload(payload));
@@ -118,6 +129,9 @@ function hubPushCloudDoc(force) {
 }
 
 function hubDeleteCloudData() {
+  if (typeof hubIsCloudWriteEnabled === 'function' && !hubIsCloudWriteEnabled()) {
+    return Promise.resolve(false);
+  }
   if (!hubFirebaseReady || !hubFirebaseUid) return Promise.resolve(false);
   let ref = hubFirestoreDocRef();
   if (!ref) return Promise.resolve(false);
@@ -157,6 +171,9 @@ function hubApplyMergedHubData(merged, cloudHash) {
 }
 
 function hubEnrichLocalFromCloud(cloudDoc) {
+  if (typeof hubIsCloudReadEnabled === 'function' && !hubIsCloudReadEnabled()) {
+    return false;
+  }
   if (!cloudDoc || typeof hubMergeHubDocuments !== 'function') return false;
   let local = typeof hubLoadFromStorage === 'function' ? hubLoadFromStorage() : { data: hubCreateEmptyData() };
   let cloudUnpacked = hubUnpackFirestorePayload(cloudDoc);
@@ -169,6 +186,9 @@ function hubEnrichLocalOrcaFromCloud(cloudDoc) {
 }
 
 function hubRunCloudSave(force) {
+  if (typeof hubIsCloudWriteEnabled === 'function' && !hubIsCloudWriteEnabled()) {
+    return Promise.resolve(false);
+  }
   if (!hubFirebaseReady || !hubFirebaseUid) {
     hubSetSyncStatus('offline');
     return Promise.resolve(false);
@@ -194,6 +214,7 @@ function hubRunCloudSave(force) {
 }
 
 function hubScheduleCloudSave(immediate) {
+  if (typeof hubIsCloudWriteEnabled === 'function' && !hubIsCloudWriteEnabled()) return;
   if (!hubFirebaseReady || !hubFirebaseUid) return;
   if (hubCloudSaveTimer) {
     clearTimeout(hubCloudSaveTimer);
@@ -222,6 +243,10 @@ function hubApplyCloudDataIfNewer(cloudDoc, localUpdatedAt) {
 }
 
 function hubSyncHubData() {
+  if (typeof hubIsCloudReadEnabled === 'function' && !hubIsCloudReadEnabled()) {
+    if (typeof hubRenderLocalDevStatus === 'function') hubRenderLocalDevStatus();
+    return Promise.resolve(false);
+  }
   if (!hubFirebaseReady || !hubFirebaseUid) {
     hubSetSyncStatus('offline', 'オフライン');
     return Promise.resolve(false);
@@ -261,17 +286,20 @@ function hubSyncHubData() {
 function hubBindFirebaseConnectivity() {
   if (typeof window === 'undefined') return;
   window.addEventListener('online', function () {
+    if (typeof hubIsLocalDevMode === 'function' && hubIsLocalDevMode()) return;
     if (hubFirebaseReady && hubFirebaseUid) hubSyncHubData();
   });
   window.addEventListener('offline', function () {
     if (hubSyncState !== 'syncing') hubSetSyncStatus('offline', 'オフライン');
   });
   document.addEventListener('visibilitychange', function () {
+    if (typeof hubIsLocalDevMode === 'function' && hubIsLocalDevMode()) return;
     if (document.visibilityState === 'visible' && hubFirebaseReady && hubFirebaseUid) {
       hubSyncHubData();
     }
   });
   window.addEventListener('pageshow', function (e) {
+    if (typeof hubIsLocalDevMode === 'function' && hubIsLocalDevMode()) return;
     if (e.persisted && hubFirebaseReady && hubFirebaseUid) hubSyncHubData();
   });
 }

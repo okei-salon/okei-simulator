@@ -17,6 +17,7 @@
     "verify:hub-restore": "node scripts/verify-restore-hub.mjs",
     "verify:eni-optin": "node scripts/verify-eni-optin.mjs",
     "verify:hub-sync": "node scripts/verify-hub-sync-merge.mjs",
+    "verify:local-dev-mode": "node scripts/verify-local-dev-mode.mjs",
     "verify:ram-operating": "node scripts/verify-ram-operating.mjs"
   },
   "devDependencies": {

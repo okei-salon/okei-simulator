@@ -1,5 +1,41 @@
 /* OUKEI HUB Auth Gate — Ver2.0.5 */
 
+body.hub-local-dev #hubAuthGate.hubAuthGate {
+  background: radial-gradient(circle at top left, #142a55, #07111f 42%, #040812);
+}
+
+.hubLocalDevBar {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 6px 12px;
+  background: rgba(180, 83, 9, 0.22);
+  border-bottom: 1px solid rgba(245, 158, 11, 0.45);
+  font-size: 11px;
+  font-weight: 800;
+  color: #fde68a;
+}
+
+.hubLocalDevBar.hidden {
+  display: none !important;
+}
+
+.hubLocalDevBar__badge {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(245, 158, 11, 0.35);
+  border: 1px solid rgba(251, 191, 36, 0.55);
+}
+
+.hubLocalDevBar__text {
+  color: #fcd34d;
+}
+
 body:not(.hub-auth-ready) > header,
 body:not(.hub-auth-ready) > main,
 body:not(.hub-auth-ready) > nav,
