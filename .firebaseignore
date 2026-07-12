@@ -9,3 +9,8 @@ package-lock.json
 *.md
 docs/**
 .DS_Store
+merge-output/**
+merge-input/**
+scripts/**
+tools/**
+*.hub

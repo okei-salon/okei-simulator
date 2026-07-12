@@ -290,12 +290,19 @@ function hubPrepareApplicationData() {
 
 function hubEnterApplication() {
   hubPrepareApplicationData();
+  if (typeof hubRenderLocalDevStatus === 'function') hubRenderLocalDevStatus();
   if (typeof render === 'function') render();
   if (typeof showPage === 'function') showPage('home');
   hubShowAppShell();
 }
 
 function hubFetchProfile() {
+  if (typeof hubIsCloudReadEnabled === 'function' && !hubIsCloudReadEnabled()) {
+    if (typeof hubLoadLocalDevProfile === 'function') {
+      return Promise.resolve(hubLoadLocalDevProfile());
+    }
+    return Promise.resolve(null);
+  }
   let ref = typeof hubProfileDocRef === 'function' ? hubProfileDocRef() : null;
   if (!ref) return Promise.resolve(null);
   return ref.get().then(function (snap) {
@@ -306,7 +313,7 @@ function hubFetchProfile() {
 function hubSaveProfile(username, user) {
   user = user || (typeof hubGetFirebaseAuth === 'function' ? hubGetFirebaseAuth().currentUser : null);
   let ref = typeof hubProfileDocRef === 'function' ? hubProfileDocRef() : null;
-  if (!ref || !user) return Promise.reject(new Error('profile unavailable'));
+  if (!user) return Promise.reject(new Error('profile unavailable'));
   let now = Date.now();
   let payload = {
     username: username,
@@ -316,6 +323,13 @@ function hubSaveProfile(username, user) {
     lastLoginAt: now
   };
   payload.createdAt = (hubCurrentProfile && hubCurrentProfile.createdAt) ? hubCurrentProfile.createdAt : now;
+  if (typeof hubIsLocalDevMode === 'function' && hubIsLocalDevMode()) {
+    hubCurrentProfile = Object.assign({}, hubCurrentProfile || {}, payload);
+    if (typeof hubSaveLocalDevProfile === 'function') hubSaveLocalDevProfile(hubCurrentProfile);
+    hubRenderAccountSummary(user, hubCurrentProfile);
+    return Promise.resolve();
+  }
+  if (!ref) return Promise.reject(new Error('profile unavailable'));
   return ref.set(payload, { merge: true }).then(function () {
     hubCurrentProfile = Object.assign({}, hubCurrentProfile || {}, payload);
     hubRenderAccountSummary(user, hubCurrentProfile);
@@ -324,7 +338,20 @@ function hubSaveProfile(username, user) {
 
 function hubTouchProfileLogin(user, profile) {
   let ref = typeof hubProfileDocRef === 'function' ? hubProfileDocRef() : null;
-  if (!ref || !user) return Promise.resolve();
+  if (!user) return Promise.resolve();
+  if (typeof hubIsLocalDevMode === 'function' && hubIsLocalDevMode()) {
+    hubCurrentProfile = Object.assign({}, profile || {}, {
+      username: profile && profile.username ? profile.username : '',
+      displayName: user.displayName || (profile && profile.displayName) || '',
+      email: user.email || (profile && profile.email) || '',
+      photoURL: user.photoURL || (profile && profile.photoURL) || '',
+      lastLoginAt: Date.now()
+    });
+    if (typeof hubSaveLocalDevProfile === 'function') hubSaveLocalDevProfile(hubCurrentProfile);
+    hubRenderAccountSummary(user, hubCurrentProfile);
+    return Promise.resolve();
+  }
+  if (!ref) return Promise.resolve();
   return ref.set({
     username: profile && profile.username ? profile.username : '',
     displayName: user.displayName || (profile && profile.displayName) || '',
@@ -420,7 +447,11 @@ function hubHandleSignedOut() {
   hubRenderAccountSummary(null, null);
   hubHideAppShell();
   hubShowAuthScreen('login');
-  hubSetSyncStatus('offline', 'オフライン');
+  if (typeof hubIsLocalDevMode === 'function' && hubIsLocalDevMode()) {
+    if (typeof hubRenderLocalDevStatus === 'function') hubRenderLocalDevStatus();
+  } else {
+    hubSetSyncStatus('offline', 'オフライン');
+  }
 }
 
 function hubHandleAuthUser(user) {
@@ -588,14 +619,22 @@ function hubInitAuth() {
   if (typeof hubFirebaseConfigValid === 'function' && !hubFirebaseConfigValid()) {
     hubShowAuthScreen('login');
     hubSetAuthError('Firebase設定が未完了です。firebase-config.js を設定してください。');
-    hubSetSyncStatus('offline', 'オフライン');
+    if (typeof hubIsLocalDevMode === 'function' && hubIsLocalDevMode()) {
+      if (typeof hubRenderLocalDevStatus === 'function') hubRenderLocalDevStatus();
+    } else {
+      hubSetSyncStatus('offline', 'オフライン');
+    }
     hubAuthInitDone = true;
     return;
   }
   if (typeof hubInitFirebaseServices === 'function' && !hubInitFirebaseServices()) {
     hubShowAuthScreen('login');
     hubSetAuthError('Firebaseに接続できません。ネットワーク接続を確認してください。');
-    hubSetSyncStatus('offline', 'オフライン');
+    if (typeof hubIsLocalDevMode === 'function' && hubIsLocalDevMode()) {
+      if (typeof hubRenderLocalDevStatus === 'function') hubRenderLocalDevStatus();
+    } else {
+      hubSetSyncStatus('offline', 'オフライン');
+    }
     hubAuthInitDone = true;
     return;
   }

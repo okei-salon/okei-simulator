@@ -67,7 +67,9 @@ function orcaApplyOrgChart(data) {
 }
 
 function orcaChildrenOf(id) {
-  return orcaMembers.filter(function (m) { return m.parent === id; });
+  var kids = orcaMembers.filter(function (m) { return m.parent === id; });
+  if (typeof aimSortOrgMemberSiblings === 'function') return aimSortOrgMemberSiblings(kids);
+  return kids;
 }
 
 function orcaNodeDepth(id) {
@@ -612,6 +614,11 @@ function orcaToggleOpen(id) {
 }
 
 function orcaReorderSibling(id, dir) {
+  if (typeof aimSwapSiblingSortOrder === 'function' && aimSwapSiblingSortOrder('orca', id, dir)) {
+    if (typeof markActivity === 'function') markActivity();
+    orcaRender();
+    return;
+  }
   var m = orcaMembers.find(function (x) { return x.id === id; });
   if (!m) return;
   var sib = orcaMembers.filter(function (x) { return x.parent === m.parent; });
@@ -630,6 +637,10 @@ function orcaReorderSibling(id, dir) {
 }
 
 function orcaAddChild(parent) {
+  if (typeof aimRenderOrgPlacementModal === 'function') {
+    aimRenderOrgPlacementModal('orca', parent);
+    return;
+  }
   orcaOpenEdit({ parent: parent });
 }
 
@@ -647,6 +658,10 @@ function orcaRankOptions(rank) {
 
 function orcaOpenEdit(data) {
   data = data || {};
+  if (!data.id && typeof aimRenderOrgPlacementModal === 'function') {
+    aimRenderOrgPlacementModal('orca', data.parent || null);
+    return;
+  }
   var opts = '<option value="">親なし</option>' + orcaMembers.map(function (m) {
     return '<option value="' + m.id + '"' + (data.parent === m.id ? ' selected' : '') + '>' + orcaDisplayName(m) + '</option>';
   }).join('');
@@ -711,10 +726,7 @@ function orcaSaveMember() {
       orcaAdjustAncestorManualVolumes(obj.parent, newLine);
     }
   } else {
-    orcaMembers.push(obj);
-    orcaAdjustAncestorManualVolumes(obj.parent, newLine);
-    var p = orcaMembers.find(function (x) { return x.id === obj.parent; });
-    if (p) p.open = true;
+    return;
   }
   if (!obj.parent && orcaRootAccountIds.indexOf(obj.id) < 0) orcaRootAccountIds.push(obj.id);
   if (!obj.parent) orcaRootId = obj.id;
@@ -744,38 +756,17 @@ function orcaSubtreeIds(id) {
 
 function orcaRecordRemovedAccounts(ids) {
   if (!ids || !ids.length) return;
-  if (typeof hubRecordRemovedOrcaOrgAccountIds === 'function') {
-    hubRecordRemovedOrcaOrgAccountIds(settings, ids);
-  } else if (typeof settings !== 'undefined') {
-    if (!Array.isArray(settings.removedOrcaOrgAccountIds)) settings.removedOrcaOrgAccountIds = [];
-    ids.forEach(function (id) {
-      if (settings.removedOrcaOrgAccountIds.indexOf(id) < 0) settings.removedOrcaOrgAccountIds.push(id);
-    });
-    if (Array.isArray(settings.orcaInputAccounts)) {
-      settings.orcaInputAccounts = settings.orcaInputAccounts.filter(function (acc) {
-        return acc && ids.indexOf(acc.id) < 0;
-      });
-    }
-  }
+  aimRecordRemovedOrgAccountIds('orca', ids);
 }
 
 function orcaDeleteMember(id) {
   var target = orcaMembers.find(function (x) { return x.id === id; });
   if (!target) return;
-  if (!confirm('削除しますか？配下も削除されます。')) return;
+  if (!confirm('組織図から削除しますか？配下も組織図から削除されます。実績入力・収益履歴・売上履歴は保持されます。')) return;
   var parent = target.parent;
   var line = orcaLineAmountOf(id);
-  var rm = new Set([id]);
-  var ch = true;
-  while (ch) {
-    ch = false;
-    orcaMembers.forEach(function (x) {
-      if (x.parent && rm.has(x.parent) && !rm.has(x.id)) { rm.add(x.id); ch = true; }
-    });
-  }
-  orcaMembers = orcaMembers.filter(function (x) { return !rm.has(x.id); });
-  orcaRootAccountIds = (orcaRootAccountIds || []).filter(function (x) { return !rm.has(x); });
-  orcaRecordRemovedAccounts(Array.from(rm));
+  var rm = orcaSubtreeIds(id);
+  aimRemoveOrgMembersOnly('orca', rm);
   orcaAdjustAncestorManualVolumes(parent, -line);
   orcaSyncPersonalSalesFor(parent);
   orcaRefreshGroupSalesUpstream(parent);
@@ -842,15 +833,17 @@ function orcaShowMemberStats() {
 }
 
 function orcaOpenRootQuickAdd() {
+  if (typeof aimRenderOrgPlacementModal === 'function') {
+    aimRenderOrgPlacementModal('orca', null);
+    return;
+  }
   orcaEnsureRootAccounts();
   var opts = orcaMembers.map(function (m) {
     return '<option value="' + m.id + '">' + orcaDisplayName(m) + '</option>';
   }).join('');
   modalTitle.textContent = '組織図を追加';
   modalContent.innerHTML = '<div class="quickAddGrid">' +
-    '<div class="lineBox"><b>親アカウント作成</b><p class="help">全く別ラインの親アカウントを新しく作成します。</p>' +
-    '<button onclick="orcaAddRootAccount()">＋ 親アカウント作成</button></div>' +
-    '<div class="lineBox"><b>表示組織図に追加</b><p class="help">入力済みアカウントを切替一覧に追加します。</p>' +
+    '<div class="lineBox"><b>登録済みアカウントを配置</b><p class="help">実績入力で登録済みのアカウントを組織図に追加します。</p>' +
     '<select id="orcaPromoteMemberSelect">' + opts + '</select>' +
     '<button onclick="orcaPromoteExistingMember()">追加</button></div></div>';
   modalBg.style.display = 'flex';
@@ -933,18 +926,9 @@ function orcaDeleteRootAccount() {
   if (orcaRootAccountIds.length <= 1) return alert('最後の組織図は削除できません');
   var target = orcaMembers.find(function (x) { return x.id === orcaRootId; });
   if (!target) return;
-  if (!confirm('表示中の親アカウント「' + orcaDisplayName(target) + '」と配下を削除しますか？')) return;
-  var rm = new Set([orcaRootId]);
-  var changed = true;
-  while (changed) {
-    changed = false;
-    orcaMembers.forEach(function (x) {
-      if (x.parent && rm.has(x.parent) && !rm.has(x.id)) { rm.add(x.id); changed = true; }
-    });
-  }
-  orcaMembers = orcaMembers.filter(function (x) { return !rm.has(x.id); });
-  orcaRootAccountIds = orcaRootAccountIds.filter(function (id) { return !rm.has(id); });
-  orcaRecordRemovedAccounts(Array.from(rm));
+  if (!confirm('表示中の親アカウント「' + orcaDisplayName(target) + '」と配下を組織図から削除しますか？実績入力・収益履歴・売上履歴は保持されます。')) return;
+  var rm = orcaSubtreeIds(orcaRootId);
+  aimRemoveOrgMembersOnly('orca', rm);
   orcaRootId = orcaRootAccountIds[0];
   orcaFocusId = orcaRootId;
   if (typeof markActivity === 'function') markActivity();

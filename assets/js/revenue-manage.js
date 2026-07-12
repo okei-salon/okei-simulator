@@ -144,6 +144,10 @@ var RM_DEMO_ACCOUNT_TREE = {
 };
 
 function rmGetLiveRamAccountTree() {
+  if (typeof aimBuildOrgAccountTree === 'function') {
+    let tree = aimBuildOrgAccountTree('ram');
+    if (tree.length) return tree;
+  }
   if (typeof getRamAllRootAccounts !== 'function') return [];
   return getRamAllRootAccounts().map(function (acc) {
     return {
@@ -152,6 +156,17 @@ function rmGetLiveRamAccountTree() {
       parentId: null,
       depth: 0
     };
+  });
+}
+
+function rmGetLiveOrcaAccountTree() {
+  if (typeof aimBuildOrgAccountTree === 'function') {
+    let tree = aimBuildOrgAccountTree('orca');
+    if (tree.length) return tree;
+  }
+  if (typeof getOrcaInputAccounts !== 'function') return [];
+  return getOrcaInputAccounts().map(function (acc) {
+    return { id: acc.id, name: acc.username, parentId: null, depth: 0 };
   });
 }
 
@@ -175,11 +190,7 @@ function rmGetProjectAccountRows(projectKey) {
     live = rmGetLiveRamAccountTree();
     if (RM_DEMO_ACCOUNT_TREE.ram) demo = RM_DEMO_ACCOUNT_TREE.ram.slice();
   } else if (projectKey === 'orca') {
-    if (typeof getOrcaInputAccounts === 'function') {
-      live = getOrcaInputAccounts().map(function (acc) {
-        return { id: acc.id, name: acc.username, parentId: null, depth: 0 };
-      });
-    }
+    live = rmGetLiveOrcaAccountTree();
     if (RM_DEMO_ACCOUNT_TREE.orca) demo = RM_DEMO_ACCOUNT_TREE.orca.slice();
   } else if (projectKey === 'eni') {
     if (typeof getEniInputAccounts === 'function') {
@@ -203,7 +214,7 @@ function rmGetProjectAccountRows(projectKey) {
   let accounts = live.length ? live : (rmIsDemoMode() ? demo : []);
   accounts = pfFilterManageAccounts(projectKey, accounts, { useDemoBypass: rmIsDemoMode() && !live.length });
   accounts = pfApplyManageAccountLabels(projectKey, accounts);
-  return pfAnnotateAccountSeries(accounts);
+  return pfAnnotateAccountSeries(accounts, projectKey);
 }
 
 function rmCalcRamOperationAmount(accountId, ae, dateKey) {

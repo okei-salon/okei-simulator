@@ -201,6 +201,16 @@ function getRamAllRootAccounts() {
     let demo = getHomeDemoRamAccounts();
     if (demo) return demo;
   }
+  if (typeof aimGetInputAccountList === 'function') {
+    aimMigrateRamInputAccountsFromMembers();
+    return aimGetInputAccountList('ram').map(function (acc) {
+      return {
+        id: acc.id,
+        username: (acc.username || acc.name || '未入力').replace(/^@/, ''),
+        investment: Number(acc.investment) || 0
+      };
+    });
+  }
   if (typeof getRootIdsForSummary !== 'function' || typeof members === 'undefined') return [];
   return getRootIdsForSummary().map(function (id) {
     let m = members.find(function (x) { return x.id === id; });
@@ -710,13 +720,13 @@ function renderRamInputAccountCard(acc, existing) {
     : '初回は本日売上0として登録';
   let effectiveInv = typeof pdGetOperatingUsdAsOf === 'function'
     ? pdGetOperatingUsdAsOf(acc.id, 'ram', dateKey)
-    : calcRamEffectiveInvestment(acc.investment, addInv);
+    : acc.investment;
   return '<section class="ramInputAccount" data-acc="' + acc.id + '">' +
     '<div class="ramInputAccountHead">' +
     renderRamInputAccountHead(existing, acc.id) +
     '</div>' +
     '<div class="ramInputRows">' +
-    '<div class="ramInputRow ramInputRow--readonly"><span class="ramInputLabel">ユーザー名</span><span class="ramInputVal">' + escapeHtml(acc.username) + '</span></div>' +
+    '<div class="ramInputRow"><span class="ramInputLabel">ユーザー名</span><div class="ramInputField"><input type="text" id="ramUsername_' + acc.id + '" class="ramInputOptional" value="' + escapeHtml(acc.username) + '"></div></div>' +
     '<div class="ramInputRow"><span class="ramInputLabel">現在運用額</span><div class="ramInputField"><input type="number" step="1" min="0" id="ramOp_' + acc.id + '" class="ramInputOptional" inputmode="decimal" placeholder="0" value="' + effectiveInv + '"><span class="ramInputUnit">ドル</span><span class="ramInputHint">誤りがあれば修正して保存</span></div></div>' +
     '<div class="ramInputRow ramInputRow--readonly"><span class="ramInputLabel">日利</span><span class="ramInputVal" id="ramRate_' + acc.id + '">' + formatDailyRateLabel(effectiveInv) + '</span></div>' +
     '<div class="ramInputRow"><span class="ramInputLabel">追加投資額</span><div class="ramInputField"><input type="number" step="1" min="0" id="ramAddInv_' + acc.id + '" class="ramInputOptional" placeholder="0" value="' + addInv + '"><span class="ramInputUnit">ドル</span><span class="ramInputHint">追加投資があった時のみ入力</span></div></div>' +
@@ -724,6 +734,9 @@ function renderRamInputAccountCard(acc, existing) {
     '<div class="ramInputRow ramInputRow--main"><span class="ramInputLabel ramInputLabel--hero">本日収益</span><div class="ramInputField ramInputField--hero"><input type="number" step="0.01" min="0" id="ramTodayRev_' + acc.id + '" class="ramInputMain" inputmode="decimal" placeholder="0" value="' + todayRev + '"><span class="ramInputUnit">ドル</span><span class="ramInputBadge">毎日入力</span></div></div>' +
     '<div class="ramInputRow"><span class="ramInputLabel">総売上</span><div class="ramInputField"><input type="number" step="0.01" id="ramTotalSales_' + acc.id + '" class="ramInputOptional" inputmode="decimal" placeholder="0" value="' + totalSalesVal + '"><span class="ramInputUnit">ドル</span><span class="ramInputHint">' + salesHint + '</span></div></div>' +
     '<div class="ramInputRow ramInputRow--readonly"><span class="ramInputLabel">本日売上</span><span class="ramInputVal" id="ramTodaySales_' + acc.id + '">' + todaySalesPreview + '</span></div>' +
+    (typeof aimRenderInputAccountActions === 'function'
+      ? aimRenderInputAccountActions('ram', acc.id, acc.username, 'openRamRevenueInput')
+      : '') +
     '</div></section>';
 }
 
@@ -1726,6 +1739,9 @@ function refreshHomeAfterRevenueSave() {
 }
 
 function executeRamSave(collected) {
+  if (typeof aimPersistInputAccountMetaFromForm === 'function') {
+    aimPersistInputAccountMetaFromForm('ram');
+  }
   if (collected.ramAccounts || collected.ramOperating) {
     persistRamRevenueEntry(collected.ramAccounts || {}, collected.totalRam || 0, collected.ramOperating);
   }
@@ -1871,22 +1887,13 @@ function registerRamAccount() {
   if (!confirm('このアカウントを登録しますか？')) return;
 
   let id = 'm' + Date.now();
-  members.push({
+  aimEnsureRamInputAccounts();
+  settings.ramInputAccounts.push({
     id: id,
-    parent: null,
-    name: username,
     username: username,
-    rank: 0,
-    investment: investment,
-    manualVolume: 0,
-    open: true,
-    bvMode: 'MANUAL',
-    bvPrompted: false
+    name: username,
+    investment: investment
   });
-  if (typeof ensureRootAccounts === 'function') ensureRootAccounts();
-  if (typeof rootAccountIds !== 'undefined' && !rootAccountIds.includes(id)) rootAccountIds.push(id);
-  if (typeof rootId !== 'undefined') rootId = id;
-  if (typeof focusId !== 'undefined') focusId = id;
 
   let todayRevenue = Number(todayRevRaw) || 0;
   if (typeof pdAddInvestmentRecord === 'function') {
@@ -1900,6 +1907,7 @@ function registerRamAccount() {
   }, 0);
 
   persistRamRevenueEntry(ramAccounts, totalRam);
+  if (typeof persistHubSettings === 'function') persistHubSettings();
   if (typeof markActivity === 'function') markActivity();
   if (typeof render === 'function') render();
   openRamRevenueInput();
@@ -2278,16 +2286,22 @@ function renderOrcaInputAccountCard(acc, existing) {
   let salesHint = prevTotal != null
     ? '前回 ' + money(prevTotal)
     : '初回は本日売上0として登録';
+  let operatingUsd = typeof pdGetOperatingUsdAsOf === 'function'
+    ? pdGetOperatingUsdAsOf(acc.id, 'orca', dateKey)
+    : acc.investment;
   return '<section class="ramInputAccount" data-acc="' + acc.id + '">' +
     '<div class="ramInputAccountHead">' + renderInputStatusBadge(isOrcaAccountEntered(existing, acc.id)) + '</div>' +
     '<div class="ramInputRows">' +
-    '<div class="ramInputRow ramInputRow--readonly"><span class="ramInputLabel">ユーザー名</span><span class="ramInputVal">' + escapeHtml(acc.username) + '</span></div>' +
-    '<div class="ramInputRow ramInputRow--readonly"><span class="ramInputLabel">投資額</span><span class="ramInputVal">' + num(acc.investment) + 'ドル</span></div>' +
+    '<div class="ramInputRow"><span class="ramInputLabel">ユーザー名</span><div class="ramInputField"><input type="text" id="orcaUsername_' + acc.id + '" class="ramInputOptional" value="' + escapeHtml(acc.username) + '"></div></div>' +
+    '<div class="ramInputRow"><span class="ramInputLabel">現在運用額</span><div class="ramInputField"><input type="number" step="1" min="0" id="orcaOp_' + acc.id + '" class="ramInputOptional" inputmode="decimal" placeholder="0" value="' + operatingUsd + '"><span class="ramInputUnit">ドル</span><span class="ramInputHint">誤りがあれば修正して保存</span></div></div>' +
     '<div class="ramInputRow ramInputRow--main"><span class="ramInputLabel ramInputLabel--hero">昨日AI利益</span><div class="ramInputField ramInputField--hero"><input type="number" step="0.01" min="0" id="orcaYesterdayAi_' + acc.id + '" class="ramInputMain" inputmode="decimal" placeholder="0" value="' + yesterdayAi + '"><span class="ramInputUnit">ドル</span><span class="ramInputBadge">毎日入力</span></div></div>' +
     '<div class="ramInputRow ramInputRow--main"><span class="ramInputLabel ramInputLabel--hero">本日AF収益</span><div class="ramInputField ramInputField--hero"><input type="number" step="0.01" min="0" id="orcaTodayAff_' + acc.id + '" class="ramInputMain" inputmode="decimal" placeholder="0" value="' + todayAff + '"><span class="ramInputUnit">ドル</span><span class="ramInputBadge">毎日入力</span></div></div>' +
     '<div class="ramInputRow ramInputRow--readonly"><span class="ramInputLabel">本日のORCA合計</span><span class="ramInputVal ramInputVal--gold" id="orcaTotal_' + acc.id + '">' + money(total) + '</span></div>' +
     '<div class="ramInputRow"><span class="ramInputLabel">総売上</span><div class="ramInputField"><input type="number" step="0.01" id="orcaTotalSales_' + acc.id + '" class="ramInputOptional" inputmode="decimal" placeholder="0" value="' + totalSalesVal + '"><span class="ramInputUnit">ドル</span><span class="ramInputHint">' + salesHint + '</span></div></div>' +
     '<div class="ramInputRow ramInputRow--readonly"><span class="ramInputLabel">本日売上</span><span class="ramInputVal" id="orcaTodaySales_' + acc.id + '">' + todaySalesPreview + '</span></div>' +
+    (typeof aimRenderInputAccountActions === 'function'
+      ? aimRenderInputAccountActions('orca', acc.id, acc.username, 'openOrcaRevenueInput')
+      : '') +
     '</div></section>';
 }
 
@@ -2329,6 +2343,9 @@ function openOrcaRevenueInput() {
 }
 
 function executeOrcaSave(collected) {
+  if (typeof aimPersistInputAccountMetaFromForm === 'function') {
+    aimPersistInputAccountMetaFromForm('orca');
+  }
   if (collected.orcaSales && Object.keys(collected.orcaSales).length) {
     persistOrcaSalesFromTotals(collected.orcaSales, todayKey());
   }
@@ -2482,6 +2499,10 @@ function registerOrcaAccount() {
     name: username,
     investment: investment
   });
+
+  if (typeof pdAddInvestmentRecord === 'function') {
+    pdAddInvestmentRecord(id, 'orca', todayKey(), investment, 'initial');
+  }
 
   let yesterdayAiProfit = Number(yesterdayRaw) || 0;
   let todayAffiliateProfit = Number(affRaw) || 0;

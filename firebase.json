@@ -6,7 +6,12 @@
       "**/.*",
       "**/node_modules/**",
       "docs/**",
-      "*.md"
+      "merge-output/**",
+      "merge-input/**",
+      "scripts/**",
+      "tools/**",
+      "*.md",
+      "*.hub"
     ],
     "headers": [
       {

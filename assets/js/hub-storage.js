@@ -26,7 +26,9 @@ function hubCreateDefaultSettings() {
     manageDisplayAccounts: {},
     performanceInputHiddenAccounts: {},
     removedRamOrgAccountIds: [],
-    removedOrcaOrgAccountIds: []
+    removedOrcaOrgAccountIds: [],
+    removedEniOrgAccountIds: [],
+    ramInputAccounts: []
   };
 }
 
@@ -57,11 +59,6 @@ function hubGetRemovedRamOrgAccountIds(settings) {
 function hubRecordRemovedOrcaOrgAccountIds(settings, ids) {
   if (!settings || !ids || !ids.length) return;
   settings.removedOrcaOrgAccountIds = hubUnionStringIds(settings.removedOrcaOrgAccountIds, ids);
-  if (Array.isArray(settings.orcaInputAccounts)) {
-    settings.orcaInputAccounts = settings.orcaInputAccounts.filter(function (acc) {
-      return acc && ids.indexOf(acc.id) < 0;
-    });
-  }
 }
 
 function hubFilterOrgChartByRemovedIds(chart, removedIds) {
@@ -85,12 +82,7 @@ function hubFilterOrgChartByRemovedIds(chart, removedIds) {
 }
 
 function hubMergeOrcaInputAccounts(cloudAccounts, localAccounts, removedIds, preferLocal) {
-  let filter = function (arr) {
-    let removed = {};
-    (removedIds || []).forEach(function (id) { removed[id] = true; });
-    return (arr || []).filter(function (acc) { return acc && acc.id && !removed[acc.id]; });
-  };
-  return hubMergeArrayEntriesById(filter(cloudAccounts), filter(localAccounts), preferLocal);
+  return hubMergeArrayEntriesById(cloudAccounts || [], localAccounts || [], preferLocal);
 }
 
 function hubCreateEmptyEniOrgChart() {
@@ -369,6 +361,7 @@ function hubMergeHubSettings(localSettings, cloudSettings, localUpdatedAt, cloud
     merged.removedOrcaOrgAccountIds,
     preferLocal
   );
+  merged.ramInputAccounts = hubMergeArrayEntriesById(cloud.ramInputAccounts, local.ramInputAccounts, preferLocal);
   merged.eniInputAccounts = hubMergeArrayEntriesById(cloud.eniInputAccounts, local.eniInputAccounts, preferLocal);
   merged.caryInputAccounts = hubMergeArrayEntriesById(cloud.caryInputAccounts, local.caryInputAccounts, preferLocal);
   return merged;
@@ -612,6 +605,8 @@ function hubNormalizeLoadedData(raw) {
   }
   if (!Array.isArray(settings.orcaInputAccounts)) settings.orcaInputAccounts = [];
   if (!Array.isArray(settings.eniInputAccounts)) settings.eniInputAccounts = [];
+  if (!Array.isArray(settings.ramInputAccounts)) settings.ramInputAccounts = [];
+  if (typeof hubRepairOrcaInputAccounts === 'function') hubRepairOrcaInputAccounts(settings);
   let normalized = {
     members: Array.isArray(raw.members) ? raw.members : base.members,
     currentData: Array.isArray(raw.currentData) ? raw.currentData : base.currentData,
@@ -764,6 +759,10 @@ function hubApplyData(data, opts) {
   if (typeof pfEnsureManageDisplayAccounts === 'function') pfEnsureManageDisplayAccounts();
   if (typeof pfEnsurePerformanceInputHiddenAccounts === 'function') pfEnsurePerformanceInputHiddenAccounts();
   if (typeof pfMigrateDisplaySettingsCompat === 'function') pfMigrateDisplaySettingsCompat();
+  if (typeof aimInitAccountInputManagement === 'function') aimInitAccountInputManagement();
+  else if (typeof aimMigrateOrgMemberMeta === 'function') {
+    ['ram', 'orca', 'eni'].forEach(function (pk) { aimMigrateOrgMemberMeta(pk); });
+  }
 }
 
 function hubLoadFromStorage() {
@@ -790,7 +789,9 @@ function hubSaveToStorage(options) {
     let now = Date.now();
     hubLocalUpdatedAt = now;
     localStorage.setItem(hubResolveStorageKey(), JSON.stringify(Object.assign(hubPackLocalData(), { updatedAt: now })));
-    if (!options.localOnly && typeof hubScheduleCloudSave === 'function') {
+    let cloudWriteOk = !options.localOnly &&
+      (typeof hubIsCloudWriteEnabled !== 'function' || hubIsCloudWriteEnabled());
+    if (cloudWriteOk && typeof hubScheduleCloudSave === 'function') {
       hubScheduleCloudSave(options.immediate === true);
     }
   } catch (e) {}
@@ -854,7 +855,10 @@ function hubClearAllData() {
   settings.lastLogin = new Date().toLocaleString();
   settings.lastUpdate = new Date().toLocaleString();
   hubSaveToStorage({ localOnly: true });
-  if (typeof hubDeleteCloudData === 'function') hubDeleteCloudData();
+  if ((typeof hubIsCloudWriteEnabled !== 'function' || hubIsCloudWriteEnabled()) &&
+    typeof hubDeleteCloudData === 'function') {
+    hubDeleteCloudData();
+  }
   if (typeof render === 'function') render();
   if (typeof showPage === 'function') showPage('home');
   if (typeof showToast === 'function') showToast('✅ 端末のデータを削除しました');

@@ -91,24 +91,30 @@ function renderEniInputProgress(existing) {
 
 function renderEniInputAccountCard(acc, existing) {
   let ae = existing ? getEniAccountEntry(existing, acc.id) : null;
-  let op = ae && ae.operationAmount != null ? ae.operationAmount : '';
   let rev = ae && ae.todayRevenue != null ? ae.todayRevenue : '';
   let ref = ae && ae.referralProfit != null ? ae.referralProfit : '';
   let title = ae && ae.titleProfit != null ? ae.titleProfit : '';
   let note = ae && ae.note ? ae.note : '';
   let total = ae ? eniAccountRevenueTotal(ae) : 0;
+  let dateKey = typeof todayKey === 'function' ? todayKey() : '';
+  let operatingUsd = typeof pdGetOperatingUsdAsOf === 'function'
+    ? pdGetOperatingUsdAsOf(acc.id, 'eni', dateKey)
+    : acc.investment;
   let esc = typeof escapeHtml === 'function' ? escapeHtml : function (t) { return String(t || ''); };
   let moneyFn = typeof money === 'function' ? money : function (n) { return '$' + Math.round(n || 0); };
   return '<section class="ramInputAccount revenueProjectCard revenueProjectCard--eni" data-acc="' + acc.id + '">' +
     '<div class="ramInputAccountHead">' + renderEniInputStatusBadge(isEniAccountEntered(existing, acc.id)) + '</div>' +
     '<div class="ramInputRows">' +
-    '<div class="ramInputRow ramInputRow--readonly"><span class="ramInputLabel">ユーザー名</span><span class="ramInputVal">' + esc(acc.username) + '</span></div>' +
-    '<div class="ramInputRow"><span class="ramInputLabel">運用額</span><div class="ramInputField"><input type="number" step="0.01" min="0" id="eniOp_' + acc.id + '" class="ramInputOptional" inputmode="decimal" placeholder="0" value="' + op + '"><span class="ramInputUnit">ドル</span></div></div>' +
+    '<div class="ramInputRow"><span class="ramInputLabel">ユーザー名</span><div class="ramInputField"><input type="text" id="eniUsername_' + acc.id + '" class="ramInputOptional" value="' + esc(acc.username) + '"></div></div>' +
+    '<div class="ramInputRow"><span class="ramInputLabel">現在運用額</span><div class="ramInputField"><input type="number" step="1" min="0" id="eniOp_' + acc.id + '" class="ramInputOptional" inputmode="decimal" placeholder="0" value="' + operatingUsd + '"><span class="ramInputUnit">ドル</span><span class="ramInputHint">誤りがあれば修正して保存</span></div></div>' +
     '<div class="ramInputRow ramInputRow--main"><span class="ramInputLabel ramInputLabel--hero">本日収益</span><div class="ramInputField ramInputField--hero"><input type="number" step="0.01" min="0" id="eniRev_' + acc.id + '" class="ramInputMain" inputmode="decimal" placeholder="0" value="' + rev + '"><span class="ramInputUnit">ドル</span><span class="ramInputBadge ramInputBadge--eni">毎日入力</span></div></div>' +
     '<div class="ramInputRow"><span class="ramInputLabel">紹介利益</span><div class="ramInputField"><input type="number" step="0.01" min="0" id="eniRef_' + acc.id + '" class="ramInputOptional" inputmode="decimal" placeholder="0" value="' + ref + '"><span class="ramInputUnit">ドル</span></div></div>' +
     '<div class="ramInputRow"><span class="ramInputLabel">タイトル利益</span><div class="ramInputField"><input type="number" step="0.01" min="0" id="eniTitle_' + acc.id + '" class="ramInputOptional" inputmode="decimal" placeholder="0" value="' + title + '"><span class="ramInputUnit">ドル</span></div></div>' +
     '<div class="ramInputRow ramInputRow--readonly"><span class="ramInputLabel">本日のENI合計</span><span class="ramInputVal ramInputVal--gold" id="eniTotal_' + acc.id + '">' + moneyFn(total) + '</span></div>' +
     '<div class="ramInputRow"><span class="ramInputLabel">メモ</span><div class="ramInputField"><input type="text" id="eniNote_' + acc.id + '" class="ramInputOptional" placeholder="任意" value="' + esc(note) + '"></div></div>' +
+    (typeof aimRenderInputAccountActions === 'function'
+      ? aimRenderInputAccountActions('eni', acc.id, acc.username, 'openEniRevenueInput')
+      : '') +
     '</div></section>';
 }
 
@@ -155,8 +161,9 @@ function collectEniRevenueFromForm() {
     let refEl = document.getElementById('eniRef_' + acc.id);
     let titleEl = document.getElementById('eniTitle_' + acc.id);
     let noteEl = document.getElementById('eniNote_' + acc.id);
+    let opVal = opEl && opEl.value !== '' && !isNaN(Number(opEl.value)) ? Number(opEl.value) : null;
     let entry = {
-      operationAmount: opEl && opEl.value !== '' ? Number(opEl.value) : null,
+      operationAmount: opVal,
       todayRevenue: revEl && revEl.value !== '' ? Number(revEl.value) : null,
       referralProfit: refEl && refEl.value !== '' ? Number(refEl.value) : null,
       titleProfit: titleEl && titleEl.value !== '' ? Number(titleEl.value) : null,
@@ -228,6 +235,9 @@ function saveEniRevenueInput() {
     alert('保存する内容がありません。収益項目を入力してください。');
     return;
   }
+  if (typeof aimPersistInputAccountMetaFromForm === 'function') {
+    aimPersistInputAccountMetaFromForm('eni');
+  }
   persistEniRevenueEntry(collected.eniAccounts, collected.totalEni);
   if (typeof persistHubSettings === 'function') persistHubSettings();
   if (typeof render === 'function') render();
@@ -285,6 +295,10 @@ function registerEniAccount() {
     name: username,
     investment: investment
   });
+
+  if (typeof pdAddInvestmentRecord === 'function') {
+    pdAddInvestmentRecord(id, 'eni', todayKey(), investment, 'initial');
+  }
 
   let entry = {
     operationAmount: investment,

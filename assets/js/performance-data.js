@@ -2097,6 +2097,10 @@ function pdDeleteAccountPerformanceData(projectKey, accountId) {
       delete entry.orcaAccounts[accountId];
       touched = true;
     }
+    if (projectKey === 'eni' && entry.eniAccounts && entry.eniAccounts[accountId]) {
+      delete entry.eniAccounts[accountId];
+      touched = true;
+    }
     if (projectKey === 'cary' && entry.caryAccounts && entry.caryAccounts[accountId]) {
       delete entry.caryAccounts[accountId];
       touched = true;

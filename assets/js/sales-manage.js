@@ -259,6 +259,10 @@ function smAccountSeed(accountId) {
 }
 
 function smGetLiveRamAccountTree() {
+  if (typeof aimBuildOrgAccountTree === 'function') {
+    let tree = aimBuildOrgAccountTree('ram');
+    if (tree.length) return tree;
+  }
   if (typeof getRamInputAccounts !== 'function' || typeof members === 'undefined') return [];
   let roots = getRamInputAccounts();
   if (!roots.length) return [];
@@ -272,13 +276,25 @@ function smGetLiveRamAccountTree() {
     if (!m) return;
     let name = typeof displayName === 'function' ? displayName(m) : (m.name || m.username || '未入力');
     out.push({ id: id, name: name, parentId: m.parent || null, depth: depth });
-    members.filter(function (x) { return x.parent === id; }).forEach(function (child) {
-      addMember(child.id, depth + 1);
-    });
+    let kids = typeof aimGetSortedOrgChildren === 'function'
+      ? aimGetSortedOrgChildren('ram', id)
+      : members.filter(function (x) { return x.parent === id; });
+    kids.forEach(function (child) { addMember(child.id, depth + 1); });
   }
 
   roots.forEach(function (r) { addMember(r.id, 0); });
   return out;
+}
+
+function smGetLiveOrcaAccountTree() {
+  if (typeof aimBuildOrgAccountTree === 'function') {
+    let tree = aimBuildOrgAccountTree('orca');
+    if (tree.length) return tree;
+  }
+  if (typeof getOrcaInputAccounts !== 'function') return [];
+  return getOrcaInputAccounts().map(function (acc) {
+    return { id: acc.id, name: acc.username, parentId: null, depth: 0 };
+  });
 }
 
 function smGetLiveEniAccounts() {
@@ -289,10 +305,7 @@ function smGetLiveEniAccounts() {
 }
 
 function smGetLiveOrcaAccounts() {
-  if (typeof getOrcaInputAccounts !== 'function') return [];
-  return getOrcaInputAccounts().map(function (acc) {
-    return { id: acc.id, name: acc.username, parentId: null, depth: 0 };
-  });
+  return smGetLiveOrcaAccountTree();
 }
 
 function smGetLiveCaryAccounts() {
@@ -318,7 +331,7 @@ function smFormatStatAmount(amount, label) {
 function smGetProjectAccounts(projectKey) {
   let live = [];
   if (projectKey === 'ram') live = smGetLiveRamAccountTree();
-  else if (projectKey === 'orca') live = smGetLiveOrcaAccounts();
+  else if (projectKey === 'orca') live = smGetLiveOrcaAccountTree();
   else if (projectKey === 'eni') live = smGetLiveEniAccounts();
   else if (projectKey === 'cary') live = smGetLiveCaryAccounts();
   let demo = SM_DEMO_SALES_ACCOUNTS[projectKey] ? SM_DEMO_SALES_ACCOUNTS[projectKey].slice() : [];
@@ -328,7 +341,7 @@ function smGetProjectAccounts(projectKey) {
   let accounts = live.length ? live : (smIsDemoMode() ? demo : []);
   accounts = pfFilterManageAccounts(projectKey, accounts, { useDemoBypass: smIsDemoMode() && !live.length });
   accounts = pfApplyManageAccountLabels(projectKey, accounts);
-  return pfAnnotateAccountSeries(accounts);
+  return pfAnnotateAccountSeries(accounts, projectKey);
 }
 
 function smBuildParentMap(accounts) {

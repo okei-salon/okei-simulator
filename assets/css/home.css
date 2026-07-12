@@ -2929,6 +2929,39 @@
   border-color: #475569;
 }
 
+.ramInputAccountActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(51, 65, 85, .55);
+}
+
+.ramInputAccountActions .btnDanger {
+  margin-left: auto;
+}
+
+.aimPlaceModeBox {
+  display: grid;
+  gap: 10px;
+}
+
+.aimPlaceModeLabel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+}
+
+.aimPlaceChildWrap {
+  margin: 0 0 4px 22px;
+}
+
+.aimPlaceChildHint {
+  margin: 0 0 6px;
+}
+
 .ramInputDisplayPanel {
   margin: 0 0 10px;
   padding: 10px 12px;

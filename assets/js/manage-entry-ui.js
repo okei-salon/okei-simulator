@@ -45,7 +45,7 @@ function pfGetSeriesRootId(accountId, parentMap) {
   return cur;
 }
 
-function pfAnnotateAccountSeries(accounts) {
+function pfAnnotateAccountSeries(accounts, projectKey) {
   if (!accounts || !accounts.length) return [];
   let parentMap = {};
   accounts.forEach(function (a) {
@@ -61,6 +61,17 @@ function pfAnnotateAccountSeries(accounts) {
     rootToSeries[root] = i;
   });
   return accounts.map(function (a) {
+    if (projectKey && typeof aimGetOrgMemberSeriesIndex === 'function') {
+      let stored = aimGetOrgMemberSeriesIndex(projectKey, a.id);
+      if (stored != null) {
+        return Object.assign({}, a, {
+          seriesIndex: stored,
+          seriesRootId: typeof aimGetOrgMemberSeriesRootId === 'function'
+            ? aimGetOrgMemberSeriesRootId(projectKey, a.id)
+            : pfGetSeriesRootId(a.id, parentMap)
+        });
+      }
+    }
     let root = pfGetSeriesRootId(a.id, parentMap);
     return Object.assign({}, a, {
       seriesIndex: rootToSeries[root] || 0,
@@ -72,6 +83,10 @@ function pfAnnotateAccountSeries(accounts) {
 function pfNormalizeRamSeriesColors(projectKey, accounts) {
   if (projectKey !== 'ram' || !accounts || !accounts.length) return accounts;
   return accounts.map(function (a) {
+    if (a.seriesIndex != null && typeof aimGetOrgMemberSeriesIndex === 'function' &&
+        aimGetOrgMemberSeriesIndex(projectKey, a.id) != null) {
+      return a;
+    }
     let label = String(a.name || '').normalize ? String(a.name).normalize('NFKC') : String(a.name || '');
     if (/甲斐|kai/i.test(label)) {
       return Object.assign({}, a, { seriesIndex: 0 });
@@ -487,7 +502,7 @@ function pfLookupManageAccountName(projectKey, accountId) {
 
 function pfResolveManageAccounts(projectKey, liveAccounts, demoAccounts) {
   let annotate = function (list) {
-    return pfNormalizeRamSeriesColors(projectKey, pfAnnotateAccountSeries(list));
+    return pfNormalizeRamSeriesColors(projectKey, pfAnnotateAccountSeries(list, projectKey));
   };
   if (typeof pdIsDemoMode === 'function' && pdIsDemoMode() &&
       demoAccounts && demoAccounts.length) {
