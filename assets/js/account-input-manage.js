@@ -84,9 +84,11 @@ function aimUpdateInputAccountInvestment(projectKey, accountId, amount) {
     let dateKey = typeof todayKey === 'function' ? todayKey() : '';
     if (dateKey) pdSetManualOperatingAmount(accountId, 'ram', dateKey, amount, { skipPersist: true });
   }
-  if (typeof pdAddInvestmentRecord === 'function' && (projectKey === 'orca' || projectKey === 'eni')) {
+  // ORCA/ENI も RAM と同様、現在運用額は initial 追加ではなく manual（基準額上書き）で保存する。
+  // initial を日付違いで積み上げると運用額が二重計上される。
+  if (typeof pdSetManualOperatingAmount === 'function' && (projectKey === 'orca' || projectKey === 'eni')) {
     let dateKey = typeof todayKey === 'function' ? todayKey() : '';
-    if (dateKey) pdAddInvestmentRecord(accountId, projectKey, dateKey, amount, 'initial', { skipPersist: true });
+    if (dateKey) pdSetManualOperatingAmount(accountId, projectKey, dateKey, amount, { skipPersist: true });
   }
   return true;
 }

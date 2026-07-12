@@ -287,14 +287,33 @@ function smGetLiveRamAccountTree() {
 }
 
 function smGetLiveOrcaAccountTree() {
+  // 実績入力レジストリ順を正とする（組織図は親子情報の補完のみ）。
+  if (typeof getOrcaInputAccounts === 'function') {
+    let inputs = getOrcaInputAccounts();
+    if (inputs.length) {
+      let orgById = {};
+      if (typeof aimBuildOrgAccountTree === 'function') {
+        aimBuildOrgAccountTree('orca').forEach(function (node) {
+          if (node && node.id) orgById[node.id] = node;
+        });
+      }
+      return inputs.map(function (acc) {
+        let org = orgById[acc.id];
+        return {
+          id: acc.id,
+          name: acc.username,
+          parentId: org ? (org.parentId || null) : null,
+          depth: org ? (org.depth || 0) : 0,
+          sortOrder: org && org.sortOrder != null ? org.sortOrder : undefined
+        };
+      });
+    }
+  }
   if (typeof aimBuildOrgAccountTree === 'function') {
     let tree = aimBuildOrgAccountTree('orca');
     if (tree.length) return tree;
   }
-  if (typeof getOrcaInputAccounts !== 'function') return [];
-  return getOrcaInputAccounts().map(function (acc) {
-    return { id: acc.id, name: acc.username, parentId: null, depth: 0 };
-  });
+  return [];
 }
 
 function smGetLiveEniAccounts() {

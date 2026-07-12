@@ -458,8 +458,29 @@ function pdGetOperatingUsdAsOf(accountId, projectKey, dateKey) {
     });
     return pdRound(total);
   }
+
+  // initial は「時点の基準額」であり加算スタックではない。
+  // 複数 initial がある場合は最新を基準にし、それ以降の additional のみ加算する。
+  // （ORCA/ENI で日付違いの initial が残っても二重計上しない）
+  let latestInitial = null;
+  for (let i = eligible.length - 1; i >= 0; i--) {
+    if (eligible[i].type === 'initial') {
+      latestInitial = eligible[i];
+      break;
+    }
+  }
+  if (latestInitial) {
+    let total = Number(latestInitial.amount) || 0;
+    eligible.forEach(function (r) {
+      if (r.type === 'additional' && r.dateKey >= latestInitial.dateKey) {
+        total += Number(r.amount) || 0;
+      }
+    });
+    return pdRound(total);
+  }
+
   return pdRound(eligible
-    .filter(function (r) { return r.type === 'initial' || r.type === 'additional'; })
+    .filter(function (r) { return r.type === 'additional'; })
     .reduce(function (sum, r) { return sum + (Number(r.amount) || 0); }, 0));
 }
 
