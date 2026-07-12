@@ -82,7 +82,131 @@ function hubFilterOrgChartByRemovedIds(chart, removedIds) {
 }
 
 function hubMergeOrcaInputAccounts(cloudAccounts, localAccounts, removedIds, preferLocal) {
-  return hubMergeArrayEntriesById(cloudAccounts || [], localAccounts || [], preferLocal);
+  let merged = hubMergeArrayEntriesById(cloudAccounts || [], localAccounts || [], preferLocal);
+  let removed = {};
+  (removedIds || []).forEach(function (id) {
+    if (id) removed[id] = true;
+  });
+  if (!Object.keys(removed).length) return merged;
+  return merged.filter(function (acc) {
+    return acc && acc.id && !removed[acc.id];
+  });
+}
+
+function hubCollectRemovedAccountIds(settings) {
+  return hubUnionStringIds(
+    settings && settings.removedOrcaOrgAccountIds,
+    settings && settings.removedRamOrgAccountIds,
+    settings && settings.removedEniOrgAccountIds
+  );
+}
+
+function hubFilterInputAccountsByRemoved(list, removedMap) {
+  if (!Array.isArray(list) || !removedMap || !Object.keys(removedMap).length) return list || [];
+  return list.filter(function (acc) {
+    return acc && acc.id && !removedMap[acc.id];
+  });
+}
+
+function hubStripRemovedAccountsFromSettings(settings) {
+  if (!settings || typeof settings !== 'object') return settings;
+  let removedIds = hubCollectRemovedAccountIds(settings);
+  if (!removedIds.length) return settings;
+  let removed = {};
+  removedIds.forEach(function (id) { removed[id] = true; });
+
+  settings.orcaInputAccounts = hubFilterInputAccountsByRemoved(settings.orcaInputAccounts, removed);
+  settings.ramInputAccounts = hubFilterInputAccountsByRemoved(settings.ramInputAccounts, removed);
+  settings.eniInputAccounts = hubFilterInputAccountsByRemoved(settings.eniInputAccounts, removed);
+  settings.caryInputAccounts = hubFilterInputAccountsByRemoved(settings.caryInputAccounts, removed);
+
+  if (settings.investmentHistory && typeof settings.investmentHistory === 'object') {
+    Object.keys(settings.investmentHistory).forEach(function (id) {
+      if (removed[id]) delete settings.investmentHistory[id];
+    });
+  }
+
+  function stripRevenueEntry(entry) {
+    if (!entry || typeof entry !== 'object') return entry;
+    ['ramAccounts', 'orcaAccounts', 'eniAccounts', 'caryAccounts', 'accounts'].forEach(function (key) {
+      if (!entry[key] || typeof entry[key] !== 'object') return;
+      Object.keys(entry[key]).forEach(function (id) {
+        if (removed[id]) delete entry[key][id];
+      });
+    });
+    return entry;
+  }
+
+  if (settings.revenueLog && typeof settings.revenueLog === 'object') {
+    Object.keys(settings.revenueLog).forEach(function (dateKey) {
+      let entry = stripRevenueEntry(settings.revenueLog[dateKey]);
+      if (typeof pdRecalculateRevenueEntry === 'function') {
+        entry = pdRecalculateRevenueEntry(entry, dateKey);
+      }
+      let has =
+        (entry.ramAccounts && Object.keys(entry.ramAccounts).length) ||
+        (entry.orcaAccounts && Object.keys(entry.orcaAccounts).length) ||
+        (entry.eniAccounts && Object.keys(entry.eniAccounts).length) ||
+        (entry.caryAccounts && Object.keys(entry.caryAccounts).length) ||
+        (entry.accounts && Object.keys(entry.accounts).length);
+      if (!has) delete settings.revenueLog[dateKey];
+      else settings.revenueLog[dateKey] = entry;
+    });
+  }
+
+  if (settings.salesLog && typeof settings.salesLog === 'object') {
+    Object.keys(settings.salesLog).forEach(function (dateKey) {
+      let entry = settings.salesLog[dateKey];
+      if (!entry || !entry.accounts) return;
+      Object.keys(entry.accounts).forEach(function (id) {
+        if (removed[id]) delete entry.accounts[id];
+      });
+      if (typeof pdRecalculateSalesEntry === 'function') {
+        entry = pdRecalculateSalesEntry(entry);
+      }
+      if (!entry.accounts || !Object.keys(entry.accounts).length) delete settings.salesLog[dateKey];
+      else settings.salesLog[dateKey] = entry;
+    });
+  }
+
+  if (settings.portfolioOperating && Array.isArray(settings.portfolioOperating.entries)) {
+    settings.portfolioOperating.entries = settings.portfolioOperating.entries.filter(function (e) {
+      return !(e && e.accountId && removed[e.accountId]);
+    });
+  }
+  if (settings.portfolioProfit && Array.isArray(settings.portfolioProfit.entries)) {
+    settings.portfolioProfit.entries = settings.portfolioProfit.entries.filter(function (e) {
+      return !(e && e.accountId && removed[e.accountId]);
+    });
+  }
+
+  if (settings.manageDisplayAccounts && typeof settings.manageDisplayAccounts === 'object') {
+    Object.keys(settings.manageDisplayAccounts).forEach(function (pk) {
+      let bucket = settings.manageDisplayAccounts[pk];
+      if (!bucket) return;
+      if (Array.isArray(bucket.orgAdded)) {
+        bucket.orgAdded = bucket.orgAdded.filter(function (id) { return !removed[id]; });
+      }
+      if (Array.isArray(bucket.removed)) {
+        bucket.removed = bucket.removed.filter(function (id) { return !removed[id]; });
+      }
+      if (bucket.labels && typeof bucket.labels === 'object') {
+        Object.keys(bucket.labels).forEach(function (id) {
+          if (removed[id]) delete bucket.labels[id];
+        });
+      }
+    });
+  }
+
+  if (settings.performanceInputHiddenAccounts && typeof settings.performanceInputHiddenAccounts === 'object') {
+    Object.keys(settings.performanceInputHiddenAccounts).forEach(function (pk) {
+      if (!Array.isArray(settings.performanceInputHiddenAccounts[pk])) return;
+      settings.performanceInputHiddenAccounts[pk] =
+        settings.performanceInputHiddenAccounts[pk].filter(function (id) { return !removed[id]; });
+    });
+  }
+
+  return settings;
 }
 
 function hubCreateEmptyEniOrgChart() {
@@ -355,16 +479,30 @@ function hubMergeHubSettings(localSettings, cloudSettings, localUpdatedAt, cloud
     cloud.removedOrcaOrgAccountIds,
     local.removedOrcaOrgAccountIds
   );
+  merged.removedEniOrgAccountIds = hubUnionStringIds(
+    cloud.removedEniOrgAccountIds,
+    local.removedEniOrgAccountIds
+  );
   merged.orcaInputAccounts = hubMergeOrcaInputAccounts(
     cloud.orcaInputAccounts,
     local.orcaInputAccounts,
     merged.removedOrcaOrgAccountIds,
     preferLocal
   );
-  merged.ramInputAccounts = hubMergeArrayEntriesById(cloud.ramInputAccounts, local.ramInputAccounts, preferLocal);
-  merged.eniInputAccounts = hubMergeArrayEntriesById(cloud.eniInputAccounts, local.eniInputAccounts, preferLocal);
+  let removedRamMap = {};
+  merged.removedRamOrgAccountIds.forEach(function (id) { removedRamMap[id] = true; });
+  let removedEniMap = {};
+  merged.removedEniOrgAccountIds.forEach(function (id) { removedEniMap[id] = true; });
+  merged.ramInputAccounts = hubFilterInputAccountsByRemoved(
+    hubMergeArrayEntriesById(cloud.ramInputAccounts, local.ramInputAccounts, preferLocal),
+    removedRamMap
+  );
+  merged.eniInputAccounts = hubFilterInputAccountsByRemoved(
+    hubMergeArrayEntriesById(cloud.eniInputAccounts, local.eniInputAccounts, preferLocal),
+    removedEniMap
+  );
   merged.caryInputAccounts = hubMergeArrayEntriesById(cloud.caryInputAccounts, local.caryInputAccounts, preferLocal);
-  return merged;
+  return hubStripRemovedAccountsFromSettings(merged);
 }
 
 function hubMergeHubDocuments(localData, cloudData) {
@@ -875,6 +1013,8 @@ if (typeof window !== 'undefined') {
   window.hubMergeOrcaOrgCharts = hubMergeOrcaOrgCharts;
   window.hubMergeRamOrgCharts = hubMergeRamOrgCharts;
   window.hubMergeHubDocuments = hubMergeHubDocuments;
+  window.hubStripRemovedAccountsFromSettings = hubStripRemovedAccountsFromSettings;
+  window.hubMergeOrcaInputAccounts = hubMergeOrcaInputAccounts;
   window.hubPackRamOrgChart = hubPackRamOrgChart;
   window.hubRamOrgChartScore = hubRamOrgChartScore;
   window.hubRebuildOrcaOrgFromSettings = hubRebuildOrcaOrgFromSettings;

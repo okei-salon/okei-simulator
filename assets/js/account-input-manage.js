@@ -555,23 +555,30 @@ function aimDeleteInputAccountFully(projectKey, accountId) {
     }
     aimRemoveOrgMembersOnly(projectKey, subtree);
   } else if (projectKey === 'orca' && typeof orcaSubtreeIds === 'function') {
-    aimRemoveOrgMembersOnly(projectKey, orcaSubtreeIds(accountId));
+    subtree = orcaSubtreeIds(accountId);
+    aimRemoveOrgMembersOnly(projectKey, subtree);
   } else if (projectKey === 'eni' && typeof eniMembers !== 'undefined') {
     aimRemoveOrgMembersOnly(projectKey, [accountId]);
+  } else {
+    aimRecordRemovedOrgAccountIds(projectKey, [accountId]);
   }
   let removed = 0;
-  if (typeof pdDeleteAccountPerformanceData === 'function') {
-    removed = pdDeleteAccountPerformanceData(projectKey, accountId);
-  }
-  aimRemoveInputAccountRecord(projectKey, accountId);
-  if (Array.isArray(settings.removedOrcaOrgAccountIds)) {
-    settings.removedOrcaOrgAccountIds = settings.removedOrcaOrgAccountIds.filter(function (id) { return id !== accountId; });
-  }
-  if (Array.isArray(settings.removedRamOrgAccountIds)) {
-    settings.removedRamOrgAccountIds = settings.removedRamOrgAccountIds.filter(function (id) { return id !== accountId; });
-  }
+  subtree.forEach(function (id) {
+    if (typeof pdDeleteAccountPerformanceData === 'function') {
+      removed += pdDeleteAccountPerformanceData(projectKey, id, {
+        skipPersist: true,
+        skipNotify: true
+      });
+    } else if (typeof pdPurgeAccountPortfolioAndDisplay === 'function') {
+      removed += pdPurgeAccountPortfolioAndDisplay(projectKey, id);
+    }
+    aimRemoveInputAccountRecord(projectKey, id);
+  });
+  // Keep removed*OrgAccountIds tombstones so cloud merge cannot resurrect accounts.
   if (typeof markActivity === 'function') markActivity();
+  if (typeof markSettingsDirty === 'function') markSettingsDirty();
   if (typeof persistHubSettings === 'function') persistHubSettings();
+  else if (typeof pdPersist === 'function') pdPersist();
   if (typeof pdNotifyPerformanceChanged === 'function') {
     pdNotifyPerformanceChanged({ type: 'delete', projectKey: projectKey, accountId: accountId });
   }
@@ -732,6 +739,10 @@ function hubRepairOrcaInputAccounts(settings) {
   settings.orcaInputAccounts.forEach(function (a) {
     if (a && a.id) existing[a.id] = true;
   });
+  let removed = {};
+  (Array.isArray(settings.removedOrcaOrgAccountIds) ? settings.removedOrcaOrgAccountIds : []).forEach(function (id) {
+    if (id) removed[id] = true;
+  });
   let candidateIds = {};
   if (settings.revenueLog) {
     Object.keys(settings.revenueLog).forEach(function (dk) {
@@ -742,7 +753,7 @@ function hubRepairOrcaInputAccounts(settings) {
   }
   let repaired = false;
   Object.keys(candidateIds).forEach(function (id) {
-    if (existing[id]) return;
+    if (existing[id] || removed[id]) return;
     let hint = AIM_ORCA_RESTORE_HINTS[id] || {};
     let inv = Number(hint.investment) || 0;
     if (!inv && settings.investmentHistory && settings.investmentHistory[id]) {
@@ -757,11 +768,6 @@ function hubRepairOrcaInputAccounts(settings) {
     });
     repaired = true;
   });
-  if (repaired && Array.isArray(settings.removedOrcaOrgAccountIds)) {
-    settings.removedOrcaOrgAccountIds = settings.removedOrcaOrgAccountIds.filter(function (rid) {
-      return !candidateIds[rid];
-    });
-  }
   return repaired;
 }
 

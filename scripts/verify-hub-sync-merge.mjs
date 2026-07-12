@@ -125,6 +125,62 @@ cloudWithDeleted.orcaOrgChart.currentData = cloudWithDeleted.orcaOrgChart.member
 const deletedMerged = hubMergeHubDocuments(deletedLocal, cloudWithDeleted);
 assert('ORCA deletion tombstones block restore', !deletedMerged.orcaOrgChart.members.some((m) => m.id === 'kai1' || m.id === 'kai2'));
 assert('ORCA deletion keeps remaining account', deletedMerged.orcaOrgChart.members.some((m) => m.id === 'kai3'));
+assert(
+  'ORCA input accounts respect tombstones',
+  !deletedMerged.settings.orcaInputAccounts.some((a) => a.id === 'kai1' || a.id === 'kai2')
+);
+
+const fullDeleteLocal = hubCreateEmptyData();
+fullDeleteLocal.updatedAt = 5000;
+fullDeleteLocal.settings = hubCreateDefaultSettings();
+fullDeleteLocal.settings.removedOrcaOrgAccountIds = ['test'];
+fullDeleteLocal.settings.orcaInputAccounts = [];
+fullDeleteLocal.settings.revenueLog = {};
+fullDeleteLocal.settings.portfolioOperating = {
+  displayMode: 'project',
+  entries: [{ id: 'keep-project', inputMode: 'project', projectKey: 'orca', amountUsd: 5000 }]
+};
+const fullDeleteCloud = hubCreateEmptyData();
+fullDeleteCloud.updatedAt = 1000;
+fullDeleteCloud.settings = hubCreateDefaultSettings();
+fullDeleteCloud.settings.orcaInputAccounts = [
+  { id: 'test', username: 'test', name: 'test', investment: 10000 }
+];
+fullDeleteCloud.settings.revenueLog = {
+  '2026-07-01': {
+    orcaAccounts: { test: { revenueUsd: 100 } },
+    accounts: { test: { projectKey: 'orca', revenueUsd: 100 } }
+  }
+};
+fullDeleteCloud.settings.investmentHistory = {
+  test: { projectKey: 'orca', records: [{ dateKey: '2026-07-01', amount: 10000, type: 'initial' }] }
+};
+fullDeleteCloud.settings.portfolioOperating = {
+  displayMode: 'account',
+  entries: [
+    { id: 'op-test', inputMode: 'account', projectKey: 'orca', accountId: 'test', amountUsd: 10000 },
+    { id: 'keep-project', inputMode: 'project', projectKey: 'orca', amountUsd: 5000 }
+  ]
+};
+const fullDeleteMerged = hubMergeHubDocuments(fullDeleteLocal, fullDeleteCloud);
+assert(
+  'Full delete keeps tombstone and drops input account',
+  fullDeleteMerged.settings.removedOrcaOrgAccountIds.indexOf('test') >= 0 &&
+    !fullDeleteMerged.settings.orcaInputAccounts.some((a) => a.id === 'test')
+);
+assert(
+  'Full delete strips revenue for removed account',
+  !fullDeleteMerged.settings.revenueLog['2026-07-01']
+);
+assert(
+  'Full delete strips investment history',
+  !fullDeleteMerged.settings.investmentHistory || !fullDeleteMerged.settings.investmentHistory.test
+);
+assert(
+  'Full delete strips account portfolio entries only',
+  fullDeleteMerged.settings.portfolioOperating.entries.length === 1 &&
+    fullDeleteMerged.settings.portfolioOperating.entries[0].id === 'keep-project'
+);
 
 console.log(`\n${passed}/${passed + failed} PASS`);
 process.exit(failed ? 1 : 0);

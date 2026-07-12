@@ -2080,7 +2080,64 @@ function pdDeleteProjectData(projectKey) {
   return changed;
 }
 
-function pdDeleteAccountPerformanceData(projectKey, accountId) {
+function pdPurgeAccountPortfolioAndDisplay(projectKey, accountId) {
+  if (!projectKey || !accountId || typeof settings === 'undefined') return 0;
+  let removed = 0;
+
+  if (settings.portfolioOperating && Array.isArray(settings.portfolioOperating.entries)) {
+    let before = settings.portfolioOperating.entries.length;
+    settings.portfolioOperating.entries = settings.portfolioOperating.entries.filter(function (e) {
+      if (!e) return false;
+      if (e.accountId === accountId) return false;
+      if (e.inputMode === 'account' && e.projectKey === projectKey && e.accountId === accountId) return false;
+      return true;
+    });
+    if (settings.portfolioOperating.entries.length !== before) removed += 1;
+  }
+
+  if (settings.portfolioProfit && Array.isArray(settings.portfolioProfit.entries)) {
+    let before = settings.portfolioProfit.entries.length;
+    settings.portfolioProfit.entries = settings.portfolioProfit.entries.filter(function (e) {
+      if (!e) return false;
+      if (e.accountId === accountId) return false;
+      return true;
+    });
+    if (settings.portfolioProfit.entries.length !== before) removed += 1;
+  }
+
+  if (settings.manageDisplayAccounts && settings.manageDisplayAccounts[projectKey]) {
+    let bucket = settings.manageDisplayAccounts[projectKey];
+    if (Array.isArray(bucket.orgAdded)) {
+      let before = bucket.orgAdded.length;
+      bucket.orgAdded = bucket.orgAdded.filter(function (id) { return id !== accountId; });
+      if (bucket.orgAdded.length !== before) removed += 1;
+    }
+    if (Array.isArray(bucket.removed)) {
+      let before = bucket.removed.length;
+      bucket.removed = bucket.removed.filter(function (id) { return id !== accountId; });
+      if (bucket.removed.length !== before) removed += 1;
+    }
+    if (bucket.labels && Object.prototype.hasOwnProperty.call(bucket.labels, accountId)) {
+      delete bucket.labels[accountId];
+      removed += 1;
+    }
+  }
+
+  if (settings.performanceInputHiddenAccounts &&
+      Array.isArray(settings.performanceInputHiddenAccounts[projectKey])) {
+    let before = settings.performanceInputHiddenAccounts[projectKey].length;
+    settings.performanceInputHiddenAccounts[projectKey] =
+      settings.performanceInputHiddenAccounts[projectKey].filter(function (id) {
+        return id !== accountId;
+      });
+    if (settings.performanceInputHiddenAccounts[projectKey].length !== before) removed += 1;
+  }
+
+  return removed;
+}
+
+function pdDeleteAccountPerformanceData(projectKey, accountId, opts) {
+  opts = opts || {};
   if (!projectKey || !accountId) return 0;
   ensurePerformanceLogs();
   let removed = 0;
@@ -2142,6 +2199,8 @@ function pdDeleteAccountPerformanceData(projectKey, accountId) {
     removed += 1;
   }
 
+  removed += pdPurgeAccountPortfolioAndDisplay(projectKey, accountId);
+
   if (projectKey === 'ram' && settings.ramExcelAccountMap && typeof settings.ramExcelAccountMap === 'object') {
     Object.keys(settings.ramExcelAccountMap).forEach(function (key) {
       if (settings.ramExcelAccountMap[key] === accountId) {
@@ -2151,12 +2210,14 @@ function pdDeleteAccountPerformanceData(projectKey, accountId) {
     });
   }
 
-  if (removed > 0) {
+  if (removed > 0 && !opts.skipPersist) {
     settings.lastUpdate = new Date().toLocaleString();
     if (typeof markActivity === 'function') markActivity();
     if (typeof markSettingsDirty === 'function') markSettingsDirty();
     pdPersist();
-    pdNotifyPerformanceChanged({ type: 'delete', projectKey: projectKey, accountId: accountId });
+    if (!opts.skipNotify) {
+      pdNotifyPerformanceChanged({ type: 'delete', projectKey: projectKey, accountId: accountId });
+    }
   }
   return removed;
 }
@@ -2212,6 +2273,7 @@ if (typeof window !== 'undefined') {
   window.pdFilterProjectsWithData = pdFilterProjectsWithData;
   window.pdHasAnyManageProjectData = pdHasAnyManageProjectData;
   window.pdDeleteAccountPerformanceData = pdDeleteAccountPerformanceData;
+  window.pdPurgeAccountPortfolioAndDisplay = pdPurgeAccountPortfolioAndDisplay;
   window.pdDeleteProjectData = pdDeleteProjectData;
   window.pdCollectRevenueAccountIds = pdCollectRevenueAccountIds;
   window.pdCollectSalesAccountIds = pdCollectSalesAccountIds;

@@ -714,9 +714,9 @@ function pfConfirmManageDeleteData(projectKey, accountId, accountName, onDeleted
   if (typeof modalContent !== 'undefined') {
     modalContent.innerHTML =
       '<div class="pfConfirmBody">' +
-      '<p class="pfConfirmMessage">このアカウントの実績データをすべて削除しますか？</p>' +
+      '<p class="pfConfirmMessage">このアカウントを完全に削除しますか？</p>' +
       '<p class="pfConfirmAccountName">' + pfEscapeHtml(accountName || accountId) + '</p>' +
-      '<p class="pfEntryHelp">組織図・アカウント情報は削除されません。収益・売上の入力データのみ削除されます。</p>' +
+      '<p class="pfEntryHelp">アカウント本体・組織図・収益・売上・ポートフォリオ・関連キャッシュをすべて削除します。この操作は取り消せません。</p>' +
       '</div>';
   }
   let footer = document.querySelector('#modalBg .modalFooter');
@@ -728,19 +728,20 @@ function pfConfirmManageDeleteData(projectKey, accountId, accountName, onDeleted
     let confirmBtn = document.getElementById('pfManageDeleteDataConfirmBtn');
     if (confirmBtn) {
       confirmBtn.onclick = function () {
-        let deleted = 0;
-        if (typeof pdDeleteAccountPerformanceData === 'function') {
-          deleted = pdDeleteAccountPerformanceData(projectKey, accountId);
+        if (typeof aimDeleteInputAccountFully === 'function') {
+          aimDeleteInputAccountFully(projectKey, accountId);
+        } else if (typeof pdDeleteAccountPerformanceData === 'function') {
+          pdDeleteAccountPerformanceData(projectKey, accountId);
         }
         pfCloseEntryModal();
-        if (deleted > 0) {
-          if (typeof showToast === 'function') {
-            showToast('✅ 実績データを削除しました');
-          }
-          if (typeof onDeleted === 'function') onDeleted();
-        } else if (typeof showToast === 'function') {
-          showToast('削除対象の実績データがありませんでした');
+        if (typeof showToast === 'function') {
+          showToast('✅ アカウントを削除しました');
         }
+        if (typeof onDeleted === 'function') onDeleted();
+        if (projectKey === 'orca' && typeof orcaRender === 'function') orcaRender();
+        if (projectKey === 'ram' && typeof render === 'function') render();
+        if (projectKey === 'eni' && typeof eniRender === 'function') eniRender();
+        if (typeof renderPortfolio === 'function') renderPortfolio();
       };
     }
   }
