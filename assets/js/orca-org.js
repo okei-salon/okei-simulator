@@ -730,6 +730,35 @@ function orcaSaveMember() {
   orcaRender();
 }
 
+function orcaSubtreeIds(id) {
+  var ids = [id];
+  var changed = true;
+  while (changed) {
+    changed = false;
+    orcaMembers.forEach(function (m) {
+      if (m.parent && ids.indexOf(m.parent) >= 0 && ids.indexOf(m.id) < 0) { ids.push(m.id); changed = true; }
+    });
+  }
+  return ids;
+}
+
+function orcaRecordRemovedAccounts(ids) {
+  if (!ids || !ids.length) return;
+  if (typeof hubRecordRemovedOrcaOrgAccountIds === 'function') {
+    hubRecordRemovedOrcaOrgAccountIds(settings, ids);
+  } else if (typeof settings !== 'undefined') {
+    if (!Array.isArray(settings.removedOrcaOrgAccountIds)) settings.removedOrcaOrgAccountIds = [];
+    ids.forEach(function (id) {
+      if (settings.removedOrcaOrgAccountIds.indexOf(id) < 0) settings.removedOrcaOrgAccountIds.push(id);
+    });
+    if (Array.isArray(settings.orcaInputAccounts)) {
+      settings.orcaInputAccounts = settings.orcaInputAccounts.filter(function (acc) {
+        return acc && ids.indexOf(acc.id) < 0;
+      });
+    }
+  }
+}
+
 function orcaDeleteMember(id) {
   var target = orcaMembers.find(function (x) { return x.id === id; });
   if (!target) return;
@@ -746,6 +775,7 @@ function orcaDeleteMember(id) {
   }
   orcaMembers = orcaMembers.filter(function (x) { return !rm.has(x.id); });
   orcaRootAccountIds = (orcaRootAccountIds || []).filter(function (x) { return !rm.has(x); });
+  orcaRecordRemovedAccounts(Array.from(rm));
   orcaAdjustAncestorManualVolumes(parent, -line);
   orcaSyncPersonalSalesFor(parent);
   orcaRefreshGroupSalesUpstream(parent);
@@ -914,6 +944,7 @@ function orcaDeleteRootAccount() {
   }
   orcaMembers = orcaMembers.filter(function (x) { return !rm.has(x.id); });
   orcaRootAccountIds = orcaRootAccountIds.filter(function (id) { return !rm.has(id); });
+  orcaRecordRemovedAccounts(Array.from(rm));
   orcaRootId = orcaRootAccountIds[0];
   orcaFocusId = orcaRootId;
   if (typeof markActivity === 'function') markActivity();
@@ -1096,18 +1127,6 @@ function orcaAccountManageMove(id, dir) {
 
 function orcaShowAccountManage() {
   if (typeof showPage === 'function') showPage('orcaAccountManage');
-}
-
-function orcaSubtreeIds(id) {
-  var ids = [id];
-  var changed = true;
-  while (changed) {
-    changed = false;
-    orcaMembers.forEach(function (m) {
-      if (m.parent && ids.indexOf(m.parent) >= 0 && ids.indexOf(m.id) < 0) { ids.push(m.id); changed = true; }
-    });
-  }
-  return ids;
 }
 
 function orcaMakeSharePackage(id, type) {

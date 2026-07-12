@@ -1,5 +1,6 @@
-/* OUKEI HUB Firebase Sync — Ver2.0.7
+/* OUKEI HUB Firebase Sync — Ver2.0.9
  * Google 認証後に LocalStorage / Firestore を同期
+ * 組織図・ポートフォリオはフィールド単位でマージして端末間の上書きを防ぐ
  */
 
 var hubFirebaseApp = null;
@@ -13,6 +14,7 @@ var hubCloudSaveQueued = false;
 var hubLastPushedHash = '';
 var hubFirebaseReady = false;
 var hubSyncState = 'offline';
+var hubSyncInFlight = false;
 
 function hubFirebaseConfigValid() {
   let cfg = typeof HUB_FIREBASE_CONFIG !== 'undefined' ? HUB_FIREBASE_CONFIG : null;
@@ -123,6 +125,49 @@ function hubDeleteCloudData() {
   return ref.delete().catch(function () { return false; });
 }
 
+function hubRefreshViewsAfterSync() {
+  if (typeof render === 'function') render();
+  if (typeof orcaRender === 'function' &&
+      typeof orcaOrgPage !== 'undefined' &&
+      orcaOrgPage &&
+      !orcaOrgPage.classList.contains('hidden')) {
+    orcaRender();
+  }
+  if (typeof renderPortfolio === 'function') renderPortfolio();
+}
+
+function hubApplyMergedHubData(merged, cloudHash) {
+  if (!merged || typeof hubApplyData !== 'function') return false;
+  let beforeHash = typeof hubComputeContentHash === 'function'
+    ? hubComputeContentHash(hubPackLocalData())
+    : '';
+  hubApplyData(merged, { skipMerge: true });
+  if (typeof pmEnsureProjectMaster === 'function') pmEnsureProjectMaster();
+  if (typeof pmEnsureFxSettings === 'function') pmEnsureFxSettings();
+  if (typeof pfEnsureManageDisplayAccounts === 'function') pfEnsureManageDisplayAccounts();
+  if (typeof ensurePerformanceLogs === 'function') ensurePerformanceLogs();
+  if (typeof ensureRevenueLog === 'function') ensureRevenueLog();
+  if (typeof hubSaveToStorage === 'function') hubSaveToStorage({ localOnly: true });
+  let afterHash = typeof hubComputeContentHash === 'function'
+    ? hubComputeContentHash(hubPackLocalData())
+    : '';
+  hubLastPushedHash = cloudHash || hubLastPushedHash;
+  if (beforeHash !== afterHash) hubRefreshViewsAfterSync();
+  return beforeHash !== afterHash;
+}
+
+function hubEnrichLocalFromCloud(cloudDoc) {
+  if (!cloudDoc || typeof hubMergeHubDocuments !== 'function') return false;
+  let local = typeof hubLoadFromStorage === 'function' ? hubLoadFromStorage() : { data: hubCreateEmptyData() };
+  let cloudUnpacked = hubUnpackFirestorePayload(cloudDoc);
+  let merged = hubMergeHubDocuments(local.data, cloudUnpacked);
+  return hubApplyMergedHubData(merged, hubComputeContentHash(cloudUnpacked));
+}
+
+function hubEnrichLocalOrcaFromCloud(cloudDoc) {
+  return hubEnrichLocalFromCloud(cloudDoc);
+}
+
 function hubRunCloudSave(force) {
   if (!hubFirebaseReady || !hubFirebaseUid) {
     hubSetSyncStatus('offline');
@@ -134,9 +179,7 @@ function hubRunCloudSave(force) {
   }
   hubCloudSaveInFlight = true;
   return hubFetchCloudDoc().then(function (cloudDoc) {
-    if (cloudDoc && typeof hubEnrichLocalOrcaFromCloud === 'function') {
-      hubEnrichLocalOrcaFromCloud(cloudDoc);
-    }
+    if (cloudDoc) hubEnrichLocalFromCloud(cloudDoc);
     return hubPushCloudDoc(force);
   }).catch(function () {
     hubSetSyncStatus('offline');
@@ -166,53 +209,16 @@ function hubScheduleCloudSave(immediate) {
   }, hubCloudSaveDelayMs);
 }
 
-function hubEnrichLocalOrcaFromCloud(cloudDoc) {
-  if (!cloudDoc || typeof hubMergeOrcaOrgCharts !== 'function') return false;
-  if (typeof orcaPackOrgChart !== 'function' || typeof orcaApplyOrgChart !== 'function') return false;
-  if (typeof hubOrcaOrgChartScore !== 'function') return false;
-  let cloudUnpacked = hubUnpackFirestorePayload(cloudDoc);
-  let localOrca = orcaPackOrgChart();
-  let merged = hubMergeOrcaOrgCharts(
-    cloudUnpacked.orcaOrgChart,
-    localOrca,
-    typeof settings !== 'undefined' ? settings : cloudUnpacked.settings
-  );
-  let before = hubOrcaOrgChartScore(localOrca);
-  let after = hubOrcaOrgChartScore(merged);
-  if (after.withParent <= before.withParent && after.members <= before.members) return false;
-  orcaApplyOrgChart(merged);
-  if (typeof orcaSyncAllPersonalSales === 'function') orcaSyncAllPersonalSales();
-  if (typeof hubSaveToStorage === 'function') hubSaveToStorage({ localOnly: true });
-  if (typeof orcaRender === 'function') orcaRender();
-  return true;
-}
-
 function hubApplyCloudDataIfNewer(cloudDoc, localUpdatedAt) {
-  if (!cloudDoc) return false;
-  let unpacked = hubUnpackFirestorePayload(cloudDoc);
-  let cloudUpdatedAt = unpacked.updatedAt || 0;
-  let localTs = typeof localUpdatedAt === 'number' ? localUpdatedAt : 0;
-  let localOrca = typeof orcaPackOrgChart === 'function' ? orcaPackOrgChart() : null;
-  if (cloudUpdatedAt > localTs) {
-    unpacked.orcaOrgChart = typeof hubMergeOrcaOrgCharts === 'function'
-      ? hubMergeOrcaOrgCharts(unpacked.orcaOrgChart, localOrca, unpacked.settings)
-      : unpacked.orcaOrgChart;
-    hubApplyData(unpacked);
-    if (typeof pmEnsureProjectMaster === 'function') pmEnsureProjectMaster();
-    if (typeof pmEnsureFxSettings === 'function') pmEnsureFxSettings();
-    if (typeof pfEnsureManageDisplayAccounts === 'function') pfEnsureManageDisplayAccounts();
-    if (typeof ensurePerformanceLogs === 'function') ensurePerformanceLogs();
-    if (typeof ensureRevenueLog === 'function') ensureRevenueLog();
-    hubSaveToStorage({ localOnly: true });
-    hubLastPushedHash = hubComputeContentHash(unpacked);
-    if (typeof render === 'function') render();
-    return true;
-  }
-  if (localTs > cloudUpdatedAt) {
-    return 'push';
-  }
-  hubLastPushedHash = hubComputeContentHash(unpacked);
-  return false;
+  if (!cloudDoc || typeof hubMergeHubDocuments !== 'function') return false;
+  let local = typeof hubLoadFromStorage === 'function' ? hubLoadFromStorage() : { data: hubCreateEmptyData() };
+  let cloudUnpacked = hubUnpackFirestorePayload(cloudDoc);
+  let merged = hubMergeHubDocuments(local.data, cloudUnpacked);
+  let mergedHash = hubComputeContentHash(merged);
+  let cloudHash = hubComputeContentHash(cloudUnpacked);
+  let changed = hubApplyMergedHubData(merged, cloudHash);
+  if (mergedHash !== cloudHash) return 'push';
+  return changed;
 }
 
 function hubSyncHubData() {
@@ -220,24 +226,26 @@ function hubSyncHubData() {
     hubSetSyncStatus('offline', 'オフライン');
     return Promise.resolve(false);
   }
+  if (hubSyncInFlight) return Promise.resolve(false);
+  hubSyncInFlight = true;
 
   hubSetSyncStatus('syncing');
   let local = hubLoadFromStorage();
-  let localUpdatedAt = (local.data && local.data.updatedAt) || 0;
 
   return hubFetchCloudDoc().then(function (cloudDoc) {
-    if (cloudDoc) hubEnrichLocalOrcaFromCloud(cloudDoc);
-    local = hubLoadFromStorage();
-    localUpdatedAt = (local.data && local.data.updatedAt) || 0;
-    let result = hubApplyCloudDataIfNewer(cloudDoc, localUpdatedAt);
-    if (result === 'push') {
-      return hubRunCloudSave(true);
-    }
-    if (result === true) {
+    if (!cloudDoc) {
+      if (!local.isNew) return hubRunCloudSave(true);
       hubSetSyncStatus('done');
       return true;
     }
-    if (!cloudDoc && !local.isNew) {
+
+    let cloudUnpacked = hubUnpackFirestorePayload(cloudDoc);
+    let merged = hubMergeHubDocuments(local.data, cloudUnpacked);
+    let mergedHash = hubComputeContentHash(merged);
+    let cloudHash = hubComputeContentHash(cloudUnpacked);
+    hubApplyMergedHubData(merged, cloudHash);
+
+    if (mergedHash !== cloudHash) {
       return hubRunCloudSave(true);
     }
     hubSetSyncStatus('done');
@@ -245,16 +253,26 @@ function hubSyncHubData() {
   }).catch(function () {
     hubSetSyncStatus('offline', 'オフライン');
     return false;
+  }).finally(function () {
+    hubSyncInFlight = false;
   });
 }
 
 function hubBindFirebaseConnectivity() {
   if (typeof window === 'undefined') return;
   window.addEventListener('online', function () {
-    if (hubFirebaseReady && hubFirebaseUid) hubRunCloudSave(false);
+    if (hubFirebaseReady && hubFirebaseUid) hubSyncHubData();
   });
   window.addEventListener('offline', function () {
     if (hubSyncState !== 'syncing') hubSetSyncStatus('offline', 'オフライン');
+  });
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'visible' && hubFirebaseReady && hubFirebaseUid) {
+      hubSyncHubData();
+    }
+  });
+  window.addEventListener('pageshow', function (e) {
+    if (e.persisted && hubFirebaseReady && hubFirebaseUid) hubSyncHubData();
   });
 }
 
@@ -265,6 +283,7 @@ if (typeof window !== 'undefined') {
   };
   window.hubSyncHubData = hubSyncHubData;
   window.hubFetchCloudDoc = hubFetchCloudDoc;
+  window.hubEnrichLocalFromCloud = hubEnrichLocalFromCloud;
   window.hubEnrichLocalOrcaFromCloud = hubEnrichLocalOrcaFromCloud;
   window.hubDeleteCloudData = hubDeleteCloudData;
   window.hubSetSyncStatus = hubSetSyncStatus;

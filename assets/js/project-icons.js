@@ -3,7 +3,7 @@
  * PNG icons loaded from assets/projects/
  */
 
-var PJ_ICON_VERSION = '20260711-eni-v4';
+var PJ_ICON_VERSION = '20260712-v310';
 var PJ_ICON_BASE = 'assets/projects/';
 
 /** プロジェクト名の完全一致 → 公式アイコン key */

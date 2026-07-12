@@ -15,7 +15,8 @@
     "fetch:orca-firestore": "python3 scripts/fetch-orca-from-firestore.py",
     "embed:orca-hub": "python3 tools/hub_embed_orca_org.py",
     "verify:hub-restore": "node scripts/verify-restore-hub.mjs",
-    "verify:eni-optin": "node scripts/verify-eni-optin.mjs"
+    "verify:eni-optin": "node scripts/verify-eni-optin.mjs",
+    "verify:hub-sync": "node scripts/verify-hub-sync-merge.mjs"
   },
   "devDependencies": {
     "firebase-tools": "^13.29.1"

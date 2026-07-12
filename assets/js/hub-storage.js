@@ -1,4 +1,4 @@
-/* OUKEI HUB Local Storage + Cloud Save Hooks — Ver2.0.7 */
+/* OUKEI HUB Local Storage + Cloud Save Hooks — Ver2.0.8 */
 
 var HUB_STORAGE_KEY = 'oukei_hub_v15_data';
 var HUB_STORAGE_LEGACY_KEY = 'okei_v14_data';
@@ -24,8 +24,73 @@ function hubCreateDefaultSettings() {
     revenueLog: {},
     salesLog: {},
     manageDisplayAccounts: {},
-    performanceInputHiddenAccounts: {}
+    performanceInputHiddenAccounts: {},
+    removedRamOrgAccountIds: [],
+    removedOrcaOrgAccountIds: []
   };
+}
+
+function hubUnionStringIds() {
+  let out = [];
+  for (let i = 0; i < arguments.length; i++) {
+    let list = arguments[i];
+    if (!Array.isArray(list)) continue;
+    list.forEach(function (id) {
+      if (id && out.indexOf(id) < 0) out.push(id);
+    });
+  }
+  return out;
+}
+
+function hubGetRemovedOrcaOrgAccountIds(settings) {
+  return settings && Array.isArray(settings.removedOrcaOrgAccountIds)
+    ? settings.removedOrcaOrgAccountIds
+    : [];
+}
+
+function hubGetRemovedRamOrgAccountIds(settings) {
+  return settings && Array.isArray(settings.removedRamOrgAccountIds)
+    ? settings.removedRamOrgAccountIds
+    : [];
+}
+
+function hubRecordRemovedOrcaOrgAccountIds(settings, ids) {
+  if (!settings || !ids || !ids.length) return;
+  settings.removedOrcaOrgAccountIds = hubUnionStringIds(settings.removedOrcaOrgAccountIds, ids);
+  if (Array.isArray(settings.orcaInputAccounts)) {
+    settings.orcaInputAccounts = settings.orcaInputAccounts.filter(function (acc) {
+      return acc && ids.indexOf(acc.id) < 0;
+    });
+  }
+}
+
+function hubFilterOrgChartByRemovedIds(chart, removedIds) {
+  let base = chart && typeof chart === 'object' ? chart : {};
+  let removed = {};
+  (removedIds || []).forEach(function (id) { removed[id] = true; });
+  if (!Object.keys(removed).length) return base;
+  let members = Array.isArray(base.members) ? base.members.filter(function (m) {
+    return m && m.id && !removed[m.id];
+  }) : [];
+  let rootAccountIds = Array.isArray(base.rootAccountIds)
+    ? base.rootAccountIds.filter(function (id) { return id && !removed[id]; })
+    : [];
+  let rootId = base.rootId && !removed[base.rootId] ? base.rootId : (rootAccountIds[0] || '');
+  return Object.assign({}, base, {
+    members: members,
+    currentData: JSON.parse(JSON.stringify(members)),
+    rootAccountIds: rootAccountIds,
+    rootId: rootId
+  });
+}
+
+function hubMergeOrcaInputAccounts(cloudAccounts, localAccounts, removedIds, preferLocal) {
+  let filter = function (arr) {
+    let removed = {};
+    (removedIds || []).forEach(function (id) { removed[id] = true; });
+    return (arr || []).filter(function (acc) { return acc && acc.id && !removed[acc.id]; });
+  };
+  return hubMergeArrayEntriesById(filter(cloudAccounts), filter(localAccounts), preferLocal);
 }
 
 function hubCreateEmptyEniOrgChart() {
@@ -130,6 +195,211 @@ function hubResolveStorageKey() {
   return HUB_STORAGE_KEY;
 }
 
+function hubRamOrgChartHasMembers(chart) {
+  return !!(chart && Array.isArray(chart.members) && chart.members.length > 0);
+}
+
+function hubRamOrgChartScore(chart) {
+  let members = chart && Array.isArray(chart.members) ? chart.members : [];
+  let withParent = members.filter(function (m) { return m && m.parent; }).length;
+  let totalInv = members.reduce(function (s, m) { return s + (Number(m && m.investment) || 0); }, 0);
+  return {
+    members: members.length,
+    withParent: withParent,
+    roots: members.filter(function (m) { return m && !m.parent; }).length,
+    totalInv: totalInv
+  };
+}
+
+function hubPickRicherRamOrgChart(a, b) {
+  let left = a && typeof a === 'object' ? a : hubPackRamOrgFromData(hubCreateEmptyData());
+  let right = b && typeof b === 'object' ? b : hubPackRamOrgFromData(hubCreateEmptyData());
+  let sa = hubRamOrgChartScore(left);
+  let sb = hubRamOrgChartScore(right);
+  if (sb.withParent !== sa.withParent) return sb.withParent > sa.withParent ? right : left;
+  if (sb.members !== sa.members) return sb.members > sa.members ? right : left;
+  if (sb.totalInv !== sa.totalInv) return sb.totalInv > sa.totalInv ? right : left;
+  return hubRamOrgChartHasMembers(right) ? right : left;
+}
+
+function hubPackRamOrgFromData(data) {
+  data = data || {};
+  return {
+    members: Array.isArray(data.members) ? data.members : [],
+    currentData: Array.isArray(data.currentData) ? data.currentData : [],
+    scenarios: Array.isArray(data.scenarios) ? data.scenarios : [],
+    rootId: typeof data.rootId === 'string' ? data.rootId : '',
+    rootAccountIds: Array.isArray(data.rootAccountIds) ? data.rootAccountIds : []
+  };
+}
+
+function hubPackRamOrgChart() {
+  return hubPackRamOrgFromData({
+    members: typeof members !== 'undefined' ? members : [],
+    currentData: typeof currentData !== 'undefined' ? currentData : [],
+    scenarios: typeof scenarios !== 'undefined' ? scenarios : [],
+    rootId: typeof rootId !== 'undefined' ? rootId : '',
+    rootAccountIds: typeof rootAccountIds !== 'undefined' ? rootAccountIds : []
+  });
+}
+
+function hubMergeRamOrgCharts(incoming, preserved, settings, preferLocal) {
+  let removedIds = hubGetRemovedRamOrgAccountIds(settings);
+  let inc = hubFilterOrgChartByRemovedIds(hubPackRamOrgFromData(incoming || {}), removedIds);
+  let pre = hubFilterOrgChartByRemovedIds(hubPackRamOrgFromData(preserved || {}), removedIds);
+  let sa = hubRamOrgChartScore(inc);
+  let sb = hubRamOrgChartScore(pre);
+  if (preferLocal && sb.members <= sa.members) return pre;
+  if (!preferLocal && sa.members <= sb.members) return inc;
+  let picked = hubPickRicherRamOrgChart(inc, pre);
+  return hubFilterOrgChartByRemovedIds(picked, removedIds);
+}
+
+function hubEniOrgChartScore(chart) {
+  let members = chart && Array.isArray(chart.members) ? chart.members : [];
+  let withParent = members.filter(function (m) { return m && m.parent; }).length;
+  return {
+    members: members.length,
+    withParent: withParent
+  };
+}
+
+function hubPickRicherEniOrgChart(a, b) {
+  let left = a && typeof a === 'object' ? a : hubCreateEmptyEniOrgChart();
+  let right = b && typeof b === 'object' ? b : hubCreateEmptyEniOrgChart();
+  let sa = hubEniOrgChartScore(left);
+  let sb = hubEniOrgChartScore(right);
+  if (sb.withParent !== sa.withParent) return sb.withParent > sa.withParent ? right : left;
+  if (sb.members !== sa.members) return sb.members > sa.members ? right : left;
+  return hubEniOrgChartHasMembers(right) ? right : left;
+}
+
+function hubMergeArrayEntriesById(cloudEntries, localEntries, preferLocal) {
+  let map = {};
+  (cloudEntries || []).forEach(function (entry) {
+    if (entry && entry.id != null) map[entry.id] = entry;
+  });
+  (localEntries || []).forEach(function (entry) {
+    if (!entry || entry.id == null) return;
+    if (!map[entry.id]) {
+      map[entry.id] = entry;
+      return;
+    }
+    map[entry.id] = preferLocal ? entry : map[entry.id];
+  });
+  return Object.keys(map).map(function (id) { return map[id]; });
+}
+
+function hubMergeKeyedObjects(cloudObj, localObj, preferLocal) {
+  let out = Object.assign({}, cloudObj || {});
+  Object.keys(localObj || {}).forEach(function (key) {
+    if (!Object.prototype.hasOwnProperty.call(out, key)) {
+      out[key] = localObj[key];
+      return;
+    }
+    if (preferLocal) out[key] = localObj[key];
+  });
+  return out;
+}
+
+function hubMergePortfolioGoal(cloudGoal, localGoal, preferLocal) {
+  let c = cloudGoal && typeof cloudGoal === 'object' ? cloudGoal : {};
+  let l = localGoal && typeof localGoal === 'object' ? localGoal : {};
+  let merged = Object.assign({}, c, l);
+  if (c.rates || l.rates) merged.rates = Object.assign({}, c.rates || {}, l.rates || {});
+  if (preferLocal) {
+    if (l.savedAt) merged.savedAt = l.savedAt;
+    if (typeof l.amountYen === 'number') merged.amountYen = l.amountYen;
+  } else {
+    if (c.savedAt) merged.savedAt = c.savedAt;
+    if (typeof c.amountYen === 'number') merged.amountYen = c.amountYen;
+  }
+  return merged;
+}
+
+function hubMergePortfolioOperating(cloudVal, localVal, preferLocal) {
+  let c = cloudVal && typeof cloudVal === 'object' ? cloudVal : { displayMode: 'project', entries: [] };
+  let l = localVal && typeof localVal === 'object' ? localVal : { displayMode: 'project', entries: [] };
+  return {
+    displayMode: preferLocal ? (l.displayMode || c.displayMode || 'project') : (c.displayMode || l.displayMode || 'project'),
+    entries: hubMergeArrayEntriesById(c.entries, l.entries, preferLocal)
+  };
+}
+
+function hubMergePortfolioProfit(cloudVal, localVal, preferLocal) {
+  let c = cloudVal && typeof cloudVal === 'object' ? cloudVal : { entries: [] };
+  let l = localVal && typeof localVal === 'object' ? localVal : { entries: [] };
+  return {
+    entries: hubMergeArrayEntriesById(c.entries, l.entries, preferLocal)
+  };
+}
+
+function hubMergeHubSettings(localSettings, cloudSettings, localUpdatedAt, cloudUpdatedAt) {
+  let local = Object.assign(hubCreateDefaultSettings(), localSettings || {});
+  let cloud = Object.assign(hubCreateDefaultSettings(), cloudSettings || {});
+  let preferLocal = (localUpdatedAt || 0) >= (cloudUpdatedAt || 0);
+  let merged = Object.assign({}, cloud, local);
+  merged.portfolioGoal = hubMergePortfolioGoal(cloud.portfolioGoal, local.portfolioGoal, preferLocal);
+  merged.portfolioOperating = hubMergePortfolioOperating(cloud.portfolioOperating, local.portfolioOperating, preferLocal);
+  merged.portfolioProfit = hubMergePortfolioProfit(cloud.portfolioProfit, local.portfolioProfit, preferLocal);
+  merged.revenueLog = hubMergeKeyedObjects(cloud.revenueLog, local.revenueLog, preferLocal);
+  merged.salesLog = hubMergeKeyedObjects(cloud.salesLog, local.salesLog, preferLocal);
+  merged.manageDisplayAccounts = hubMergeKeyedObjects(cloud.manageDisplayAccounts, local.manageDisplayAccounts, preferLocal);
+  merged.performanceInputHiddenAccounts = hubMergeKeyedObjects(
+    cloud.performanceInputHiddenAccounts,
+    local.performanceInputHiddenAccounts,
+    preferLocal
+  );
+  if (cloud.projectMaster || local.projectMaster) {
+    merged.projectMaster = preferLocal
+      ? Object.assign({}, cloud.projectMaster || {}, local.projectMaster || {})
+      : Object.assign({}, local.projectMaster || {}, cloud.projectMaster || {});
+  }
+  merged.removedRamOrgAccountIds = hubUnionStringIds(
+    cloud.removedRamOrgAccountIds,
+    local.removedRamOrgAccountIds
+  );
+  merged.removedOrcaOrgAccountIds = hubUnionStringIds(
+    cloud.removedOrcaOrgAccountIds,
+    local.removedOrcaOrgAccountIds
+  );
+  merged.orcaInputAccounts = hubMergeOrcaInputAccounts(
+    cloud.orcaInputAccounts,
+    local.orcaInputAccounts,
+    merged.removedOrcaOrgAccountIds,
+    preferLocal
+  );
+  merged.eniInputAccounts = hubMergeArrayEntriesById(cloud.eniInputAccounts, local.eniInputAccounts, preferLocal);
+  merged.caryInputAccounts = hubMergeArrayEntriesById(cloud.caryInputAccounts, local.caryInputAccounts, preferLocal);
+  return merged;
+}
+
+function hubMergeHubDocuments(localData, cloudData) {
+  let local = hubNormalizeLoadedData(localData || hubCreateEmptyData());
+  let cloud = hubNormalizeLoadedData(cloudData || hubCreateEmptyData());
+  let preferLocal = (local.updatedAt || 0) >= (cloud.updatedAt || 0);
+  let mergedSettings = hubMergeHubSettings(local.settings, cloud.settings, local.updatedAt, cloud.updatedAt);
+  let mergedRam = hubMergeRamOrgCharts(
+    hubPackRamOrgFromData(cloud),
+    hubPackRamOrgFromData(local),
+    mergedSettings,
+    preferLocal
+  );
+  let mergedOrca = hubMergeOrcaOrgCharts(cloud.orcaOrgChart, local.orcaOrgChart, mergedSettings);
+  let mergedEni = hubPickRicherEniOrgChart(cloud.eniOrgChart, local.eniOrgChart);
+  return {
+    members: mergedRam.members,
+    currentData: mergedRam.currentData,
+    scenarios: mergedRam.scenarios,
+    rootId: mergedRam.rootId,
+    rootAccountIds: mergedRam.rootAccountIds,
+    settings: mergedSettings,
+    orcaOrgChart: mergedOrca,
+    eniOrgChart: mergedEni,
+    updatedAt: Math.max(local.updatedAt || 0, cloud.updatedAt || 0)
+  };
+}
+
 function hubOrcaOrgChartHasMembers(chart) {
   return !!(chart && Array.isArray(chart.members) && chart.members.length > 0);
 }
@@ -195,17 +465,13 @@ function hubEnsureOrcaRootsOnChart(chart, settings) {
   let rootAccountIds = Array.isArray(merged.rootAccountIds) ? merged.rootAccountIds.slice() : [];
   (settings && settings.orcaInputAccounts ? settings.orcaInputAccounts : []).forEach(function (acc) {
     if (!acc || !acc.id) return;
-    if (!byId[acc.id]) {
-      let created = hubCreateOrcaMemberFromInputAccount(acc);
-      members.push(created);
-      byId[acc.id] = created;
-    } else {
-      let m = byId[acc.id];
+    if (hubGetRemovedOrcaOrgAccountIds(settings).indexOf(acc.id) >= 0) return;
+    if (!byId[acc.id]) return;
+    let m = byId[acc.id];
       m.username = String(acc.username || acc.name || m.username || '未入力').replace(/^@/, '');
       m.name = acc.name || m.name || m.username || '未入力';
       m.investment = Number(acc.investment) || Number(m.investment) || 0;
-      if (acc.aiAgent) m.aiAgent = acc.aiAgent;
-    }
+    if (acc.aiAgent) m.aiAgent = acc.aiAgent;
     if (rootAccountIds.indexOf(acc.id) < 0) rootAccountIds.push(acc.id);
   });
   rootAccountIds = rootAccountIds.filter(function (id) { return !!byId[id]; });
@@ -245,11 +511,7 @@ function hubEniOrgChartHasMembers(chart) {
 }
 
 function hubMergeEniOrgCharts(incoming, preserved) {
-  let picked = hubCreateEmptyEniOrgChart();
-  [incoming, preserved].forEach(function (chart) {
-    if (hubEniOrgChartHasMembers(chart)) picked = chart;
-  });
-  return picked;
+  return hubPickRicherEniOrgChart(incoming, preserved);
 }
 
 function hubResolveEniOrgChart(rawChart, preservedChart) {
@@ -278,16 +540,19 @@ function hubExtractRawOrcaOrgChart(raw) {
   return null;
 }
 
-function hubMergeOrcaOrgCharts(incoming, preserved, settings) {
-  let candidates = [];
-  if (incoming && typeof incoming === 'object') candidates.push(incoming);
-  if (preserved && typeof preserved === 'object') candidates.push(preserved);
-  let rebuilt = hubRebuildOrcaOrgFromSettings(settings);
-  if (hubOrcaOrgChartHasMembers(rebuilt)) candidates.push(rebuilt);
-  let picked = hubCreateEmptyOrcaOrgChart();
-  candidates.forEach(function (chart) {
-    if (hubOrcaOrgChartHasMembers(chart)) picked = hubPickRicherOrcaOrgChart(picked, chart);
-  });
+function hubMergeOrcaOrgCharts(incoming, preserved, settings, preferLocal) {
+  let removedIds = hubGetRemovedOrcaOrgAccountIds(settings);
+  let inc = hubFilterOrgChartByRemovedIds(incoming, removedIds);
+  let pre = hubFilterOrgChartByRemovedIds(preserved, removedIds);
+  let sa = hubOrcaOrgChartScore(inc);
+  let sb = hubOrcaOrgChartScore(pre);
+  if (preferLocal && sb.members <= sa.members) {
+    return hubEnsureOrcaRootsOnChart(pre, settings);
+  }
+  if (!preferLocal && sa.members <= sb.members) {
+    return hubEnsureOrcaRootsOnChart(inc, settings);
+  }
+  let picked = hubPickRicherOrcaOrgChart(inc, pre);
   return hubEnsureOrcaRootsOnChart(picked, settings);
 }
 
@@ -329,8 +594,8 @@ function hubRebuildOrcaOrgFromSettings(settings) {
   };
 }
 
-function hubResolveOrcaOrgChart(rawChart, settings, preservedChart) {
-  return hubMergeOrcaOrgCharts(rawChart, preservedChart, settings);
+function hubResolveOrcaOrgChart(rawChart, settings, preservedChart, preferLocal) {
+  return hubMergeOrcaOrgCharts(rawChart, preservedChart, settings, preferLocal);
 }
 
 function hubNormalizeLoadedData(raw) {
@@ -446,19 +711,36 @@ function hubComputeContentHash(data) {
   return String(hash);
 }
 
-function hubApplyData(data) {
+function hubApplyData(data, opts) {
+  opts = opts || {};
+  let preferLocal = !!opts.preferLocal;
+  let preservedRam = hubPackRamOrgChart();
   let preservedOrca = typeof orcaPackOrgChart === 'function' ? orcaPackOrgChart() : null;
   let preservedEni = typeof eniPackOrgChart === 'function' ? eniPackOrgChart() : null;
   let normalized = hubNormalizeLoadedData(data);
-  normalized.orcaOrgChart = hubMergeOrcaOrgCharts(
-    hubExtractRawOrcaOrgChart(data) || normalized.orcaOrgChart,
-    preservedOrca,
-    normalized.settings
-  );
-  normalized.eniOrgChart = hubMergeEniOrgCharts(
-    hubExtractRawEniOrgChart(data) || normalized.eniOrgChart,
-    preservedEni
-  );
+  if (!opts.skipMerge) {
+    let mergedRam = hubMergeRamOrgCharts(
+      hubPackRamOrgFromData(normalized),
+      preservedRam,
+      normalized.settings,
+      preferLocal
+    );
+    normalized.members = mergedRam.members;
+    normalized.currentData = mergedRam.currentData;
+    normalized.scenarios = mergedRam.scenarios;
+    normalized.rootId = mergedRam.rootId;
+    normalized.rootAccountIds = mergedRam.rootAccountIds;
+    normalized.orcaOrgChart = hubMergeOrcaOrgCharts(
+      hubExtractRawOrcaOrgChart(data) || normalized.orcaOrgChart,
+      preservedOrca,
+      normalized.settings,
+      preferLocal
+    );
+    normalized.eniOrgChart = hubMergeEniOrgCharts(
+      hubExtractRawEniOrgChart(data) || normalized.eniOrgChart,
+      preservedEni
+    );
+  }
   if (typeof clone === 'function') {
     members = clone(normalized.members);
     currentData = clone(normalized.currentData);
@@ -585,7 +867,12 @@ if (typeof window !== 'undefined') {
   window.hubOrcaOrgChartScore = hubOrcaOrgChartScore;
   window.hubOrcaOrgChartIsShallow = hubOrcaOrgChartIsShallow;
   window.hubExtractRawOrcaOrgChart = hubExtractRawOrcaOrgChart;
+  window.hubRecordRemovedOrcaOrgAccountIds = hubRecordRemovedOrcaOrgAccountIds;
   window.hubMergeOrcaOrgCharts = hubMergeOrcaOrgCharts;
+  window.hubMergeRamOrgCharts = hubMergeRamOrgCharts;
+  window.hubMergeHubDocuments = hubMergeHubDocuments;
+  window.hubPackRamOrgChart = hubPackRamOrgChart;
+  window.hubRamOrgChartScore = hubRamOrgChartScore;
   window.hubRebuildOrcaOrgFromSettings = hubRebuildOrcaOrgFromSettings;
   window.hubResolveOrcaOrgChart = hubResolveOrcaOrgChart;
   window.hubApplyData = hubApplyData;
