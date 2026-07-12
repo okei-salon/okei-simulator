@@ -393,6 +393,7 @@
 
 .pfProjectCard--ram { border-color: rgba(249, 115, 22, .35); }
 .pfProjectCard--orca { border-color: rgba(59, 130, 246, .32); }
+.pfProjectCard--eni { border-color: rgba(163, 230, 53, .34); }
 .pfProjectCard--cary { border-color: rgba(168, 85, 247, .32); }
 
 .pfProjectCard.isClickable {
@@ -412,6 +413,7 @@
 
 .pfProjectCard--ram.isClickable:hover { border-color: rgba(249, 115, 22, .55); }
 .pfProjectCard--orca.isClickable:hover { border-color: rgba(59, 130, 246, .52); }
+.pfProjectCard--eni.isClickable:hover { border-color: rgba(163, 230, 53, .46); }
 
 .pfProjectMetrics--detail {
   grid-template-columns: repeat(5, minmax(0, 1fr));

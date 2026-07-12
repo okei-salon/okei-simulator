@@ -117,7 +117,7 @@ function pjIsOrgChartImplemented(projectKey) {
 
 function pjBuildOrgSelectCardBg(projectKey) {
   let t = pjGetTheme(projectKey);
-  let bg = projectKey === 'eni' ? 'linear-gradient(180deg, #132018, #0d1b14)' : 'linear-gradient(180deg, #13243d, #0d1b30)';
+  let bg = 'linear-gradient(180deg, #13243d, #0d1b30)';
   return bg + ' padding-box, linear-gradient(135deg, ' + t.accentBorder + ', ' + t.accentSoft + ') border-box';
 }
 
@@ -133,9 +133,6 @@ function pjBuildDynamicThemeCss() {
     let glowLine = t.accentMid || t.accent;
 
     css.push('.homeMonthlyProjCard--' + key + ',.homeMonthlyCard .homeMonthlyProjCard--' + key + '{border-color:' + t.accentBorder + '}');
-    if (key === 'eni') {
-      css.push('.homeMonthlyCard .homeMonthlyProjCard--eni{box-shadow:0 0 18px ' + t.accentGlow + '}');
-    }
     css.push('.homeMonthlyProjCard--' + key + ' .homeMonthlyProjCardBarFill,.homeMonthlyCard .homeMonthlyProjCard--' + key + ' .homeMonthlyProjCardBarFill{background:' + grad + '}');
 
     css.push('.homeTodayProjCard--' + key + ',.homeTodayCard .homeTodayProjCard--' + key + '{border-color:' + t.accentBorder + '}');

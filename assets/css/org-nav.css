@@ -91,6 +91,17 @@
   box-shadow: 0 0 18px rgba(59, 130, 246, .4);
 }
 
+.orgSelectCard--eni {
+  background:
+    linear-gradient(180deg, #13243d, #0d1b30) padding-box,
+    linear-gradient(135deg, rgba(163, 230, 53, .34), rgba(163, 230, 53, .38)) border-box;
+}
+
+.orgSelectCard--eni::before {
+  background: linear-gradient(90deg, transparent, #84cc16, transparent);
+  box-shadow: 0 0 18px rgba(132, 204, 22, .42);
+}
+
 .orgSelectCardIcon {
   position: relative;
   z-index: 1;

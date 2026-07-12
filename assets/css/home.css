@@ -876,6 +876,10 @@
   border-color: rgba(148, 163, 184, .28);
 }
 
+.homeMonthlyCard .homeMonthlyProjCard--eni {
+  border-color: rgba(163, 230, 53, .34);
+}
+
 .homeMonthlyCard .homeMonthlyProjCardPct {
   font-size: 10px;
   font-weight: 800;
@@ -923,6 +927,10 @@
 
 .homeMonthlyCard .homeMonthlyProjCard--custom .homeMonthlyProjCardBarFill {
   background: linear-gradient(90deg, #64748b, #94a3b8);
+}
+
+.homeMonthlyCard .homeMonthlyProjCard--eni .homeMonthlyProjCardBarFill {
+  background: linear-gradient(90deg, #65a30d, #a3e635, #bef264);
 }
 
 /* --- 本日収益カード（このカード専用・他カード非共有） --- */
@@ -1272,6 +1280,10 @@
   border-color: rgba(168, 85, 247, .28);
 }
 
+.homeTodayCard .homeTodayProjCard--eni {
+  border-color: rgba(163, 230, 53, .34);
+}
+
 .homeTodayCard .homeTodayProjCardPct {
   font-size: 14px;
   font-weight: 800;
@@ -1319,6 +1331,10 @@
 
 .homeTodayCard .homeTodayProjCard--custom .homeTodayProjCardBarFill {
   background: linear-gradient(90deg, #64748b, #94a3b8);
+}
+
+.homeTodayCard .homeTodayProjCard--eni .homeTodayProjCardBarFill {
+  background: linear-gradient(90deg, #65a30d, #a3e635, #bef264);
 }
 
 .homeChartBlock {
@@ -1507,6 +1523,7 @@
 .homeProjCard--ram { border-color: rgba(59, 130, 246, .28); }
 .homeProjCard--orca { border-color: rgba(20, 184, 166, .28); }
 .homeProjCard--cary { border-color: rgba(168, 85, 247, .28); }
+.homeProjCard--eni { border-color: rgba(163, 230, 53, .34); }
 
 .homeProjCardName {
   font-size: 11px;
@@ -2781,6 +2798,10 @@
 
 .revenueProjectCard--cary:hover {
   border-color: rgba(168, 85, 247, .45);
+}
+
+.revenueProjectCard--eni:hover {
+  border-color: rgba(163, 230, 53, .46);
 }
 
 .revenueProjectCardBody {
