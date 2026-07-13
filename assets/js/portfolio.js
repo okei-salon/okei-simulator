@@ -546,6 +546,9 @@ function pfGetEnabledProjectRows() {
     let monthYield = pfFormatPredictedMonthlyYield(monthRev, operatingUsd, viewMonth.y, viewMonth.m);
     let eniAvgDailyProfitUsd = 0;
     let eniCanForecast = false;
+    let eniCycleDaysLeft = null;
+    let eniCycleTargetDateStr = null;
+    let eniCycleAchieved = false;
     if (p.key === 'ram') {
       let ramAgg = pfGetRamAggregateTotals();
       if (ramAgg) {
@@ -559,11 +562,14 @@ function pfGetEnabledProjectRows() {
         monthYield = pfFormatYieldFromAmount(monthProfitUsd, operatingUsd);
       }
     } else if (p.key === 'eni' && !pfIsDemoMode()) {
-      let eniMonthForecast = pfGetEniMonthLandingForecast(operatingUsd);
-      monthProfitUsd = eniMonthForecast.monthProfitUsd;
-      monthYield = eniMonthForecast.monthYield;
-      eniAvgDailyProfitUsd = pfGetEniAllTimeAvgDailyProfit(profitUsd);
-      eniCanForecast = !!eniMonthForecast.canForecast;
+      let eniPace = pfGetEniSharedPaceMetrics(operatingUsd, profitUsd);
+      monthProfitUsd = eniPace.predictedMonthProfitUsd;
+      monthYield = eniPace.predictedMonthYield;
+      eniAvgDailyProfitUsd = eniPace.avgDailyProfitUsd;
+      eniCanForecast = !!eniPace.canForecast;
+      eniCycleDaysLeft = eniPace.cycleDaysLeft;
+      eniCycleTargetDateStr = eniPace.cycleTargetDateStr;
+      eniCycleAchieved = !!eniPace.cycleAchieved;
     }
     let recovery = operatingUsd > 0
       ? Math.round((profitUsd / operatingUsd) * 1000) / 10
@@ -580,6 +586,9 @@ function pfGetEnabledProjectRows() {
       monthYield: monthYield,
       eniAvgDailyProfitUsd: eniAvgDailyProfitUsd,
       eniCanForecast: eniCanForecast,
+      eniCycleDaysLeft: eniCycleDaysLeft,
+      eniCycleTargetDateStr: eniCycleTargetDateStr,
+      eniCycleAchieved: eniCycleAchieved,
       recovery: recovery,
       recoveryDisplay: pfDisplayPct(recovery, operatingUsd > 0 && profitUsd > 0),
       fill: pfRecoveryFillPct(recovery),
@@ -1029,33 +1038,23 @@ function pfEniDayProfitUsd(entry) {
   return Number(entry.eni) || 0;
 }
 
-/** Count all-time calendar days that have at least one ENI performance entry. */
-function pfCountEniPerformanceDays() {
-  if (typeof settings === 'undefined' || !settings || !settings.revenueLog) return 0;
-  let keys = typeof pdListRevenueDateKeys === 'function'
-    ? pdListRevenueDateKeys()
-    : Object.keys(settings.revenueLog).sort();
-  let count = 0;
-  keys.forEach(function (dateKey) {
-    if (pfEniDayHasPerformance(settings.revenueLog[dateKey], dateKey)) count += 1;
-  });
-  return count;
-}
-
 /**
- * Current-month ENI landing forecast:
- * avgDaily = monthProfit / monthInputDays
- * predictedMonth = monthProfit + avgDaily * remainingCalendarDays
- * (previous months are excluded)
+ * Single ENI pace source used by:
+ * - 予測月利益 / 予測月利
+ * - 3.5倍までの残り日数 / 到達予定日
+ *
+ * avgDaily = thisMonthProfit / thisMonthInputDays
+ * (previous months excluded from avgDaily)
  */
-function pfGetEniMonthLandingForecast(operatingUsd) {
+function pfGetEniSharedPaceMetrics(operatingUsd, cumulativeProfitUsd) {
   let op = Number(operatingUsd) || 0;
+  let cumulative = Number(cumulativeProfitUsd) || 0;
   let now = new Date();
   let y = now.getFullYear();
   let m = now.getMonth();
   let todayD = now.getDate();
   let daysInMonth = new Date(y, m + 1, 0).getDate();
-  let remainingDays = Math.max(0, daysInMonth - todayD);
+  let remainingDaysInMonth = Math.max(0, daysInMonth - todayD);
 
   let monthProfit = 0;
   let inputDays = 0;
@@ -1073,37 +1072,51 @@ function pfGetEniMonthLandingForecast(operatingUsd) {
   if (typeof pdRoundEni === 'function') monthProfit = pdRoundEni(monthProfit);
   else monthProfit = Math.round(monthProfit * 10000) / 10000;
 
-  if (inputDays <= 0) {
-    return {
-      monthProfitToDateUsd: 0,
-      monthInputDays: 0,
-      remainingDays: remainingDays,
-      avgDailyProfitUsd: 0,
-      monthProfitUsd: 0,
-      monthYield: '--',
-      canForecast: false
-    };
-  }
-
-  let avgDaily = monthProfit / inputDays;
-  let predictedMonth = monthProfit + (avgDaily * remainingDays);
-  return {
+  let empty = {
+    avgDailyProfitUsd: 0,
     monthProfitToDateUsd: monthProfit,
     monthInputDays: inputDays,
-    remainingDays: remainingDays,
-    avgDailyProfitUsd: avgDaily,
-    monthProfitUsd: predictedMonth,
-    monthYield: pfFormatYieldFromAmount(predictedMonth, op),
-    canForecast: avgDaily > 0
+    remainingDaysInMonth: remainingDaysInMonth,
+    predictedMonthProfitUsd: 0,
+    predictedMonthYield: '--',
+    canForecast: false,
+    cycleDaysLeft: null,
+    cycleTargetDateStr: null,
+    cycleAchieved: op > 0 && cumulative >= (op * PF_ENI_CYCLE_MULTIPLE)
   };
-}
 
-/** All-time average daily profit for 3.5x ETA (cumulative ÷ all ENI input days). */
-function pfGetEniAllTimeAvgDailyProfit(profitUsd) {
-  let profit = Number(profitUsd) || 0;
-  let days = pfCountEniPerformanceDays();
-  if (days <= 0 || !(profit > 0)) return 0;
-  return profit / days;
+  if (inputDays <= 0) return empty;
+
+  let avgDaily = monthProfit / inputDays;
+  if (!(avgDaily > 0)) return empty;
+
+  let predictedMonth = monthProfit + (avgDaily * remainingDaysInMonth);
+  let targetProfit = op * PF_ENI_CYCLE_MULTIPLE;
+  let cycleAchieved = op > 0 && cumulative >= targetProfit;
+  let cycleDaysLeft = null;
+  let cycleTargetDateStr = null;
+  if (!cycleAchieved && op > 0) {
+    let remainingNeed = Math.max(0, targetProfit - cumulative);
+    cycleDaysLeft = Math.max(1, Math.ceil(remainingNeed / avgDaily));
+    let targetDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    targetDate.setDate(targetDate.getDate() + cycleDaysLeft);
+    cycleTargetDateStr = targetDate.getFullYear() + '/' +
+      String(targetDate.getMonth() + 1).padStart(2, '0') + '/' +
+      String(targetDate.getDate()).padStart(2, '0');
+  }
+
+  return {
+    avgDailyProfitUsd: avgDaily,
+    monthProfitToDateUsd: monthProfit,
+    monthInputDays: inputDays,
+    remainingDaysInMonth: remainingDaysInMonth,
+    predictedMonthProfitUsd: predictedMonth,
+    predictedMonthYield: pfFormatYieldFromAmount(predictedMonth, op),
+    canForecast: true,
+    cycleDaysLeft: cycleDaysLeft,
+    cycleTargetDateStr: cycleTargetDateStr,
+    cycleAchieved: cycleAchieved
+  };
 }
 
 function pfCalcEniCycleProgressPct(operatingUsd, profitUsd) {
@@ -1119,34 +1132,19 @@ function pfFormatEniProgressPctDisplay(progressPct) {
 }
 
 function pfRenderEniCycleEtaHtml(row) {
-  let operating = Number(row.operatingUsd) || 0;
-  let profit = Number(row.profitUsd) || 0;
-  let avgDaily = Number(row.eniAvgDailyProfitUsd) || 0;
-  if (!(avgDaily > 0)) {
-    avgDaily = pfGetEniAllTimeAvgDailyProfit(profit);
-  }
-  let progress = pfCalcEniCycleProgressPct(operating, profit);
-  let achieved = progress != null && progress >= 100;
-
-  if (achieved) {
+  if (row.eniCycleAchieved) {
     return '<div class="pfHundredReturnRow">' +
       '<span>3.5倍まで</span>' +
       '<b class="pfHundredReturnDone">達成済み ✅</b></div>';
   }
-  if (operating <= 0 || !(avgDaily > 0) || progress == null) {
+  let avgDaily = Number(row.eniAvgDailyProfitUsd) || 0;
+  let daysLeft = row.eniCycleDaysLeft;
+  let dateStr = row.eniCycleTargetDateStr;
+  if (!(avgDaily > 0) || daysLeft == null || !dateStr || !row.eniCanForecast) {
     return '<div class="pfHundredReturnRow">' +
       '<span>3.5倍まで</span>' +
       '<b class="pfHundredReturnUnknown">計算できません</b></div>';
   }
-
-  let targetProfit = operating * PF_ENI_CYCLE_MULTIPLE;
-  let remaining = Math.max(0, targetProfit - profit);
-  let daysLeft = Math.max(1, Math.ceil(remaining / avgDaily));
-  let target = new Date();
-  target.setDate(target.getDate() + daysLeft);
-  let dateStr = target.getFullYear() + '/' +
-    String(target.getMonth() + 1).padStart(2, '0') + '/' +
-    String(target.getDate()).padStart(2, '0');
   return '<div class="pfHundredReturnRow">' +
     '<span>3.5倍まで</span>' +
     '<b class="pfHundredReturnInline">あと' + daysLeft + '日（' + dateStr + '予定）</b></div>';
