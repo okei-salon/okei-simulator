@@ -544,6 +544,8 @@ function pfGetEnabledProjectRows() {
     }
     let monthProfitUsd = monthRev;
     let monthYield = pfFormatPredictedMonthlyYield(monthRev, operatingUsd, viewMonth.y, viewMonth.m);
+    let eniAvgDailyProfitUsd = 0;
+    let eniCanForecast = false;
     if (p.key === 'ram') {
       let ramAgg = pfGetRamAggregateTotals();
       if (ramAgg) {
@@ -556,6 +558,12 @@ function pfGetEnabledProjectRows() {
         monthProfitUsd = Number(orcaAgg.total) || 0;
         monthYield = pfFormatYieldFromAmount(monthProfitUsd, operatingUsd);
       }
+    } else if (p.key === 'eni' && !pfIsDemoMode()) {
+      let eniMonthForecast = pfGetEniMonthLandingForecast(operatingUsd);
+      monthProfitUsd = eniMonthForecast.monthProfitUsd;
+      monthYield = eniMonthForecast.monthYield;
+      eniAvgDailyProfitUsd = pfGetEniAllTimeAvgDailyProfit(profitUsd);
+      eniCanForecast = !!eniMonthForecast.canForecast;
     }
     let recovery = operatingUsd > 0
       ? Math.round((profitUsd / operatingUsd) * 1000) / 10
@@ -570,6 +578,8 @@ function pfGetEnabledProjectRows() {
       profitUsd: profitUsd,
       monthProfitUsd: monthProfitUsd,
       monthYield: monthYield,
+      eniAvgDailyProfitUsd: eniAvgDailyProfitUsd,
+      eniCanForecast: eniCanForecast,
       recovery: recovery,
       recoveryDisplay: pfDisplayPct(recovery, operatingUsd > 0 && profitUsd > 0),
       fill: pfRecoveryFillPct(recovery),
@@ -988,6 +998,114 @@ function pfRenderHundredPctReturnHtml(row) {
 /** ENI cycle target: 3.5x of operating capital (profit / operating == 3.5 → 100%). */
 var PF_ENI_CYCLE_MULTIPLE = 3.5;
 
+function pfEniDateKey(y, m, d) {
+  if (typeof revenueDateKey === 'function') return revenueDateKey(y, m, d);
+  return y + '-' + String(m + 1).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+}
+
+function pfEniDayHasPerformance(entry, dateKey) {
+  if (!entry) return false;
+  if (typeof pdProjectDayHasRevenue === 'function') {
+    return pdProjectDayHasRevenue(entry, 'eni', dateKey);
+  }
+  if (!entry.eniAccounts) return false;
+  return Object.keys(entry.eniAccounts).some(function (id) {
+    let ae = entry.eniAccounts[id];
+    return typeof pdIsEniAccountEntryPresent === 'function'
+      ? pdIsEniAccountEntryPresent(ae)
+      : !!ae;
+  });
+}
+
+function pfEniDayProfitUsd(entry) {
+  if (!entry) return 0;
+  if (entry.eniAccounts && typeof pdEniAccountRevenueTotal === 'function') {
+    let sum = 0;
+    Object.keys(entry.eniAccounts).forEach(function (id) {
+      sum += pdEniAccountRevenueTotal(entry.eniAccounts[id]);
+    });
+    return sum;
+  }
+  return Number(entry.eni) || 0;
+}
+
+/** Count all-time calendar days that have at least one ENI performance entry. */
+function pfCountEniPerformanceDays() {
+  if (typeof settings === 'undefined' || !settings || !settings.revenueLog) return 0;
+  let keys = typeof pdListRevenueDateKeys === 'function'
+    ? pdListRevenueDateKeys()
+    : Object.keys(settings.revenueLog).sort();
+  let count = 0;
+  keys.forEach(function (dateKey) {
+    if (pfEniDayHasPerformance(settings.revenueLog[dateKey], dateKey)) count += 1;
+  });
+  return count;
+}
+
+/**
+ * Current-month ENI landing forecast:
+ * avgDaily = monthProfit / monthInputDays
+ * predictedMonth = monthProfit + avgDaily * remainingCalendarDays
+ * (previous months are excluded)
+ */
+function pfGetEniMonthLandingForecast(operatingUsd) {
+  let op = Number(operatingUsd) || 0;
+  let now = new Date();
+  let y = now.getFullYear();
+  let m = now.getMonth();
+  let todayD = now.getDate();
+  let daysInMonth = new Date(y, m + 1, 0).getDate();
+  let remainingDays = Math.max(0, daysInMonth - todayD);
+
+  let monthProfit = 0;
+  let inputDays = 0;
+  if (typeof settings !== 'undefined' && settings && settings.revenueLog) {
+    for (let d = 1; d <= daysInMonth; d++) {
+      let dateKey = pfEniDateKey(y, m, d);
+      let entry = typeof pdGetRevenueEntry === 'function'
+        ? pdGetRevenueEntry(dateKey)
+        : settings.revenueLog[dateKey];
+      if (!pfEniDayHasPerformance(entry, dateKey)) continue;
+      inputDays += 1;
+      monthProfit += pfEniDayProfitUsd(entry);
+    }
+  }
+  if (typeof pdRoundEni === 'function') monthProfit = pdRoundEni(monthProfit);
+  else monthProfit = Math.round(monthProfit * 10000) / 10000;
+
+  if (inputDays <= 0) {
+    return {
+      monthProfitToDateUsd: 0,
+      monthInputDays: 0,
+      remainingDays: remainingDays,
+      avgDailyProfitUsd: 0,
+      monthProfitUsd: 0,
+      monthYield: '--',
+      canForecast: false
+    };
+  }
+
+  let avgDaily = monthProfit / inputDays;
+  let predictedMonth = monthProfit + (avgDaily * remainingDays);
+  return {
+    monthProfitToDateUsd: monthProfit,
+    monthInputDays: inputDays,
+    remainingDays: remainingDays,
+    avgDailyProfitUsd: avgDaily,
+    monthProfitUsd: predictedMonth,
+    monthYield: pfFormatYieldFromAmount(predictedMonth, op),
+    canForecast: avgDaily > 0
+  };
+}
+
+/** All-time average daily profit for 3.5x ETA (cumulative ÷ all ENI input days). */
+function pfGetEniAllTimeAvgDailyProfit(profitUsd) {
+  let profit = Number(profitUsd) || 0;
+  let days = pfCountEniPerformanceDays();
+  if (days <= 0 || !(profit > 0)) return 0;
+  return profit / days;
+}
+
 function pfCalcEniCycleProgressPct(operatingUsd, profitUsd) {
   let op = Number(operatingUsd) || 0;
   let profit = Number(profitUsd) || 0;
@@ -995,10 +1113,18 @@ function pfCalcEniCycleProgressPct(operatingUsd, profitUsd) {
   return Math.round(((profit / (op * PF_ENI_CYCLE_MULTIPLE)) * 1000)) / 10;
 }
 
+function pfFormatEniProgressPctDisplay(progressPct) {
+  if (progressPct == null || !isFinite(progressPct)) return '--';
+  return (Math.round(Number(progressPct) * 10) / 10) + '%';
+}
+
 function pfRenderEniCycleEtaHtml(row) {
   let operating = Number(row.operatingUsd) || 0;
   let profit = Number(row.profitUsd) || 0;
-  let monthProfit = Number(row.monthProfitUsd) || 0;
+  let avgDaily = Number(row.eniAvgDailyProfitUsd) || 0;
+  if (!(avgDaily > 0)) {
+    avgDaily = pfGetEniAllTimeAvgDailyProfit(profit);
+  }
   let progress = pfCalcEniCycleProgressPct(operating, profit);
   let achieved = progress != null && progress >= 100;
 
@@ -1007,7 +1133,7 @@ function pfRenderEniCycleEtaHtml(row) {
       '<span>3.5倍まで</span>' +
       '<b class="pfHundredReturnDone">達成済み ✅</b></div>';
   }
-  if (operating <= 0 || monthProfit <= 0 || progress == null) {
+  if (operating <= 0 || !(avgDaily > 0) || progress == null) {
     return '<div class="pfHundredReturnRow">' +
       '<span>3.5倍まで</span>' +
       '<b class="pfHundredReturnUnknown">計算できません</b></div>';
@@ -1015,8 +1141,7 @@ function pfRenderEniCycleEtaHtml(row) {
 
   let targetProfit = operating * PF_ENI_CYCLE_MULTIPLE;
   let remaining = Math.max(0, targetProfit - profit);
-  let dailyProfit = monthProfit / 30;
-  let daysLeft = Math.max(1, Math.ceil(remaining / dailyProfit));
+  let daysLeft = Math.max(1, Math.ceil(remaining / avgDaily));
   let target = new Date();
   target.setDate(target.getDate() + daysLeft);
   let dateStr = target.getFullYear() + '/' +
@@ -1028,12 +1153,11 @@ function pfRenderEniCycleEtaHtml(row) {
 }
 
 function pfRenderEniCycleBlockHtml(row) {
-  // Header shows 累計利回り (same metric as RAM/ORCA). Bar is 0–100% of that rate.
-  let recovery = Number(row.recovery) || 0;
-  let recoveryDisplay = row.recoveryDisplay || ((row.operatingUsd > 0) ? (recovery + '%') : '--');
-  let fillPct = Math.max(0, Math.min(100, recovery));
+  let progress = pfCalcEniCycleProgressPct(row.operatingUsd, row.profitUsd);
+  let progressDisplay = pfFormatEniProgressPctDisplay(progress);
+  let fillPct = progress == null ? 0 : Math.max(0, Math.min(100, progress));
   return '<div class="pfRecoveryBlock pfRecoveryBlock--eniCycle">' +
-    '<div class="pfRecoveryLabel"><span>累計利回り</span><b>' + recoveryDisplay + '</b></div>' +
+    '<div class="pfRecoveryLabel"><span>進捗割合</span><b>' + progressDisplay + '</b></div>' +
     '<div class="pfRecoveryTrack"><div class="pfRecoveryFill" style="width:' + fillPct + '%"></div></div>' +
     '<div class="pfRecoveryScale"><span>0%</span><span>100%</span></div></div>' +
     pfRenderEniCycleEtaHtml(row);
