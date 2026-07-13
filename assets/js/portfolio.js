@@ -985,6 +985,60 @@ function pfRenderHundredPctReturnHtml(row) {
     '<b class="pfHundredReturnInline">あと' + daysLeft + '日（' + dateStr + '予定）</b></div>';
 }
 
+/** ENI cycle target: 3.5x of operating capital (profit / operating == 3.5 → 100%). */
+var PF_ENI_CYCLE_MULTIPLE = 3.5;
+
+function pfCalcEniCycleProgressPct(operatingUsd, profitUsd) {
+  let op = Number(operatingUsd) || 0;
+  let profit = Number(profitUsd) || 0;
+  if (op <= 0) return null;
+  return Math.round(((profit / (op * PF_ENI_CYCLE_MULTIPLE)) * 1000)) / 10;
+}
+
+function pfRenderEniCycleEtaHtml(row) {
+  let operating = Number(row.operatingUsd) || 0;
+  let profit = Number(row.profitUsd) || 0;
+  let monthProfit = Number(row.monthProfitUsd) || 0;
+  let progress = pfCalcEniCycleProgressPct(operating, profit);
+  let achieved = progress != null && progress >= 100;
+
+  if (achieved) {
+    return '<div class="pfHundredReturnRow">' +
+      '<span>3.5倍まで</span>' +
+      '<b class="pfHundredReturnDone">達成済み ✅</b></div>';
+  }
+  if (operating <= 0 || monthProfit <= 0 || progress == null) {
+    return '<div class="pfHundredReturnRow">' +
+      '<span>3.5倍まで</span>' +
+      '<b class="pfHundredReturnUnknown">計算できません</b></div>';
+  }
+
+  let targetProfit = operating * PF_ENI_CYCLE_MULTIPLE;
+  let remaining = Math.max(0, targetProfit - profit);
+  let dailyProfit = monthProfit / 30;
+  let daysLeft = Math.max(1, Math.ceil(remaining / dailyProfit));
+  let target = new Date();
+  target.setDate(target.getDate() + daysLeft);
+  let dateStr = target.getFullYear() + '/' +
+    String(target.getMonth() + 1).padStart(2, '0') + '/' +
+    String(target.getDate()).padStart(2, '0');
+  return '<div class="pfHundredReturnRow">' +
+    '<span>3.5倍まで</span>' +
+    '<b class="pfHundredReturnInline">あと' + daysLeft + '日（' + dateStr + '予定）</b></div>';
+}
+
+function pfRenderEniCycleBlockHtml(row) {
+  // Header shows 累計利回り (same metric as RAM/ORCA). Bar is 0–100% of that rate.
+  let recovery = Number(row.recovery) || 0;
+  let recoveryDisplay = row.recoveryDisplay || ((row.operatingUsd > 0) ? (recovery + '%') : '--');
+  let fillPct = Math.max(0, Math.min(100, recovery));
+  return '<div class="pfRecoveryBlock pfRecoveryBlock--eniCycle">' +
+    '<div class="pfRecoveryLabel"><span>累計利回り</span><b>' + recoveryDisplay + '</b></div>' +
+    '<div class="pfRecoveryTrack"><div class="pfRecoveryFill" style="width:' + fillPct + '%"></div></div>' +
+    '<div class="pfRecoveryScale"><span>0%</span><span>100%</span></div></div>' +
+    pfRenderEniCycleEtaHtml(row);
+}
+
 function pfOpenProjectProfitDetail(projectKey) {
   if (projectKey !== 'ram' && projectKey !== 'orca') return;
   if (typeof modalTitle === 'undefined' || typeof modalContent === 'undefined' || typeof modalBg === 'undefined') return;
@@ -1004,6 +1058,7 @@ var PF_MOCK_SUMMARY_DATA = {
 
 function pfRenderProjectCard(row) {
   let isDetailCard = row.key === 'ram' || row.key === 'orca';
+  let isUnifiedMetrics = isDetailCard || row.key === 'eni';
   let cardClass = 'pfProjectCard pfProjectCard--' + row.key + (isDetailCard ? ' isClickable' : '');
   let cardAttrs = 'class="' + cardClass + '"';
   if (isDetailCard) {
@@ -1016,11 +1071,28 @@ function pfRenderProjectCard(row) {
       ? renderHomeProjIcon(row.key, 'pfProjectCardIcon')
       : '<span class="pfProjectCardIcon"></span>');
   let monthProfitMetric = '';
-  if (isDetailCard) {
+  if (isUnifiedMetrics) {
     monthProfitMetric = '<div class="pfProjectMetric"><span class="pfProjectMetricLabel">予測月利益</span><span class="pfProjectMetricVal isProfit">' +
       pfFormatMonthlyUsd(row.monthProfitUsd || 0) + '</span></div>';
   }
-  let recoveryMarkLeft = pfRecoveryMarkLeft(row.recovery);
+  let recoveryMarkLeft = row.key === 'eni' ? null : pfRecoveryMarkLeft(row.recovery);
+  let bottomHtml = '';
+  if (row.key === 'eni') {
+    bottomHtml = pfRenderEniCycleBlockHtml(row);
+  } else {
+    bottomHtml =
+      '<div class="pfRecoveryBlock">' +
+      '<div class="pfRecoveryLabel"><span>累計利回り</span><b>' + (row.recoveryDisplay || row.recovery + '%') + '</b></div>' +
+      '<div class="pfRecoveryTrack"><div class="pfRecoveryFill" style="width:' + row.fill + '%"></div>' +
+      (recoveryMarkLeft != null
+        ? '<i class="pfRecoveryMark" style="left:' + recoveryMarkLeft + '%"></i>'
+        : '') +
+      '</div>' +
+      '<div class="pfRecoveryScale">' + pfRecoveryScaleHtml(row.recovery) + '</div></div>' +
+      (isDetailCard
+        ? pfRenderHundredPctReturnHtml(row)
+        : '<div class="pfRecoveryDateRow"><span>回収予定日</span><b>' + pfEscape(row.recoveryDate) + '</b></div>');
+  }
   return '<article ' + cardAttrs + '>' +
     '<div class="pfProjectCardGlow"></div>' +
     '<div class="pfProjectCardTop">' +
@@ -1028,23 +1100,14 @@ function pfRenderProjectCard(row) {
     '<div><h3 class="pfProjectCardName">' + pfEscape(row.name) + '</h3>' +
     '<p class="pfProjectStart">開始日 ' + pfEscape(row.start) + '</p></div></div>' +
     '<span class="pfStatusBadge pfStatusBadge--' + row.statusCls + '">' + pfEscape(row.status) + '</span></div>' +
-    '<div class="pfProjectMetrics' + (isDetailCard ? ' pfProjectMetrics--detail' : '') + '">' +
+    '<div class="pfProjectMetrics' + (isUnifiedMetrics ? ' pfProjectMetrics--detail' : '') + '">' +
     '<div class="pfProjectMetric"><span class="pfProjectMetricLabel">運用額</span><span class="pfProjectMetricVal">' + row.operating + '</span></div>' +
     '<div class="pfProjectMetric"><span class="pfProjectMetricLabel">累計利益</span><span class="pfProjectMetricVal isProfit">' + row.profit + '</span></div>' +
     monthProfitMetric +
     '<div class="pfProjectMetric"><span class="pfProjectMetricLabel">予測月利</span><span class="pfProjectMetricVal isYield">' + pfEscape(row.monthYield || '--') + '</span></div>' +
     '<div class="pfProjectMetric"><span class="pfProjectMetricLabel">累計利回り</span><span class="pfProjectMetricVal isRecovery">' + (row.recoveryDisplay || row.recovery + '%') + '</span></div>' +
     '</div>' +
-    '<div class="pfRecoveryBlock">' +
-    '<div class="pfRecoveryLabel"><span>累計利回り</span><b>' + (row.recoveryDisplay || row.recovery + '%') + '</b></div>' +
-    '<div class="pfRecoveryTrack"><div class="pfRecoveryFill" style="width:' + row.fill + '%"></div>' +
-    (recoveryMarkLeft != null
-      ? '<i class="pfRecoveryMark" style="left:' + recoveryMarkLeft + '%"></i>'
-      : '') +
-    '</div>' +
-    '<div class="pfRecoveryScale">' + pfRecoveryScaleHtml(row.recovery) + '</div></div>' +
-    (isDetailCard ? pfRenderHundredPctReturnHtml(row) :
-      '<div class="pfRecoveryDateRow"><span>回収予定日</span><b>' + pfEscape(row.recoveryDate) + '</b></div>') +
+    bottomHtml +
     (isDetailCard ? '<div class="pfProjectCardHint">タップで利益構成・月利詳細</div>' : '') +
     '</article>';
 }
