@@ -58,7 +58,7 @@ function renderOrgProjectSelect() {
   var grid = document.getElementById('orgSelectGrid');
   if (!grid) return;
   var projects = orgGetSelectableProjects();
-  grid.innerHTML = projects.map(function (p) {
+  var html = projects.map(function (p) {
     var icon = typeof pjRenderProjectIcon === 'function'
       ? pjRenderProjectIcon(p.key, 'orgSelectCardIcon')
       : '<span class="homeProjIcon homeProjIcon--' + p.key + ' orgSelectCardIcon"></span>';
@@ -67,9 +67,12 @@ function renderOrgProjectSelect() {
       var meta = pmGetProject(p.key);
       if (meta && meta.name) name = meta.name;
     }
-    return '<button type="button" class="orgSelectCard orgSelectCard--' + p.key + '" onclick="openOrgChartForProject(\'' + p.key + '\')">' +
+    return '<button type="button" class="orgSelectCard orgSelectCard--' + p.key +
+      '" data-pj-icon-key="' + p.key + '" onclick="openOrgChartForProject(\'' + p.key + '\')">' +
       icon + '<span class="orgSelectName">' + name + '</span></button>';
   }).join('');
+  if (typeof pjSetHtmlKeepIcons === 'function') pjSetHtmlKeepIcons(grid, html);
+  else grid.innerHTML = html;
 }
 
 function initOrgChartTitleIcons() {
@@ -80,6 +83,8 @@ function initOrgChartTitleIcons() {
   ].forEach(function (pair) {
     var el = document.getElementById(pair[0]);
     if (!el || typeof pjRenderProjectIcon !== 'function') return;
+    if (el.getAttribute('data-pj-ready') === pair[1] && el.querySelector('img.homeProjIcon')) return;
+    el.setAttribute('data-pj-ready', pair[1]);
     el.innerHTML = pjRenderProjectIcon(pair[1], 'orgChartTitleIcon');
   });
 }

@@ -1347,13 +1347,14 @@ function renderHomeMonthlyProjGrid(sAll) {
   el.setAttribute('data-count', rows.length);
 
   if (!rows.length) {
+    if (typeof pjClearHtmlKeepIconsCache === 'function') pjClearHtmlKeepIconsCache(el);
     el.innerHTML = '';
     return;
   }
 
-  el.innerHTML = rows.map(function (row) {
+  let html = rows.map(function (row) {
     let p = row.proj;
-    return '<div class="homeMonthlyProjCard homeMonthlyProjCard--' + p.cls + '">' +
+    return '<div class="homeMonthlyProjCard homeMonthlyProjCard--' + p.cls + '" data-pj-icon-key="' + p.key + '">' +
       '<div class="homeMonthlyProjCardHead">' +
       '<span class="homeMonthlyProjCardName"><span class="homeMonthlyProjDot">' +
       renderHomeProjIcon(p.key, 'homeMonthlyProjIcon') + '</span>' + p.name + '</span>' +
@@ -1362,6 +1363,8 @@ function renderHomeMonthlyProjGrid(sAll) {
       '<div class="homeMonthlyProjCardBar"><div class="homeMonthlyProjCardBarFill" style="width:' + row.pct + '%"></div></div>' +
       '</div>';
   }).join('');
+  if (typeof pjSetHtmlKeepIcons === 'function') pjSetHtmlKeepIcons(el, html);
+  else el.innerHTML = html;
 }
 
 function updateHomeMonthlyProjects(sAll) {
@@ -1523,13 +1526,14 @@ function renderHomeTodayProjGrid(rows) {
   el.setAttribute('data-count', rows.length);
 
   if (!rows.length) {
+    if (typeof pjClearHtmlKeepIconsCache === 'function') pjClearHtmlKeepIconsCache(el);
     el.innerHTML = '';
     return;
   }
 
-  el.innerHTML = rows.map(function (row) {
+  let html = rows.map(function (row) {
     let p = row.proj;
-    return '<div class="homeTodayProjCard homeTodayProjCard--' + p.cls + '">' +
+    return '<div class="homeTodayProjCard homeTodayProjCard--' + p.cls + '" data-pj-icon-key="' + p.key + '">' +
       '<div class="homeTodayProjCardHead">' +
       '<span class="homeTodayProjCardName"><span class="homeTodayProjMark">' +
       renderHomeProjIcon(p.key, 'homeTodayProjIcon') + '</span>' + p.name + '</span>' +
@@ -1538,6 +1542,8 @@ function renderHomeTodayProjGrid(rows) {
       '<div class="homeTodayProjCardBar"><div class="homeTodayProjCardBarFill" style="width:' + row.pct + '%"></div></div>' +
       '</div>';
   }).join('');
+  if (typeof pjSetHtmlKeepIcons === 'function') pjSetHtmlKeepIcons(el, html);
+  else el.innerHTML = html;
 }
 
 function updateHomeTodaySection(sAll) {

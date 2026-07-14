@@ -2468,32 +2468,13 @@ function pdDeleteAccountPerformanceData(projectKey, accountId, opts) {
 
 function pdNotifyPerformanceChanged(opts) {
   opts = opts || {};
+  // Single refresh path: updateHomeDashboard already refreshes portfolio + visible manage pages.
   if (typeof allOrgSummary === 'function' && typeof updateHomeDashboard === 'function') {
     updateHomeDashboard(allOrgSummary());
   } else if (typeof updateHomeDashboard === 'function') {
     updateHomeDashboard();
   } else if (typeof renderHome === 'function') {
     renderHome();
-  }
-  if (typeof renderRevenueManage === 'function') {
-    if (typeof revenueManagePage === 'undefined' ||
-        !revenueManagePage.classList.contains('hidden')) {
-      renderRevenueManage();
-    }
-  }
-  if (typeof renderSalesManage === 'function') {
-    if (opts.type === 'sales' ||
-        typeof salesManagePage === 'undefined' ||
-        !salesManagePage.classList.contains('hidden')) {
-      renderSalesManage();
-    }
-  }
-  if (typeof renderPortfolio === 'function') {
-    renderPortfolio();
-  }
-  if (typeof updateOchanMessage === 'function') updateOchanMessage();
-  if (typeof render === 'function' && opts.refreshOrg !== false) {
-    /* render() also calls renderHome; skip full render to avoid double work unless needed */
   }
 }
 

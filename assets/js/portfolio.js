@@ -1235,7 +1235,7 @@ function pfRenderProjectCard(row) {
         ? pfRenderHundredPctReturnHtml(row)
         : '<div class="pfRecoveryDateRow"><span>回収予定日</span><b>' + pfEscape(row.recoveryDate) + '</b></div>');
   }
-  return '<article ' + cardAttrs + '>' +
+  return '<article ' + cardAttrs + ' data-pj-icon-key="' + pfEscape(row.key) + '">' +
     '<div class="pfProjectCardGlow"></div>' +
     '<div class="pfProjectCardTop">' +
     '<div class="pfProjectCardBrand">' + icon +
@@ -1265,12 +1265,15 @@ function pfRenderProjectCards() {
   ));
   el.setAttribute('data-count', rows.length);
   if (!rows.length) {
+    if (typeof pjClearHtmlKeepIconsCache === 'function') pjClearHtmlKeepIconsCache(el);
     el.innerHTML = '<div class="pfEmptyCard"><p>表示ONのプロジェクトがありません。</p></div>';
     el.classList.add('isEmpty');
     return;
   }
   el.classList.remove('isEmpty');
-  el.innerHTML = rows.map(pfRenderProjectCard).join('');
+  let html = rows.map(pfRenderProjectCard).join('');
+  if (typeof pjSetHtmlKeepIcons === 'function') pjSetHtmlKeepIcons(el, html);
+  else el.innerHTML = html;
 }
 
 function pfGetOperatingAccountLabel(projectKey, accountId) {

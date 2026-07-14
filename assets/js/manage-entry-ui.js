@@ -805,14 +805,11 @@ function pfSyncAccountDisplayCheckboxes(accountId) {
 }
 
 function pfRefreshViewsAfterDisplayChange() {
-  if (typeof renderHome === 'function') renderHome();
-  if (typeof updateHomeDashboard === 'function' && typeof allOrgSummary === 'function') {
+  // renderHome → updateHomeDashboard already refreshes portfolio + visible manage pages
+  if (typeof renderHome === 'function') {
+    renderHome();
+  } else if (typeof updateHomeDashboard === 'function' && typeof allOrgSummary === 'function') {
     updateHomeDashboard(allOrgSummary());
-  }
-  if (typeof revenueManagePage !== 'undefined' &&
-      !revenueManagePage.classList.contains('hidden') &&
-      typeof renderRevenueManage === 'function') {
-    renderRevenueManage();
   }
   if (typeof modalContent !== 'undefined' &&
       modalContent.querySelector('.ramInputList') &&

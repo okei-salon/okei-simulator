@@ -576,6 +576,7 @@ function hubDeleteCloudData() {
 }
 
 function hubRefreshViewsAfterSync() {
+  // render() → renderHome() → updateHomeDashboard() already calls renderPortfolio()
   if (typeof render === 'function') render();
   if (typeof orcaRender === 'function' &&
       typeof orcaOrgPage !== 'undefined' &&
@@ -583,7 +584,6 @@ function hubRefreshViewsAfterSync() {
       !orcaOrgPage.classList.contains('hidden')) {
     orcaRender();
   }
-  if (typeof renderPortfolio === 'function') renderPortfolio();
 }
 
 function hubApplyMergedHubData(merged, cloudHash) {

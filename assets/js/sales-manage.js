@@ -1440,7 +1440,7 @@ function smRenderProjectStats() {
 
   try {
   if (smFilter === 'all') {
-    el.innerHTML =
+    let html =
       '<div class="rmStatTable">' +
       '<div class="rmStatTableHead">' +
       '<div class="rmStatTableCol rmStatTableCol--project"></div>' +
@@ -1450,7 +1450,7 @@ function smRenderProjectStats() {
       '</div>' +
       smGetActiveProjects().map(function (p) {
         let stats = smGetProjectStats(p.key);
-        return '<div class="rmStatTableRow">' +
+        return '<div class="rmStatTableRow" data-pj-icon-key="' + smEscape(p.key) + '">' +
           '<div class="rmStatTableCol rmStatTableCol--project">' + smRenderProjectIcon(p.key, 'rmRowIcon') + smEscape(p.name) + '</div>' +
           '<div class="rmStatTableCol rmStatTableCol--metric">' +
           '<span class="rmStatAmt">' + smFormatStatAmount(stats.bestDayAmount, stats.bestDayLabel) + '</span>' +
@@ -1464,6 +1464,8 @@ function smRenderProjectStats() {
           '</div>';
       }).join('') +
       '</div>';
+    if (typeof pjSetHtmlKeepIcons === 'function') pjSetHtmlKeepIcons(el, html);
+    else el.innerHTML = html;
     return;
   }
 

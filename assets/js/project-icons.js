@@ -172,9 +172,12 @@ function renderProjectIcon(projectKey, extraClass, opts) {
     if (extraClass) cls += ' ' + extraClass;
     if (meta.file && pjHasIconFile(officialIconKey)) {
       cls += ' homeProjIcon--img';
+      // eager + sync: avoid Safari blank flash when grids re-render above-the-fold icons
       let img = '<img class="' + cls + '" src="' + pjEscape(pjGetIconUrl(officialIconKey)) + '" alt="' +
-        pjEscape(pjGetIconAlt(officialIconKey, opts.name)) + '" loading="lazy" decoding="async">';
-      return '<span class="' + pjWrapClass(sizeKey) + '">' + img + '</span>';
+        pjEscape(pjGetIconAlt(officialIconKey, opts.name)) +
+        '" loading="eager" decoding="sync" draggable="false">';
+      return '<span class="' + pjWrapClass(sizeKey) + '" data-pj-icon="' +
+        pjEscape(officialIconKey) + '">' + img + '</span>';
     }
     return '<span class="' + pjWrapClass(sizeKey) + '"><span class="' + cls + '" aria-hidden="true"></span></span>';
   }
@@ -194,10 +197,63 @@ function pmRenderProjectIcon(key, extraClass, project) {
   return pjRenderProjectIcon(key, extraClass, project);
 }
 
+var pjLastHtmlByEl = typeof WeakMap !== 'undefined' ? new WeakMap() : null;
+
+/**
+ * Replace container HTML but reuse existing .pjIconWrap / <img> when src is unchanged.
+ * Prevents Safari flicker from destroying and re-decoding the same PNG.
+ *
+ * @param {Element} container
+ * @param {string} html
+ * @param {string} [itemSelector] elements that carry data-pj-icon-key
+ */
+function pjSetHtmlKeepIcons(container, html, itemSelector) {
+  if (!container) return;
+  if (pjLastHtmlByEl) {
+    if (pjLastHtmlByEl.get(container) === html) return;
+  } else if (container.__pjLastHtml === html) {
+    return;
+  }
+  itemSelector = itemSelector || '[data-pj-icon-key]';
+  let saved = {};
+  container.querySelectorAll(itemSelector).forEach(function (item) {
+    let key = item.getAttribute('data-pj-icon-key');
+    if (!key) return;
+    let wrap = item.querySelector('.pjIconWrap');
+    if (wrap) saved[key] = wrap;
+  });
+  container.innerHTML = html;
+  if (pjLastHtmlByEl) pjLastHtmlByEl.set(container, html);
+  else container.__pjLastHtml = html;
+  container.querySelectorAll(itemSelector).forEach(function (item) {
+    let key = item.getAttribute('data-pj-icon-key');
+    let wrap = item.querySelector('.pjIconWrap');
+    let prev = key ? saved[key] : null;
+    if (!prev || !wrap || !wrap.parentNode) return;
+    let prevImg = prev.querySelector('img.homeProjIcon');
+    let nextImg = wrap.querySelector('img.homeProjIcon');
+    if (prevImg && nextImg && prevImg.getAttribute('src') === nextImg.getAttribute('src')) {
+      wrap.parentNode.replaceChild(prev, wrap);
+    }
+  });
+}
+
+function pjClearHtmlKeepIconsCache(container) {
+  if (!container) return;
+  if (pjLastHtmlByEl) pjLastHtmlByEl.delete(container);
+  else delete container.__pjLastHtml;
+}
+
 function pjUpdateFilterIcon(containerId, projectKey) {
   let el = document.getElementById(containerId);
   if (!el) return;
-  if (!projectKey || projectKey === 'all') {
+  let nextKey = (!projectKey || projectKey === 'all') ? '' : String(projectKey);
+  if (el.getAttribute('data-pj-key') === nextKey) {
+    if (!nextKey && el.classList.contains('isEmpty')) return;
+    if (nextKey && el.querySelector('img.homeProjIcon')) return;
+  }
+  el.setAttribute('data-pj-key', nextKey);
+  if (!nextKey) {
     el.innerHTML = '';
     el.className = 'rmFilterIcon isEmpty';
     return;
@@ -218,5 +274,7 @@ if (typeof window !== 'undefined') {
   window.renderProjectIcon = renderProjectIcon;
   window.renderHomeProjIcon = renderHomeProjIcon;
   window.pmRenderProjectIcon = pmRenderProjectIcon;
+  window.pjSetHtmlKeepIcons = pjSetHtmlKeepIcons;
+  window.pjClearHtmlKeepIconsCache = pjClearHtmlKeepIconsCache;
   window.pjUpdateFilterIcon = pjUpdateFilterIcon;
 }

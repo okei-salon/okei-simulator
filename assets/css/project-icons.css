@@ -29,6 +29,23 @@ img.homeProjIcon--img {
   box-shadow: none !important;
   border-radius: var(--pj-icon-radius-md);
   vertical-align: middle;
+  opacity: 1 !important;
+  visibility: visible !important;
+  transition: none !important;
+  animation: none !important;
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+}
+
+.pjIconWrap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  line-height: 0;
+  opacity: 1 !important;
+  transition: none !important;
+  animation: none !important;
 }
 
 img.homeProjIcon--size-sm {
@@ -57,15 +74,10 @@ img.homeProjIcon--size-xl {
 
 /* Wrapper for inline / flex alignment (optional outer shell) */
 .pjIconWrap {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
   background: transparent !important;
   border: none;
   box-shadow: none;
   padding: 0;
-  line-height: 0;
 }
 
 .pjIconWrap--size-sm {

@@ -1714,7 +1714,7 @@ function rmRenderProjectStats() {
 
   try {
   if (rmFilter === 'all') {
-    el.innerHTML =
+    let html =
       '<div class="rmStatTable">' +
       '<div class="rmStatTableHead">' +
       '<div class="rmStatTableCol rmStatTableCol--project"></div>' +
@@ -1723,7 +1723,7 @@ function rmRenderProjectStats() {
       '</div>' +
       rmGetActiveProjects().map(function (p) {
         let stats = rmGetProjectStats(p.key);
-        return '<div class="rmStatTableRow">' +
+        return '<div class="rmStatTableRow" data-pj-icon-key="' + rmEscape(p.key) + '">' +
           '<div class="rmStatTableCol rmStatTableCol--project">' + rmRenderProjectIcon(p.key, 'rmRowIcon') + rmEscape(p.name) + '</div>' +
           '<div class="rmStatTableCol rmStatTableCol--metric">' +
           '<span class="rmStatAmt">' + rmFormatStatAmount(stats.bestDayAmount, stats.bestDayLabel) + '</span>' +
@@ -1734,6 +1734,8 @@ function rmRenderProjectStats() {
           '</div>';
       }).join('') +
       '</div>';
+    if (typeof pjSetHtmlKeepIcons === 'function') pjSetHtmlKeepIcons(el, html);
+    else el.innerHTML = html;
     return;
   }
 
