@@ -420,6 +420,9 @@ function pfGetPerformanceInputRegisteredAccountIds(projectKey) {
   if (projectKey === 'orca' && typeof getOrcaInputAccounts === 'function') {
     return getOrcaInputAccounts().map(function (a) { return a.id; });
   }
+  if (projectKey === 'eni' && typeof getEniInputAccounts === 'function') {
+    return getEniInputAccounts().map(function (a) { return a.id; });
+  }
   if (projectKey === 'cary' && typeof getCaryInputAccounts === 'function') {
     return getCaryInputAccounts().map(function (a) { return a.id; });
   }
@@ -433,7 +436,7 @@ function pfIsPerformanceInputRegisteredAccount(projectKey, accountId) {
 
 function pfIsManageAccountVisible(projectKey, accountId) {
   if (!pfIsRevenueManageAccountVisible(projectKey, accountId)) return false;
-  if (projectKey === 'ram' || projectKey === 'orca' || projectKey === 'cary') {
+  if (projectKey === 'ram' || projectKey === 'orca' || projectKey === 'eni' || projectKey === 'cary') {
     return pfIsPerformanceInputRegisteredAccount(projectKey, accountId);
   }
   return true;
@@ -886,14 +889,26 @@ function pfHandleRevenueManageDisplayToggle(accountId, inputEl) {
 }
 
 function pfAddManageDisplayFromOrgUi(projectKey, accountId) {
+  if (typeof aimEnsureOrgMemberRegisteredAsInput === 'function') {
+    aimEnsureOrgMemberRegisteredAsInput(projectKey, accountId);
+  }
   pfAddManageDisplayFromOrg(projectKey, accountId);
   let label = accountId;
-  if (typeof members !== 'undefined') {
+  if (projectKey === 'ram' && typeof members !== 'undefined') {
     let m = members.find(function (x) { return x.id === accountId; });
     if (m && typeof displayName === 'function') label = displayName(m);
+  } else if (projectKey === 'orca' && typeof orcaMembers !== 'undefined') {
+    let om = orcaMembers.find(function (x) { return x.id === accountId; });
+    if (om && typeof orcaDisplayName === 'function') label = orcaDisplayName(om);
+  } else if (projectKey === 'eni' && typeof eniMembers !== 'undefined') {
+    let em = eniMembers.find(function (x) { return x.id === accountId; });
+    if (em && typeof eniDisplayName === 'function') label = eniDisplayName(em);
   }
+  if (typeof persistHubSettings === 'function') persistHubSettings();
+  else if (typeof hubSaveToStorage === 'function') hubSaveToStorage();
+  if (typeof markActivity === 'function') markActivity();
   if (typeof showToast === 'function') {
-    showToast('✅ ' + label + ' を収益管理・売上管理の表示一覧に追加しました');
+    showToast('✅ ' + label + ' を実績入力・収益管理・売上管理の対象に追加しました');
   }
   if (typeof revenueManagePage !== 'undefined' && !revenueManagePage.classList.contains('hidden') &&
       typeof renderRevenueManage === 'function') {

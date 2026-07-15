@@ -562,7 +562,7 @@ function eniShowDetail(id) {
     '<div class="detailBox"><div class="label">チーム人数</div><div class="val">' + teamCount + '人</div></div>' +
     '</div>' +
     '<div class="lineBox"><b>管理</b>' +
-    '<p class="help">収益管理・売上管理の表示一覧に追加できます。</p>' +
+    '<p class="help">「表示に追加」で実績入力・収益管理・売上管理の対象になります。</p>' +
     '<div class="accountManageActions">' +
     '<button type="button" class="btn2" onclick="pfAddManageDisplayFromOrgUi(\'eni\',\'' + m.id + '\')">表示に追加</button>' +
     '<button type="button" onclick="eniOpenEditById(\'' + m.id + '\')">編集</button>' +
@@ -753,6 +753,10 @@ function eniShowMemberStats() {
 }
 
 function eniOpenRootQuickAdd() {
+  if (typeof aimRenderOrgPlacementModal === 'function') {
+    aimRenderOrgPlacementModal('eni', null);
+    return;
+  }
   eniOpenEdit({ parent: null, forceManual: true });
 }
 

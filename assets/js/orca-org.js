@@ -803,7 +803,10 @@ function orcaShowDetail(id) {
     incomeHtml +
     '<div class="detailBox"><div class="label">個人販売</div><div class="val">' + orcaMoney(m.personalSales) + '</div></div>' +
     '<div class="detailBox"><div class="label">グループ販売</div><div class="val">' + orcaMoney(orcaDisplayGroupSales(id)) + '</div></div>' +
-    '</div><div class="lineBox"><b>管理</b><div class="accountManageActions">' +
+    '</div><div class="lineBox"><b>管理</b>' +
+    '<p class="help">実績入力・収益管理・売上管理の対象に追加できます。</p>' +
+    '<div class="accountManageActions">' +
+    '<button type="button" class="btn2" onclick="pfAddManageDisplayFromOrgUi(\'orca\',\'' + id + '\')">表示に追加</button>' +
     '<button onclick="orcaOpenEditById(\'' + id + '\')">編集</button>' +
     '<button class="btn2" onclick="orcaAddChild(\'' + id + '\')">配下追加</button>' +
     '<button class="btn2" onclick="orcaExportSubtree(\'' + id + '\')">配下保存</button>' +

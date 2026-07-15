@@ -2964,33 +2964,16 @@
   margin: 0 0 6px;
 }
 
-/* Shared org-add modal (RAM / ORCA / ENI) — theme via data-aim-project */
+/* Shared org-add modal (RAM / ORCA / ENI) — OUKEI HUB common UI blue
+ * Match 「運用額の設定」.pfOperatingModeTab / default button #2563eb
+ */
 #modalBg.aimOrgAddOpen {
-  --aim-accent: #a3e635;
-  --aim-accent-mid: #84cc16;
-  --aim-accent-border: rgba(163, 230, 53, .55);
-  --aim-accent-glow: rgba(132, 204, 22, .22);
-}
-
-#modalBg.aimOrgAddOpen[data-aim-project="ram"] {
-  --aim-accent: #fb923c;
-  --aim-accent-mid: #f97316;
-  --aim-accent-border: rgba(251, 146, 60, .55);
-  --aim-accent-glow: rgba(249, 115, 22, .22);
-}
-
-#modalBg.aimOrgAddOpen[data-aim-project="orca"] {
   --aim-accent: #60a5fa;
-  --aim-accent-mid: #3b82f6;
-  --aim-accent-border: rgba(96, 165, 250, .55);
-  --aim-accent-glow: rgba(59, 130, 246, .22);
-}
-
-#modalBg.aimOrgAddOpen[data-aim-project="eni"] {
-  --aim-accent: #a3e635;
-  --aim-accent-mid: #84cc16;
-  --aim-accent-border: rgba(163, 230, 53, .55);
-  --aim-accent-glow: rgba(132, 204, 22, .22);
+  --aim-accent-mid: #2563eb;
+  --aim-accent-soft: rgba(37, 99, 235, .18);
+  --aim-accent-border: rgba(96, 165, 250, .45);
+  --aim-accent-glow: rgba(96, 165, 250, .15);
+  --aim-accent-text: #dbeafe;
 }
 
 #modalBg.aimOrgAddOpen .modal {
@@ -3017,6 +3000,54 @@
 .aimOrgAddLead {
   margin: 0;
   line-height: 1.55;
+}
+
+.aimOrgAddTabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  border: 0;
+}
+
+.aimOrgAddTab {
+  flex: 1 1 0;
+  min-width: 0;
+  margin: 0 !important;
+  padding: 10px 12px !important;
+  border-radius: 12px !important;
+  border: 1px solid rgba(42, 66, 100, .55) !important;
+  background: rgba(8, 20, 38, .55) !important;
+  color: #9db4d0 !important;
+  font-size: 12px !important;
+  font-weight: 800 !important;
+  box-shadow: none !important;
+  cursor: pointer;
+}
+
+.aimOrgAddTab.is-active {
+  color: var(--aim-accent-text) !important;
+  border-color: var(--aim-accent-border) !important;
+  background: var(--aim-accent-soft) !important;
+  box-shadow: inset 0 0 0 1px var(--aim-accent-glow) !important;
+}
+
+.aimOrgAddTabPanel {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.aimOrgAddFormGrid {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.aimOrgAddFormGrid label {
+  margin-top: 4px;
 }
 
 .aimOrgAddChoiceGrid {
@@ -3088,20 +3119,30 @@
 .aimOrgAddChoice:has(input:checked) {
   border-color: var(--aim-accent-border);
   box-shadow: 0 0 0 1px var(--aim-accent-glow), inset 0 1px 0 rgba(255, 255, 255, .04);
+  background: linear-gradient(180deg, rgba(37, 99, 235, .14), rgba(13, 27, 48, .98));
 }
 
 #modalBg.aimOrgAddOpen #aimOrgAddPrimaryBtn,
 #modalBg.aimOrgAddOpen .aimOrgAddEmptyBtn {
-  background: linear-gradient(135deg, var(--aim-accent-mid), var(--aim-accent));
-  border-color: var(--aim-accent-border);
-  color: #0b1220;
+  background: #2563eb;
+  border: 1px solid rgba(96, 165, 250, .45);
+  color: #fff;
   font-weight: 800;
-  box-shadow: 0 0 18px var(--aim-accent-glow);
+  box-shadow: none;
 }
 
 #modalBg.aimOrgAddOpen #aimOrgAddPrimaryBtn:hover,
 #modalBg.aimOrgAddOpen .aimOrgAddEmptyBtn:hover {
   filter: brightness(1.06);
+  background: #1d4ed8;
+}
+
+#modalBg.aimOrgAddOpen input:focus,
+#modalBg.aimOrgAddOpen select:focus,
+#modalBg.aimOrgAddOpen textarea:focus {
+  outline: none;
+  border-color: rgba(96, 165, 250, .45);
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, .18);
 }
 
 .aimOrgAddPanel {

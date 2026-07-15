@@ -189,7 +189,7 @@ input,select{width:100%;background:#081426;color:var(--text);border:1px solid #2
 
 </style>
 <link rel="stylesheet" href="assets/css/project-icons.css?v=20260714-icon-stable">
-<link rel="stylesheet" href="assets/css/home.css?v=20260715-v001">
+<link rel="stylesheet" href="assets/css/home.css?v=20260715-aim-hub-ui">
 <link rel="stylesheet" href="assets/css/portfolio-ui.css?v=20260713-v322">
 <link rel="stylesheet" href="assets/css/settings-ui.css?v=20260708-v254">
 <link rel="stylesheet" href="assets/css/hub-auth.css?v=20260712-v400">
@@ -204,7 +204,7 @@ input,select{width:100%;background:#081426;color:var(--text);border:1px solid #2
 <script src="assets/js/project-theme.js?v=20260712-v311"></script>
 <script src="assets/js/project-icons.js?v=20260714-icon-stable"></script>
 <script src="assets/js/performance-data.js?v=20260714-icon-stable"></script>
-<script src="assets/js/account-input-manage.js?v=20260715-v001"></script>
+<script src="assets/js/account-input-manage.js?v=20260715-org-add-v1"></script>
 <script src="assets/js/home.js?v=20260714-icon-stable"></script>
 <script src="assets/js/home-demo.js?v=20260708-v254"></script>
 <script src="assets/js/orca-import.js?v=20260628-v207"></script>
@@ -212,12 +212,12 @@ input,select{width:100%;background:#081426;color:var(--text);border:1px solid #2
 <script src="assets/js/portfolio.js?v=20260714-icon-stable"></script>
 <script src="assets/js/project-master.js?v=20260711-eni-v1"></script>
 <script src="assets/js/settings-ui.js?v=20260711-eni-v1"></script>
-<script src="assets/js/manage-entry-ui.js?v=20260714-icon-stable"></script>
+<script src="assets/js/manage-entry-ui.js?v=20260715-org-add-v1"></script>
 <script src="assets/js/revenue-manage.js?v=20260714-icon-stable"></script>
 <script src="assets/js/sales-manage.js?v=20260714-icon-stable"></script>
 <script src="assets/js/org-nav.js?v=20260715-v001"></script>
-<script src="assets/js/orca-org.js?v=20260712-v315"></script>
-<script src="assets/js/eni-org.js?v=20260715-v001"></script>
+<script src="assets/js/orca-org.js?v=20260715-org-add-v1"></script>
+<script src="assets/js/eni-org.js?v=20260715-org-add-v1"></script>
 <script src="assets/js/eni-project.js?v=20260712-v310"></script>
 <script src="assets/js/eni-revenue-input.js?v=20260713-v321"></script>
 <script src="assets/js/ochan-room.js?v=20260711-room-main-v2"></script>
@@ -380,7 +380,7 @@ input,select{width:100%;background:#081426;color:var(--text);border:1px solid #2
       <div><b>ORCA 組織図</b><div class="help">表示中の組織図を表示しています</div></div>
     </div>
     <div>
-      <button onclick="orcaAddChild(orcaRootId)">＋ 追加</button>
+      <button onclick="orcaOpenRootQuickAdd()">＋ 追加</button>
       <button class="btn2" onclick="orcaZoomOut()">－</button>
       <button class="btn2" onclick="orcaZoomIn()">＋</button>
       <button class="btn2" onclick="orcaFitView()">全体表示</button>
@@ -429,7 +429,7 @@ input,select{width:100%;background:#081426;color:var(--text);border:1px solid #2
       <div><b>ENI 組織図</b><div class="help">表示中アカウントを起点にチーム実績・人数を自動集計します</div></div>
     </div>
     <div>
-      <button type="button" onclick="eniAddChild(eniRootId)">＋ 追加</button>
+      <button type="button" onclick="eniOpenRootQuickAdd()">＋ 追加</button>
       <button type="button" class="btn2" onclick="eniZoomOut()">－</button>
       <button type="button" class="btn2" onclick="eniZoomIn()">＋</button>
       <button type="button" class="btn2" onclick="eniFitView()">全体表示</button>
@@ -472,7 +472,7 @@ input,select{width:100%;background:#081426;color:var(--text);border:1px solid #2
     <button class="tabBtn" onclick="showOrgProjectSelect()">プロジェクト選択</button>
   </div>
 </div>
-<div class="notice">⚠️ 入力内容をもとにした参考シミュレーションです。実際の報酬額・タイトル・ボリュームを保証するものではありません。</div><section class="cards" id="ramIncomeCards"><div class="card total" onclick="showCardDetail('total')"><div class="label">合計収益 <span class="helpQ" onclick="event.stopPropagation();showHelp('total')">?</span></div><div class="main" id="cTotal">$0/月</div><div class="subline" id="cTotalD">$0/日</div><div class="subline" id="cTotalY">約0円/月</div></div><div class="card" onclick="showCardDetail('personal')"><div class="label" id="cPersonalLabel">個人収益 <span class="helpQ" onclick="event.stopPropagation();showHelp('personal')">?</span></div><div class="main" id="cPersonal">$0/月</div><div class="subline" id="cPersonalD">$0/日</div><div class="subline" id="cRate">月利0% / 日利0%</div></div><div class="card" onclick="showCardDetail('direct')"><div class="label">紹介報酬（1段目） <span class="helpQ" onclick="event.stopPropagation();showHelp('direct')">?</span></div><div class="main" id="cDirect">$0/月</div><div class="subline" id="cDirectD">$0/日　20%</div></div><div class="card" onclick="showCardDetail('second')"><div class="label">紹介報酬（2段目） <span class="helpQ" onclick="event.stopPropagation();showHelp('second')">?</span></div><div class="main" id="cSecond">$0/月</div><div class="subline" id="cSecondD">$0/日　10%</div></div><div class="card" onclick="showCardDetail('title')"><div class="label">タイトル報酬 <span class="helpQ" onclick="event.stopPropagation();showHelp('title')">?</span></div><div class="main" id="cTitle">$0/月</div><div class="subline" id="cTitleD">$0/日</div></div><div class="card" onclick="showCardDetail('volume')"><div class="label">チームボリューム <span class="helpQ" onclick="event.stopPropagation();showHelp('volume')">?</span></div><div class="main" id="cVolume">$0</div><div class="subline">手入力値を優先</div></div></section><section class="panel"><div class="chartTop"><div class="orgChartTitleRow"><span class="orgChartTitleIcon" id="ramChartTitleIcon" aria-hidden="true"></span><div><b>RAM 組織図</b><div class="help">表示中の組織図を表示しています</div></div></div><div><button onclick="addChild(rootId)">＋ 追加</button><button class="btn2" onclick="zoomOut()">－</button><button class="btn2" onclick="zoomIn()">＋</button><button class="btn2" onclick="fitView()">全体表示</button><div class="zoomHint">Mac：ピンチ / ⌘+ホイールでズーム</div></div></div><div class="chartArea"><div id="viewport" class="viewport"><div id="canvas" class="canvas"><div id="tree" class="tree"></div></div></div></div></section></section>
+<div class="notice">⚠️ 入力内容をもとにした参考シミュレーションです。実際の報酬額・タイトル・ボリュームを保証するものではありません。</div><section class="cards" id="ramIncomeCards"><div class="card total" onclick="showCardDetail('total')"><div class="label">合計収益 <span class="helpQ" onclick="event.stopPropagation();showHelp('total')">?</span></div><div class="main" id="cTotal">$0/月</div><div class="subline" id="cTotalD">$0/日</div><div class="subline" id="cTotalY">約0円/月</div></div><div class="card" onclick="showCardDetail('personal')"><div class="label" id="cPersonalLabel">個人収益 <span class="helpQ" onclick="event.stopPropagation();showHelp('personal')">?</span></div><div class="main" id="cPersonal">$0/月</div><div class="subline" id="cPersonalD">$0/日</div><div class="subline" id="cRate">月利0% / 日利0%</div></div><div class="card" onclick="showCardDetail('direct')"><div class="label">紹介報酬（1段目） <span class="helpQ" onclick="event.stopPropagation();showHelp('direct')">?</span></div><div class="main" id="cDirect">$0/月</div><div class="subline" id="cDirectD">$0/日　20%</div></div><div class="card" onclick="showCardDetail('second')"><div class="label">紹介報酬（2段目） <span class="helpQ" onclick="event.stopPropagation();showHelp('second')">?</span></div><div class="main" id="cSecond">$0/月</div><div class="subline" id="cSecondD">$0/日　10%</div></div><div class="card" onclick="showCardDetail('title')"><div class="label">タイトル報酬 <span class="helpQ" onclick="event.stopPropagation();showHelp('title')">?</span></div><div class="main" id="cTitle">$0/月</div><div class="subline" id="cTitleD">$0/日</div></div><div class="card" onclick="showCardDetail('volume')"><div class="label">チームボリューム <span class="helpQ" onclick="event.stopPropagation();showHelp('volume')">?</span></div><div class="main" id="cVolume">$0</div><div class="subline">手入力値を優先</div></div></section><section class="panel"><div class="chartTop"><div class="orgChartTitleRow"><span class="orgChartTitleIcon" id="ramChartTitleIcon" aria-hidden="true"></span><div><b>RAM 組織図</b><div class="help">表示中の組織図を表示しています</div></div></div><div><button onclick="openRootQuickAdd()">＋ 追加</button><button class="btn2" onclick="zoomOut()">－</button><button class="btn2" onclick="zoomIn()">＋</button><button class="btn2" onclick="fitView()">全体表示</button><div class="zoomHint">Mac：ピンチ / ⌘+ホイールでズーム</div></div></div><div class="chartArea"><div id="viewport" class="viewport"><div id="canvas" class="canvas"><div id="tree" class="tree"></div></div></div></div></section></section>
 
 <section id="accountManagePage" class="hidden">
   <div class="tabs"><button class="tabBtn" onclick="showPage('ram')">組織図</button><button class="tabBtn active" onclick="showAccountManage()">集計</button></div><div class="topbar"><div><b>RAM 集計</b><div class="help">全アカウントの6項目を一覧で確認します。組織図は表示しません。</div></div><div><button class="btn2" onclick="showPage('ram')">組織図へ戻る</button></div></div>
@@ -1195,7 +1195,7 @@ function reorderSibling(id,dir){
  markActivity();render();
 }
 
-function showDetail(id){focusId=id;let m=members.find(x=>x.id===id),kids=childrenOf(id);if(!m)return;modalTitle.textContent=displayName(m)+' 詳細';modalContent.innerHTML=`<div class="detailGrid"><div class="detailBox"><div class="label">タイトル</div><div class="val">${titleLabel(m.rank||0)}</div></div><div class="detailBox"><div class="label">個人投資額</div><div class="val">${money(m.investment)}</div></div><div class="detailBox"><div class="label">チームボリューム</div><div class="val">${money(calcVolume(id))}</div></div><div class="detailBox"><div class="label">配下数</div><div class="val">${kids.length}件</div></div></div><div class="lineBox"><b>管理</b><p class="help">収益管理・売上管理の表示一覧に追加できます。RAM集計で収益詳細を確認します。</p><div class="accountManageActions"><button class="btn2" onclick="pfAddManageDisplayFromOrgUi('ram','${id}')">表示に追加</button><button onclick="openEdit(members.find(x=>x.id==='${id}'))">編集</button><button class="btn2" onclick="addChild('${id}')">配下追加</button><button class="btn2" onclick="exportSubtree('${id}')">配下保存</button><button class="btn2" onclick="importSubtree('${id}')">配下導入</button>${m.id!==rootId?`<button class="btn2" onclick="openMove('${id}')">移動</button><button class="btnDanger" onclick="deleteMember('${id}')">削除</button>`:''}</div></div>`;modalBg.style.display='flex'}
+function showDetail(id){focusId=id;let m=members.find(x=>x.id===id),kids=childrenOf(id);if(!m)return;modalTitle.textContent=displayName(m)+' 詳細';modalContent.innerHTML=`<div class="detailGrid"><div class="detailBox"><div class="label">タイトル</div><div class="val">${titleLabel(m.rank||0)}</div></div><div class="detailBox"><div class="label">個人投資額</div><div class="val">${money(m.investment)}</div></div><div class="detailBox"><div class="label">チームボリューム</div><div class="val">${money(calcVolume(id))}</div></div><div class="detailBox"><div class="label">配下数</div><div class="val">${kids.length}件</div></div></div><div class="lineBox"><b>管理</b><p class="help">「表示に追加」で実績入力・収益管理・売上管理の対象になります。RAM集計で収益詳細を確認します。</p><div class="accountManageActions"><button class="btn2" onclick="pfAddManageDisplayFromOrgUi('ram','${id}')">表示に追加</button><button onclick="openEdit(members.find(x=>x.id==='${id}'))">編集</button><button class="btn2" onclick="addChild('${id}')">配下追加</button><button class="btn2" onclick="exportSubtree('${id}')">配下保存</button><button class="btn2" onclick="importSubtree('${id}')">配下導入</button>${m.id!==rootId?`<button class="btn2" onclick="openMove('${id}')">移動</button><button class="btnDanger" onclick="deleteMember('${id}')">削除</button>`:''}</div></div>`;modalBg.style.display='flex'}
 function openEdit(data={}){if(!data.id&&typeof aimRenderOrgPlacementModal==='function'){aimRenderOrgPlacementModal('ram',data.parent||null);return}let opts='<option value="">親なし</option>'+members.map(m=>`<option value="${m.id}" ${data.parent===m.id?'selected':''}>${displayName(m)}</option>`).join('');modalTitle.textContent=data.id?'メンバー編集':'メンバー追加';modalContent.innerHTML=`<input type="hidden" id="editId" value="${data.id||''}"><label>親</label><select id="parentInput">${opts}</select><label>名前</label><input id="nameInput" value="${data.name||''}"><label>ユーザーネーム</label><input id="usernameInput" value="${data.username||''}"><div class="grid2"><div><label>保有ランク</label><select id="rankInput">${[5,4,3,2,1,0].map(r=>`<option value="${r}" ${Number(data.rank||0)===r?'selected':''}>${rankName[r]}</option>`).join('')}</select></div><div><label>個人投資額</label><input id="investmentInput" type="number" value="${data.investment||''}"></div></div><label>チームボリューム</label><input id="volumeInput" type="number" value="${data.manualVolume||''}"><div style="display:flex;gap:8px;margin-top:14px;justify-content:flex-end"><button class="btn2" onclick="closeModal()">キャンセル</button><button onclick="saveMember()">保存</button></div>`;modalBg.style.display='flex'}
 function checkAncestorVolumes(parentId){let p=members.find(x=>x.id===parentId);while(p){let need=directLineSum(p.id),cur=Number(p.manualVolume)||0;if(need>cur){p.manualVolume=need;p.bvMode='AUTO'}p=members.find(x=>x.id===p.parent)}}
 function adjustAncestorManualVolumes(parentId,delta){delta=Number(delta)||0;if(!parentId||!delta)return;let p=members.find(x=>x.id===parentId);while(p){let cur=Number(p.manualVolume)||0;p.manualVolume=Math.max(0,cur+delta);p.bvMode=p.bvMode||'MANUAL_PLUS';p=members.find(x=>x.id===p.parent)}}

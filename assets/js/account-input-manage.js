@@ -19,6 +19,8 @@ function aimMigrateRamInputAccountsFromMembers() {
   if (typeof settings === 'undefined') return;
   aimEnsureRamInputAccounts();
   if (settings.ramInputAccounts.length) return;
+  // 組織図専用の新規追加を行った後は、組織図メンバーを実績入力へ自動移行しない
+  if (settings.ramOrgOnlyCreateUsed) return;
   if (typeof members === 'undefined') return;
   let roots = typeof getRootIdsForSummary === 'function'
     ? getRootIdsForSummary()
@@ -622,180 +624,287 @@ function aimEnsureCloseModalHook() {
   aimCloseModalHooked = true;
 }
 
-function aimOpenProjectRegisterFromOrg(projectKey, contextParentId) {
-  if (typeof modalBg !== 'undefined' && modalBg) {
-    modalBg.classList.remove('aimOrgAddOpen');
-    modalBg.removeAttribute('data-aim-project');
+function aimEscapeHtml(text) {
+  if (typeof escapeHtml === 'function') return escapeHtml(text);
+  return String(text == null ? '' : text)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function aimPersistAndRerenderOrg(projectKey) {
+  if (typeof persistHubSettings === 'function') persistHubSettings();
+  else if (typeof hubSaveToStorage === 'function') hubSaveToStorage();
+  if (typeof markActivity === 'function') markActivity();
+  if (projectKey === 'ram' && typeof render === 'function') render();
+  if (projectKey === 'orca' && typeof orcaRender === 'function') orcaRender();
+  if (projectKey === 'eni' && typeof eniRender === 'function') eniRender();
+}
+
+/**
+ * 組織図専用の新規メンバー作成（実績入力 *InputAccounts には書かない）
+ * @returns {string|null} new member id
+ */
+function aimCreateOrgOnlyMember(projectKey, fields, parentId) {
+  fields = fields || {};
+  parentId = parentId || null;
+  var name = String(fields.name || '').trim();
+  var username = String(fields.username || '').trim().replace(/^@/, '');
+  var investment = Number(fields.investment) || 0;
+
+  if (projectKey === 'ram' && typeof members !== 'undefined') {
+    if (typeof settings !== 'undefined') settings.ramOrgOnlyCreateUsed = true;
+    var ramId = 'm' + Date.now();
+    var ramMember = {
+      id: ramId,
+      parent: parentId,
+      name: name || username || '未入力',
+      username: username,
+      rank: Number(fields.rank) || 0,
+      investment: investment,
+      manualVolume: 0,
+      open: true,
+      bvMode: 'MANUAL',
+      bvPrompted: false
+    };
+    aimClearRemovedOrgAccountId('ram', ramId);
+    aimApplyOrgMemberSeriesMeta('ram', ramMember, parentId);
+    aimEnsureMemberSortOrderAtEnd('ram', ramMember);
+    members.push(ramMember);
+    if (!parentId) {
+      if (typeof rootAccountIds !== 'undefined' && rootAccountIds.indexOf(ramId) < 0) rootAccountIds.push(ramId);
+      if (typeof rootId !== 'undefined') rootId = ramId;
+      if (typeof focusId !== 'undefined') focusId = ramId;
+    } else {
+      var ramParent = members.find(function (m) { return m.id === parentId; });
+      if (ramParent) ramParent.open = true;
+      if (typeof focusId !== 'undefined') focusId = ramId;
+      if (typeof adjustAncestorManualVolumes === 'function') {
+        adjustAncestorManualVolumes(parentId, investment);
+      }
+    }
+    return ramId;
   }
-  if (projectKey === 'ram' && typeof openRamAddAccountForm === 'function') {
-    openRamAddAccountForm();
-    return;
+
+  if (projectKey === 'orca' && typeof orcaMembers !== 'undefined') {
+    var orcaId = 'o' + Date.now();
+    var orcaMember = {
+      id: orcaId,
+      parent: parentId,
+      name: name || username || '未入力',
+      username: username,
+      rank: Number(fields.rank) || 0,
+      investment: investment,
+      aiAgent: fields.aiAgent || '不明',
+      personalSales: 0,
+      groupSales: 0,
+      open: true,
+      bvMode: 'MANUAL',
+      bvPrompted: false
+    };
+    aimClearRemovedOrgAccountId('orca', orcaId);
+    aimApplyOrgMemberSeriesMeta('orca', orcaMember, parentId);
+    aimEnsureMemberSortOrderAtEnd('orca', orcaMember);
+    orcaMembers.push(orcaMember);
+    if (!parentId) {
+      if (typeof orcaRootAccountIds !== 'undefined' && orcaRootAccountIds.indexOf(orcaId) < 0) {
+        orcaRootAccountIds.push(orcaId);
+      }
+      if (typeof orcaRootId !== 'undefined') orcaRootId = orcaId;
+      if (typeof orcaFocusId !== 'undefined') orcaFocusId = orcaId;
+    } else {
+      var orcaParent = orcaMembers.find(function (m) { return m.id === parentId; });
+      if (orcaParent) orcaParent.open = true;
+      if (typeof orcaFocusId !== 'undefined') orcaFocusId = orcaId;
+      var line = investment;
+      if (typeof orcaAdjustAncestorManualVolumes === 'function') {
+        orcaAdjustAncestorManualVolumes(parentId, line);
+      }
+      if (typeof orcaSyncPersonalSalesFor === 'function') {
+        orcaSyncPersonalSalesFor(orcaId);
+        orcaSyncPersonalSalesFor(parentId);
+      }
+      if (typeof orcaRefreshGroupSalesUpstream === 'function') {
+        orcaRefreshGroupSalesUpstream(orcaId);
+      }
+    }
+    return orcaId;
   }
-  if (projectKey === 'orca' && typeof openOrcaAddAccountForm === 'function') {
-    openOrcaAddAccountForm();
-    return;
+
+  if (projectKey === 'eni' && typeof eniMembers !== 'undefined') {
+    var wallet = String(fields.walletAddress || fields.username || '').trim();
+    if (!wallet) return null;
+    var eniId = 'eni_' + Date.now();
+    var eniMember = {
+      id: eniId,
+      parent: parentId,
+      name: name,
+      username: wallet,
+      walletAddress: wallet,
+      investment: investment,
+      stakingReward: 0,
+      teamReward: 0,
+      open: true
+    };
+    aimClearRemovedOrgAccountId('eni', eniId);
+    aimApplyOrgMemberSeriesMeta('eni', eniMember, parentId);
+    aimEnsureMemberSortOrderAtEnd('eni', eniMember);
+    eniMembers.push(eniMember);
+    if (!parentId) {
+      if (typeof eniRootAccountIds !== 'undefined' && eniRootAccountIds.indexOf(eniId) < 0) {
+        eniRootAccountIds.push(eniId);
+      }
+      if (typeof eniRootId !== 'undefined') eniRootId = eniId;
+      if (typeof eniFocusId !== 'undefined') eniFocusId = eniId;
+    } else {
+      var eniParent = eniMembers.find(function (m) { return m.id === parentId; });
+      if (eniParent) eniParent.open = true;
+      if (typeof eniFocusId !== 'undefined') eniFocusId = eniId;
+    }
+    return eniId;
+  }
+  return null;
+}
+
+/**
+ * 「表示に追加」用：組織図メンバーを実績入力アカウント一覧へ登録（未登録時のみ）
+ * 収益ログや投資履歴は自動作成しない
+ */
+function aimEnsureOrgMemberRegisteredAsInput(projectKey, accountId) {
+  if (!projectKey || !accountId || typeof settings === 'undefined') return false;
+  if (aimFindInputAccount(projectKey, accountId)) return true;
+  var m = aimGetOrgMembersList(projectKey).find(function (x) { return x && x.id === accountId; });
+  if (!m) return false;
+
+  if (projectKey === 'ram') {
+    aimEnsureRamInputAccounts();
+    settings.ramInputAccounts.push({
+      id: m.id,
+      username: String(m.username || m.name || '未入力').replace(/^@/, ''),
+      name: m.name || m.username || '未入力',
+      investment: Number(m.investment) || 0,
+      rank: Number(m.rank) || 0
+    });
+    return true;
+  }
+  if (projectKey === 'orca') {
+    if (!Array.isArray(settings.orcaInputAccounts)) settings.orcaInputAccounts = [];
+    settings.orcaInputAccounts.push({
+      id: m.id,
+      username: String(m.username || m.name || '未入力').replace(/^@/, ''),
+      name: m.name || m.username || '未入力',
+      investment: Number(m.investment) || 0,
+      aiAgent: m.aiAgent || '不明',
+      rank: Number(m.rank) || 0
+    });
+    return true;
   }
   if (projectKey === 'eni') {
-    aimRenderEniOrgRegisterAndPlaceForm(contextParentId || null);
+    if (!Array.isArray(settings.eniInputAccounts)) settings.eniInputAccounts = [];
+    var wallet = m.walletAddress || m.username || '';
+    settings.eniInputAccounts.push({
+      id: m.id,
+      username: wallet,
+      name: m.name || '',
+      walletAddress: wallet,
+      investment: Number(m.investment) || 0
+    });
+    return true;
   }
+  return false;
 }
 
-function aimRenderEniOrgRegisterAndPlaceForm(contextParentId) {
-  aimEnsureCloseModalHook();
-  if (typeof modalBg !== 'undefined' && modalBg) {
-    modalBg.classList.add('aimOrgAddOpen');
-    modalBg.setAttribute('data-aim-project', 'eni');
+function aimBuildOrgOnlyNewFormHtml(projectKey) {
+  var esc = aimEscapeHtml;
+  if (projectKey === 'ram') {
+    var rankOpts = '';
+    var ranks = (typeof rankName !== 'undefined') ? [5, 4, 3, 2, 1, 0] : [0];
+    ranks.forEach(function (r) {
+      var label = (typeof rankName !== 'undefined' && rankName[r]) ? rankName[r] : ('Rank ' + r);
+      rankOpts += '<option value="' + r + '"' + (r === 0 ? ' selected' : '') + '>' + esc(label) + '</option>';
+    });
+    return '<div class="aimOrgAddFormGrid">' +
+      '<label>名前</label><input id="aimOrgNewName" type="text" placeholder="表示名">' +
+      '<label>ユーザーネーム</label><input id="aimOrgNewUsername" type="text" placeholder="@なしで入力">' +
+      '<label>保有ランク</label><select id="aimOrgNewRank">' + rankOpts + '</select>' +
+      '<label>個人投資額</label><input id="aimOrgNewInvestment" type="number" min="0" step="any" placeholder="例：300" value="0">' +
+      '</div>';
   }
-  if (typeof modalTitle !== 'undefined') modalTitle.textContent = '新しいENIアカウントを登録して配置';
-  if (typeof modalContent === 'undefined') return;
-  var esc = typeof escapeHtml === 'function' ? escapeHtml : function (t) { return String(t || ''); };
-  var parentOptions = aimGetOrgParentOptions('eni');
-  var parentOpts = parentOptions.map(function (p) {
-    var selected = contextParentId && contextParentId === p.id ? ' selected' : '';
-    return '<option value="' + p.id + '"' + selected + '>' + esc(p.label) + '</option>';
-  }).join('');
-  var canPlaceUnderParent = !!parentOptions.length || !!contextParentId;
-  var defaultMode = contextParentId ? 'child' : 'root';
-  modalContent.innerHTML =
-    '<div class="aimOrgAddModal">' +
-    '<p class="help aimOrgAddLead">名前は任意、ウォレットアドレスは必須です。登録と同時に組織図へ配置します。</p>' +
-    '<label>名前（任意）</label>' +
-    '<input id="aimEniRegName" type="text" placeholder="未入力時は「ウォレット XXXX」表示">' +
-    '<label>ウォレットアドレス（必須）</label>' +
-    '<input id="aimEniRegWallet" type="text" placeholder="0x... またはアドレス">' +
-    '<label>ステーキング額</label>' +
-    '<input id="aimEniRegStake" type="number" min="0" step="any" placeholder="例：10000" value="0">' +
-    '<div class="aimOrgAddChoiceGrid aimOrgAddPlaceModes">' +
-    '<label class="aimOrgAddChoice">' +
-    '<input type="radio" name="aimEniRegMode" value="child"' +
-    (defaultMode === 'child' ? ' checked' : '') + (canPlaceUnderParent ? '' : ' disabled') + '>' +
-    '<span class="aimOrgAddChoiceBody"><b>既存アカウント配下へ追加</b>' +
-    '<small>親アカウントを指定して配置</small></span></label>' +
-    '<label class="aimOrgAddChoice">' +
-    '<input type="radio" name="aimEniRegMode" value="root"' +
-    (defaultMode === 'root' ? ' checked' : '') + '>' +
-    '<span class="aimOrgAddChoiceBody"><b>新しい親系列として追加</b>' +
-    '<small>独立した系列の起点として配置</small></span></label>' +
-    '</div>' +
-    '<div id="aimEniRegParentWrap"' + (defaultMode === 'child' ? '' : ' class="hidden"') + '>' +
-    '<label>親アカウント</label>' +
-    (contextParentId
-      ? '<input type="hidden" id="aimEniRegParent" value="' + esc(contextParentId) + '">' +
-        '<p class="help">親：' + esc((function () {
-          var m = aimGetOrgMembersList('eni').find(function (x) { return x && x.id === contextParentId; });
-          return m ? aimGetOrgMemberDisplayName('eni', m) : contextParentId;
-        })()) + '</p>'
-      : '<select id="aimEniRegParent">' + parentOpts + '</select>') +
-    '</div>' +
-    '<div class="aimOrgAddFooter">' +
-    '<button type="button" class="btn2" id="aimEniRegCancelBtn">キャンセル</button>' +
-    '<button type="button" id="aimEniRegSaveBtn">登録して配置</button>' +
-    '</div></div>';
-
-  function syncEniRegMode() {
-    var modeEl = document.querySelector('input[name="aimEniRegMode"]:checked');
-    var mode = modeEl ? modeEl.value : 'root';
-    var wrap = document.getElementById('aimEniRegParentWrap');
-    if (wrap) wrap.classList.toggle('hidden', mode !== 'child');
+  if (projectKey === 'orca') {
+    var agentOpts = '';
+    var agents = (typeof ORCA_AI_AGENTS !== 'undefined' && ORCA_AI_AGENTS.length)
+      ? ORCA_AI_AGENTS
+      : ['不明', 'Eden', 'Atlas', 'Nova'];
+    agents.forEach(function (a) {
+      agentOpts += '<option value="' + esc(a) + '"' + (a === '不明' ? ' selected' : '') + '>' + esc(a) + '</option>';
+    });
+    return '<div class="aimOrgAddFormGrid">' +
+      '<label>名前</label><input id="aimOrgNewName" type="text" placeholder="表示名">' +
+      '<label>ユーザーネーム</label><input id="aimOrgNewUsername" type="text" placeholder="@なしで入力">' +
+      '<label>個人投資額</label><input id="aimOrgNewInvestment" type="number" min="0" step="any" placeholder="例：300" value="0">' +
+      '<label>運用AIエージェント</label><select id="aimOrgNewAiAgent">' + agentOpts + '</select>' +
+      '</div>';
   }
-  document.querySelectorAll('input[name="aimEniRegMode"]').forEach(function (el) {
-    el.addEventListener('change', syncEniRegMode);
-  });
-  syncEniRegMode();
-
-  var cancelBtn = document.getElementById('aimEniRegCancelBtn');
-  if (cancelBtn) {
-    cancelBtn.onclick = function () {
-      aimRenderOrgPlacementModal('eni', contextParentId || null);
-    };
-  }
-  var saveBtn = document.getElementById('aimEniRegSaveBtn');
-  if (saveBtn) {
-    saveBtn.onclick = function () {
-      var name = String((document.getElementById('aimEniRegName') || {}).value || '').trim();
-      var wallet = String((document.getElementById('aimEniRegWallet') || {}).value || '').trim();
-      var stake = Number((document.getElementById('aimEniRegStake') || {}).value) || 0;
-      if (!wallet) {
-        if (typeof showToast === 'function') showToast('⚠️ ウォレットアドレスは必須です');
-        return;
-      }
-      var modeEl = document.querySelector('input[name="aimEniRegMode"]:checked');
-      var mode = modeEl ? modeEl.value : 'root';
-      var parentId = null;
-      if (mode === 'child') {
-        var parentSel = document.getElementById('aimEniRegParent');
-        parentId = parentSel ? (parentSel.value || null) : (contextParentId || null);
-        if (!parentId) {
-          if (typeof showToast === 'function') showToast('⚠️ 親アカウントを選択してください');
-          return;
-        }
-      }
-      var id = 'eni_' + Date.now();
-      if (typeof ensureEniInputAccounts === 'function') ensureEniInputAccounts();
-      else if (typeof settings !== 'undefined' && !Array.isArray(settings.eniInputAccounts)) {
-        settings.eniInputAccounts = [];
-      }
-      if (typeof settings !== 'undefined') {
-        settings.eniInputAccounts.push({
-          id: id,
-          username: wallet,
-          name: name,
-          walletAddress: wallet,
-          investment: stake
-        });
-      }
-      var dateKey = typeof todayKey === 'function' ? todayKey() : '';
-      if (typeof pdAddInvestmentRecord === 'function' && dateKey) {
-        pdAddInvestmentRecord(id, 'eni', dateKey, stake, 'initial');
-      } else if (typeof pdSetManualOperatingAmount === 'function' && dateKey) {
-        pdSetManualOperatingAmount(id, 'eni', dateKey, stake);
-      }
-      aimPlaceInputAccountInOrg('eni', id, parentId);
-      // Ensure wallet/name/investment on the org member after place
-      if (typeof eniMembers !== 'undefined') {
-        var m = eniMembers.find(function (x) { return x && x.id === id; });
-        if (m) {
-          m.walletAddress = wallet;
-          m.username = wallet;
-          m.name = name;
-          m.investment = stake;
-        }
-      }
-      if (typeof persistHubSettings === 'function') persistHubSettings();
-      if (typeof markActivity === 'function') markActivity();
-      if (typeof closeModal === 'function') closeModal();
-      if (typeof eniRender === 'function') eniRender();
-      if (typeof showToast === 'function') showToast('✅ アカウントを登録して配置しました');
-    };
-  }
-  if (typeof modalBg !== 'undefined') modalBg.style.display = 'flex';
+  return '<div class="aimOrgAddFormGrid">' +
+    '<label>名前（任意）</label><input id="aimOrgNewName" type="text" placeholder="未入力時はウォレット表示">' +
+    '<label>ウォレットアドレス（必須）</label><input id="aimOrgNewWallet" type="text" placeholder="0x... またはアドレス">' +
+    '<label>ステーキング額</label><input id="aimOrgNewInvestment" type="number" min="0" step="any" placeholder="例：10000" value="0">' +
+    '</div>';
 }
 
+function aimReadOrgOnlyNewFormFields(projectKey) {
+  var nameEl = document.getElementById('aimOrgNewName');
+  var userEl = document.getElementById('aimOrgNewUsername');
+  var invEl = document.getElementById('aimOrgNewInvestment');
+  var fields = {
+    name: nameEl ? nameEl.value : '',
+    username: userEl ? userEl.value : '',
+    investment: invEl ? invEl.value : 0
+  };
+  if (projectKey === 'ram') {
+    var rankEl = document.getElementById('aimOrgNewRank');
+    fields.rank = rankEl ? rankEl.value : 0;
+  }
+  if (projectKey === 'orca') {
+    var agentEl = document.getElementById('aimOrgNewAiAgent');
+    fields.aiAgent = agentEl ? agentEl.value : '不明';
+  }
+  if (projectKey === 'eni') {
+    var walletEl = document.getElementById('aimOrgNewWallet');
+    fields.walletAddress = walletEl ? walletEl.value : '';
+    fields.username = fields.walletAddress;
+  }
+  return fields;
+}
+
+/**
+ * 組織図追加モーダル
+ * contextParentId あり → 配下へ追加（親固定）
+ * contextParentId なし → 独立親系列の追加
+ */
 function aimRenderOrgPlacementModal(projectKey, contextParentId, onPlaced) {
   aimEnsureCloseModalHook();
+  var isChildMode = !!contextParentId;
   var available = aimGetAccountsForOrgPlacement(projectKey);
-  var esc = typeof escapeHtml === 'function' ? escapeHtml : function (t) { return String(t || ''); };
-  var parentOptions = aimGetOrgParentOptions(projectKey);
-  var parentOpts = parentOptions.map(function (p) {
-    var selected = contextParentId && contextParentId === p.id ? ' selected' : '';
-    return '<option value="' + p.id + '"' + selected + '>' + esc(p.label) + '</option>';
-  }).join('');
-  var contextParent = contextParentId
+  var esc = aimEscapeHtml;
+  var contextParent = isChildMode
     ? aimGetOrgMembersList(projectKey).find(function (m) { return m && m.id === contextParentId; })
     : null;
   var contextParentLabel = contextParent
     ? aimGetOrgMemberDisplayName(projectKey, contextParent)
     : '';
-  var canPlaceUnderParent = !!parentOptions.length || !!contextParentId;
-  var defaultMode = contextParentId ? 'child' : 'root';
-  var defaultPath = available.length ? 'existing' : 'new';
   var projectLabel = projectKey === 'ram' ? 'RAM' : projectKey === 'orca' ? 'ORCA' : 'ENI';
+  var defaultTab = 'new';
 
   if (typeof modalBg !== 'undefined' && modalBg) {
     modalBg.classList.add('aimOrgAddOpen');
-    modalBg.setAttribute('data-aim-project', projectKey === 'ram' || projectKey === 'orca' || projectKey === 'eni' ? projectKey : 'eni');
+    modalBg.setAttribute('data-aim-project',
+      projectKey === 'ram' || projectKey === 'orca' || projectKey === 'eni' ? projectKey : 'eni');
   }
-  if (typeof modalTitle !== 'undefined') modalTitle.textContent = 'アカウントを組織図へ追加';
+  if (typeof modalTitle !== 'undefined') {
+    modalTitle.textContent = isChildMode ? '配下へ追加' : '親系列を追加';
+  }
   if (typeof modalContent === 'undefined') return;
 
   var accountOpts = available.map(function (acc) {
@@ -805,105 +914,72 @@ function aimRenderOrgPlacementModal(projectKey, contextParentId, onPlaced) {
       var nm = String(acc.name || '').trim();
       label = nm ? (nm + '（' + short + '）') : ('ウォレット ' + short);
     }
-    return '<option value="' + acc.id + '">' + esc(label) + '</option>';
+    return '<option value="' + esc(acc.id) + '">' + esc(label) + '</option>';
   }).join('');
 
-  var existingPanel = available.length
-    ? ('<div id="aimOrgAddExistingPanel" class="aimOrgAddPanel">' +
-      '<label>未配置の登録済みアカウント</label>' +
+  var fromInputPanel = available.length
+    ? ('<div class="aimOrgAddPanel">' +
+      '<p class="help">実績入力に登録済みで、まだこの組織図に配置されていないアカウントです。</p>' +
+      '<label>未配置アカウント</label>' +
       '<select id="aimPlaceAccountSelect">' + accountOpts + '</select>' +
-      '<div class="aimOrgAddChoiceGrid aimOrgAddPlaceModes">' +
-      '<label class="aimOrgAddChoice">' +
-      '<input type="radio" name="aimPlaceMode" value="child"' +
-      (defaultMode === 'child' ? ' checked' : '') + (canPlaceUnderParent ? '' : ' disabled') + '>' +
-      '<span class="aimOrgAddChoiceBody"><b>既存アカウント配下へ追加</b>' +
-      '<small>' + (contextParentId ? ('親：' + esc(contextParentLabel)) : '親アカウントを選択') +
-      '</small></span></label>' +
-      '<label class="aimOrgAddChoice">' +
-      '<input type="radio" name="aimPlaceMode" value="root"' +
-      (defaultMode === 'root' ? ' checked' : '') + '>' +
-      '<span class="aimOrgAddChoiceBody"><b>新しい親系列として追加</b>' +
-      '<small>独立した系列の起点として配置</small></span></label>' +
-      '</div>' +
-      '<div id="aimPlaceChildWrap"' + (defaultMode === 'child' ? '' : ' class="hidden"') + '>' +
-      (contextParentId
-        ? '<input type="hidden" id="aimPlaceParentSelect" value="' + esc(contextParentId) + '">'
-        : '<label>親アカウント</label><select id="aimPlaceParentSelect">' + parentOpts + '</select>') +
-      '</div></div>')
-    : ('<div id="aimOrgAddExistingPanel" class="aimOrgAddPanel">' +
-      '<div class="aimOrgAddEmpty">' +
-      '<b>未配置の登録済みアカウントはありません</b>' +
-      '<p class="help">' + projectLabel + 'の登録済みアカウントは、すべて組織図へ配置済みか、まだ登録がありません。</p>' +
-      '<button type="button" class="aimOrgAddEmptyBtn" id="aimOrgAddEmptyToNewBtn">新しいアカウントを登録して配置</button>' +
+      '</div>')
+    : ('<div class="aimOrgAddPanel"><div class="aimOrgAddEmpty">' +
+      '<b>組織図に未配置の実績入力アカウントはありません</b>' +
+      '<p class="help">' + projectLabel + 'の実績入力アカウントは、すべて配置済みか、まだ登録がありません。</p>' +
       '</div></div>');
+
+  var lead = isChildMode
+    ? ('親：<b>' + esc(contextParentLabel || contextParentId) + '</b> の直下へ追加します。組織図専用の新規追加では実績入力へは登録しません。')
+    : ('新しい独立系列の起点アカウントを追加します。組織図専用の新規追加では実績入力へは登録しません。');
 
   modalContent.innerHTML =
     '<div class="aimOrgAddModal">' +
-    '<p class="help aimOrgAddLead">登録済みアカウントを配置するか、新しいアカウントを登録してください。</p>' +
-    '<div class="aimOrgAddChoiceGrid" role="radiogroup" aria-label="追加方法">' +
-    '<label class="aimOrgAddChoice' + (available.length ? '' : ' isDisabled') + '">' +
-    '<input type="radio" name="aimOrgAddPath" value="existing"' +
-    (defaultPath === 'existing' ? ' checked' : '') + (available.length ? '' : ' disabled') + '>' +
-    '<span class="aimOrgAddChoiceBody"><b>登録済みアカウントを配置</b>' +
-    '<small>' + projectLabel + 'の未配置アカウントを組織図へ追加</small></span></label>' +
-    '<label class="aimOrgAddChoice">' +
-    '<input type="radio" name="aimOrgAddPath" value="new"' +
-    (defaultPath === 'new' ? ' checked' : '') + '>' +
-    '<span class="aimOrgAddChoiceBody"><b>新しいアカウントを登録して配置</b>' +
-    '<small>アカウントを新規登録してから組織図へ配置</small></span></label>' +
+    '<p class="help aimOrgAddLead">' + lead + '</p>' +
+    '<div class="aimOrgAddTabs" role="tablist">' +
+    '<button type="button" class="aimOrgAddTab is-active" data-aim-tab="new" role="tab" aria-selected="true">新規追加</button>' +
+    '<button type="button" class="aimOrgAddTab" data-aim-tab="fromInput" role="tab" aria-selected="false">実績入力から追加</button>' +
     '</div>' +
-    existingPanel +
-    '<div id="aimOrgAddNewPanel" class="aimOrgAddPanel' + (defaultPath === 'new' ? '' : ' hidden') + '">' +
-    '<p class="help">「次へ」を押すと、' + projectLabel + 'のアカウント登録画面へ進みます。</p>' +
+    '<div id="aimOrgAddTabNew" class="aimOrgAddTabPanel" data-aim-tab-panel="new">' +
+    aimBuildOrgOnlyNewFormHtml(projectKey) +
+    '<p class="help">この登録は組織図だけに保存されます。実績入力へ追加するには、後から詳細の「表示に追加」を使います。</p>' +
+    '</div>' +
+    '<div id="aimOrgAddTabFromInput" class="aimOrgAddTabPanel hidden" data-aim-tab-panel="fromInput">' +
+    fromInputPanel +
     '</div>' +
     '<div class="aimOrgAddFooter">' +
     '<button type="button" class="btn2" id="aimOrgAddCancelBtn">キャンセル</button>' +
     '<button type="button" id="aimOrgAddPrimaryBtn">' +
-    (defaultPath === 'existing' ? '配置する' : '次へ') + '</button>' +
+    (isChildMode ? '登録して配下へ追加' : '登録して系列を追加') + '</button>' +
     '</div></div>';
 
-  function currentPath() {
-    var el = document.querySelector('input[name="aimOrgAddPath"]:checked');
-    return el ? el.value : defaultPath;
-  }
+  var currentTab = defaultTab;
 
-  function syncPathUi() {
-    var path = currentPath();
-    var existingEl = document.getElementById('aimOrgAddExistingPanel');
-    var newEl = document.getElementById('aimOrgAddNewPanel');
+  function syncTabUi() {
+    document.querySelectorAll('.aimOrgAddTab').forEach(function (btn) {
+      var on = btn.getAttribute('data-aim-tab') === currentTab;
+      btn.classList.toggle('is-active', on);
+      btn.setAttribute('aria-selected', on ? 'true' : 'false');
+    });
+    document.querySelectorAll('.aimOrgAddTabPanel').forEach(function (panel) {
+      panel.classList.toggle('hidden', panel.getAttribute('data-aim-tab-panel') !== currentTab);
+    });
     var primary = document.getElementById('aimOrgAddPrimaryBtn');
-    if (existingEl) existingEl.classList.toggle('hidden', path !== 'existing');
-    if (newEl) newEl.classList.toggle('hidden', path !== 'new');
-    if (primary) primary.textContent = path === 'existing' ? '配置する' : '次へ';
-  }
-
-  function syncPlaceModeUi() {
-    var modeEl = document.querySelector('input[name="aimPlaceMode"]:checked');
-    var mode = modeEl ? modeEl.value : 'root';
-    var wrap = document.getElementById('aimPlaceChildWrap');
-    if (wrap) wrap.classList.toggle('hidden', mode !== 'child');
-  }
-
-  document.querySelectorAll('input[name="aimOrgAddPath"]').forEach(function (el) {
-    el.addEventListener('change', syncPathUi);
-  });
-  document.querySelectorAll('input[name="aimPlaceMode"]').forEach(function (el) {
-    el.addEventListener('change', syncPlaceModeUi);
-  });
-  syncPathUi();
-  syncPlaceModeUi();
-
-  var emptyToNew = document.getElementById('aimOrgAddEmptyToNewBtn');
-  if (emptyToNew) {
-    emptyToNew.onclick = function () {
-      var newRadio = document.querySelector('input[name="aimOrgAddPath"][value="new"]');
-      if (newRadio) {
-        newRadio.checked = true;
-        syncPathUi();
+    if (primary) {
+      if (currentTab === 'new') {
+        primary.textContent = isChildMode ? '登録して配下へ追加' : '登録して系列を追加';
+      } else {
+        primary.textContent = isChildMode ? '配下へ追加' : '系列として追加';
       }
-      aimOpenProjectRegisterFromOrg(projectKey, contextParentId || null);
-    };
+    }
   }
+
+  document.querySelectorAll('.aimOrgAddTab').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      currentTab = btn.getAttribute('data-aim-tab') || 'new';
+      syncTabUi();
+    });
+  });
+  syncTabUi();
 
   var cancelBtn = document.getElementById('aimOrgAddCancelBtn');
   if (cancelBtn) {
@@ -915,43 +991,66 @@ function aimRenderOrgPlacementModal(projectKey, contextParentId, onPlaced) {
   var primaryBtn = document.getElementById('aimOrgAddPrimaryBtn');
   if (primaryBtn) {
     primaryBtn.onclick = function () {
-      if (currentPath() === 'new') {
-        aimOpenProjectRegisterFromOrg(projectKey, contextParentId || null);
+      var parentId = isChildMode ? contextParentId : null;
+      if (currentTab === 'new') {
+        var fields = aimReadOrgOnlyNewFormFields(projectKey);
+        if (projectKey === 'eni' && !String(fields.walletAddress || '').trim()) {
+          if (typeof showToast === 'function') showToast('⚠️ ウォレットアドレスは必須です');
+          return;
+        }
+        if (projectKey !== 'eni' && !String(fields.name || '').trim() && !String(fields.username || '').trim()) {
+          if (typeof showToast === 'function') showToast('⚠️ 名前またはユーザーネームを入力してください');
+          return;
+        }
+        var newId = aimCreateOrgOnlyMember(projectKey, fields, parentId);
+        if (!newId) {
+          if (typeof showToast === 'function') showToast('⚠️ 追加できませんでした');
+          return;
+        }
+        if (typeof closeModal === 'function') closeModal();
+        aimPersistAndRerenderOrg(projectKey);
+        if (typeof onPlaced === 'function') onPlaced(newId);
+        if (typeof showToast === 'function') {
+          showToast(isChildMode ? '✅ 組織図の配下へ追加しました' : '✅ 新しい親系列を追加しました');
+        }
         return;
       }
+
       if (!available.length) {
         if (typeof showToast === 'function') {
-          showToast('⚠️ 未配置の登録済みアカウントはありません');
+          showToast('⚠️ 組織図に未配置の実績入力アカウントはありません');
         }
         return;
       }
       var sel = document.getElementById('aimPlaceAccountSelect');
       var id = sel ? sel.value : '';
       if (!id) return;
-      var modeEl = document.querySelector('input[name="aimPlaceMode"]:checked');
-      var mode = modeEl ? modeEl.value : 'root';
-      var parentId = null;
-      if (mode === 'child') {
-        var parentSel = document.getElementById('aimPlaceParentSelect');
-        parentId = parentSel ? (parentSel.value || null) : (contextParentId || null);
-        if (!parentId) {
-          alert('親アカウントを選択してください。');
-          return;
-        }
-      }
-      // Placement logic unchanged
       aimPlaceInputAccountInOrg(projectKey, id, parentId);
-      if (typeof persistHubSettings === 'function') persistHubSettings();
-      if (typeof markActivity === 'function') markActivity();
+      if (isChildMode) {
+        var list = aimGetOrgMembersList(projectKey);
+        var p = list.find(function (m) { return m && m.id === parentId; });
+        if (p) p.open = true;
+      }
       if (typeof closeModal === 'function') closeModal();
-      if (projectKey === 'ram' && typeof render === 'function') render();
-      if (projectKey === 'orca' && typeof orcaRender === 'function') orcaRender();
-      if (projectKey === 'eni' && typeof eniRender === 'function') eniRender();
-      if (typeof onPlaced === 'function') onPlaced();
+      aimPersistAndRerenderOrg(projectKey);
+      if (typeof onPlaced === 'function') onPlaced(id);
+      if (typeof showToast === 'function') {
+        showToast(isChildMode ? '✅ 配下へ追加しました' : '✅ 親系列として追加しました');
+      }
     };
   }
 
   if (typeof modalBg !== 'undefined') modalBg.style.display = 'flex';
+}
+
+/** @deprecated 組織図からは実績入力登録フォームを開かない */
+function aimOpenProjectRegisterFromOrg(projectKey, contextParentId) {
+  aimRenderOrgPlacementModal(projectKey, contextParentId || null);
+}
+
+/** @deprecated ENI組織図専用新規は aimCreateOrgOnlyMember に統合 */
+function aimRenderEniOrgRegisterAndPlaceForm(contextParentId) {
+  aimRenderOrgPlacementModal('eni', contextParentId || null);
 }
 
 function aimRenderInputAccountActions(projectKey, accountId, accountName, reopenFn) {
@@ -1068,6 +1167,8 @@ if (typeof window !== 'undefined') {
   window.aimRenderOrgPlacementModal = aimRenderOrgPlacementModal;
   window.aimOpenProjectRegisterFromOrg = aimOpenProjectRegisterFromOrg;
   window.aimRenderEniOrgRegisterAndPlaceForm = aimRenderEniOrgRegisterAndPlaceForm;
+  window.aimCreateOrgOnlyMember = aimCreateOrgOnlyMember;
+  window.aimEnsureOrgMemberRegisteredAsInput = aimEnsureOrgMemberRegisteredAsInput;
   window.aimSortOrgMemberSiblings = aimSortOrgMemberSiblings;
   window.aimGetSortedOrgChildren = aimGetSortedOrgChildren;
   window.aimBuildOrgAccountTree = aimBuildOrgAccountTree;
