@@ -11,6 +11,12 @@ alwaysApply: true
 - 計算ロジック以外の UI 確認も localhost で行う
 - Safari キャッシュが気になる場合は「開発 → キャッシュを空にする」後にスーパーリロード
 
+## バージョン / Build（必須）
+
+- Commit・Push・Hosting デプロイの直前に **Ver** と **Build** を必ず更新する
+- 詳細は `oukei-version-bump.mdc` に従う
+- デプロイ後は Ver / Build / 変更内容 / Hosting URL を報告する
+
 ## デプロイ禁止（開発中）
 
 - ユーザーが明示的に承認するまで **`firebase deploy` / `npm run deploy:hosting` を実行しない**

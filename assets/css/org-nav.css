@@ -80,6 +80,102 @@
   box-shadow: 0 14px 28px rgba(0, 0, 0, .32);
 }
 
+.orgSelectCard.is-selected {
+  box-shadow:
+    0 0 0 2px rgba(255, 255, 255, .12),
+    0 16px 32px rgba(0, 0, 0, .36);
+}
+
+.orgSelectCard--ram.is-selected {
+  box-shadow:
+    0 0 0 2px rgba(251, 146, 60, .55),
+    0 0 28px rgba(249, 115, 22, .28),
+    0 16px 32px rgba(0, 0, 0, .36);
+}
+
+.orgSelectCard--orca.is-selected {
+  box-shadow:
+    0 0 0 2px rgba(96, 165, 250, .55),
+    0 0 28px rgba(59, 130, 246, .28),
+    0 16px 32px rgba(0, 0, 0, .36);
+}
+
+.orgSelectCard--eni.is-selected {
+  box-shadow:
+    0 0 0 2px rgba(163, 230, 53, .55),
+    0 0 28px rgba(132, 204, 22, .28),
+    0 16px 32px rgba(0, 0, 0, .36);
+}
+
+.orgSelectSelectedBadge {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 2px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .04em;
+  color: #f8fafc;
+  border: 1px solid rgba(148, 163, 184, .45);
+  background: rgba(15, 23, 42, .72);
+}
+
+.orgSelectCard--ram .orgSelectSelectedBadge {
+  color: #ffedd5;
+  border-color: rgba(251, 146, 60, .55);
+  background: rgba(249, 115, 22, .18);
+}
+
+.orgSelectCard--orca .orgSelectSelectedBadge {
+  color: #dbeafe;
+  border-color: rgba(96, 165, 250, .55);
+  background: rgba(59, 130, 246, .18);
+}
+
+.orgSelectCard--eni .orgSelectSelectedBadge {
+  color: #ecfccb;
+  border-color: rgba(163, 230, 53, .55);
+  background: rgba(132, 204, 22, .18);
+}
+
+/* Accent the select page shell based on the project that opened it */
+.orgSelectPage[data-org-select-theme="ram"] .orgSelectTitle {
+  text-shadow: 0 0 24px rgba(249, 115, 22, .28);
+}
+.orgSelectPage[data-org-select-theme="orca"] .orgSelectTitle {
+  text-shadow: 0 0 24px rgba(59, 130, 246, .28);
+}
+.orgSelectPage[data-org-select-theme="eni"] .orgSelectTitle {
+  text-shadow: 0 0 24px rgba(132, 204, 22, .28);
+}
+
+.orgSelectPage[data-org-select-theme="ram"] .orgSelectShell::before,
+.orgSelectPage[data-org-select-theme="orca"] .orgSelectShell::before,
+.orgSelectPage[data-org-select-theme="eni"] .orgSelectShell::before {
+  content: '';
+  display: block;
+  height: 2px;
+  margin: 0 0 14px;
+  border-radius: 999px;
+  opacity: .9;
+}
+.orgSelectPage[data-org-select-theme="ram"] .orgSelectShell::before {
+  background: linear-gradient(90deg, transparent, #fb923c, transparent);
+  box-shadow: 0 0 18px rgba(249, 115, 22, .4);
+}
+.orgSelectPage[data-org-select-theme="orca"] .orgSelectShell::before {
+  background: linear-gradient(90deg, transparent, #60a5fa, transparent);
+  box-shadow: 0 0 18px rgba(59, 130, 246, .4);
+}
+.orgSelectPage[data-org-select-theme="eni"] .orgSelectShell::before {
+  background: linear-gradient(90deg, transparent, #84cc16, transparent);
+  box-shadow: 0 0 18px rgba(132, 204, 22, .42);
+}
+
 .orgSelectCard--orca {
   background:
     linear-gradient(180deg, #13243d, #0d1b30) padding-box,

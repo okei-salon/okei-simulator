@@ -189,22 +189,22 @@ input,select{width:100%;background:#081426;color:var(--text);border:1px solid #2
 
 </style>
 <link rel="stylesheet" href="assets/css/project-icons.css?v=20260714-icon-stable">
-<link rel="stylesheet" href="assets/css/home.css?v=20260712-v317">
+<link rel="stylesheet" href="assets/css/home.css?v=20260715-eni-review">
 <link rel="stylesheet" href="assets/css/portfolio-ui.css?v=20260713-v322">
 <link rel="stylesheet" href="assets/css/settings-ui.css?v=20260708-v254">
 <link rel="stylesheet" href="assets/css/hub-auth.css?v=20260712-v400">
 <link rel="stylesheet" href="assets/css/excel-import.css?v=20260705-v243">
 <link rel="stylesheet" href="assets/css/orca-import.css?v=20260628-v205">
 <link rel="stylesheet" href="assets/css/revenue-manage.css?v=20260707-sales-total-panel-v1">
-<link rel="stylesheet" href="assets/css/org-nav.css?v=20260712-v311">
+<link rel="stylesheet" href="assets/css/org-nav.css?v=20260715-header-unify">
 <link rel="stylesheet" href="assets/css/project-theme.css?v=20260712-v310">
-<link rel="stylesheet" href="assets/css/eni-theme.css?v=20260712-v316">
+<link rel="stylesheet" href="assets/css/eni-theme.css?v=20260715-header-unify">
 <link rel="stylesheet" href="assets/css/org-theme.css?v=20260712-v310">
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="assets/js/project-theme.js?v=20260712-v311"></script>
 <script src="assets/js/project-icons.js?v=20260714-icon-stable"></script>
 <script src="assets/js/performance-data.js?v=20260714-icon-stable"></script>
-<script src="assets/js/account-input-manage.js?v=20260712-v323"></script>
+<script src="assets/js/account-input-manage.js?v=20260715-eni-review"></script>
 <script src="assets/js/home.js?v=20260714-icon-stable"></script>
 <script src="assets/js/home-demo.js?v=20260708-v254"></script>
 <script src="assets/js/orca-import.js?v=20260628-v207"></script>
@@ -215,9 +215,9 @@ input,select{width:100%;background:#081426;color:var(--text);border:1px solid #2
 <script src="assets/js/manage-entry-ui.js?v=20260714-icon-stable"></script>
 <script src="assets/js/revenue-manage.js?v=20260714-icon-stable"></script>
 <script src="assets/js/sales-manage.js?v=20260714-icon-stable"></script>
-<script src="assets/js/org-nav.js?v=20260714-icon-stable"></script>
+<script src="assets/js/org-nav.js?v=20260715-header-unify"></script>
 <script src="assets/js/orca-org.js?v=20260712-v315"></script>
-<script src="assets/js/eni-org.js?v=20260712-v310"></script>
+<script src="assets/js/eni-org.js?v=20260715-eni-nav-btns"></script>
 <script src="assets/js/eni-project.js?v=20260712-v310"></script>
 <script src="assets/js/eni-revenue-input.js?v=20260713-v321"></script>
 <script src="assets/js/ochan-room.js?v=20260711-room-main-v2"></script>
@@ -340,7 +340,7 @@ input,select{width:100%;background:#081426;color:var(--text);border:1px solid #2
 <div class="ochanRoomFuture" id="ochanRoomFuture"><p class="help">今後、表情・衣装・成長・アルバム機能を追加予定です。</p></div>
 <div class="ochanRoomActions"><button type="button" class="btn2" onclick="showPage('home')">ホームへ戻る</button></div>
 </section>
-<section id="orgSelectPage" class="hidden orgSelectPage">
+<section id="orgSelectPage" class="hidden orgSelectPage" data-org-select-theme="ram">
 <div class="orgSelectShell">
 <h2 class="orgSelectTitle">組織図を選択</h2>
 <p class="orgSelectHelp">編集するプロジェクトを選んでください</p>
@@ -363,6 +363,7 @@ input,select{width:100%;background:#081426;color:var(--text);border:1px solid #2
     <button class="tabBtn" onclick="orcaShowAccountManage()">集計</button>
     <button class="tabBtn" onclick="orcaOpenSimulationPanel()">シミュレーション</button>
     <button class="tabBtn" onclick="orcaOpenAccountManager()">管理</button>
+    <button class="tabBtn" onclick="showOrgProjectSelect()">プロジェクト選択</button>
   </div>
 </div>
 <div class="notice">⚠️ 入力内容をもとにした参考シミュレーションです。実際の報酬額・タイトル・ボリュームを保証するものではありません。</div>
@@ -396,19 +397,61 @@ input,select{width:100%;background:#081426;color:var(--text);border:1px solid #2
 </section>
 </section>
 
-<section id="eniOrgPage" class="hidden eniOrgPage eniOrgComingSoon" data-project-theme="eni">
-<div class="eniComingSoonShell">
-  <div class="eniComingSoonGlass">
-    <div class="eniComingSoonLogo" aria-hidden="true"></div>
-    <h2 class="eniComingSoonTitle">ENI 組織図</h2>
-    <p class="eniComingSoonBadge">開発中</p>
-    <p class="eniComingSoonText">ENI組織図は現在開発中です。<br>実績入力・収益管理・売上管理・ポートフォリオはご利用いただけます。</p>
-    <div class="eniComingSoonActions">
-      <button type="button" onclick="showOrgProjectSelect()">プロジェクト選択へ戻る</button>
-      <button type="button" class="btn2" onclick="showPage('home')">ホームへ戻る</button>
-    </div>
+<section id="eniOrgPage" class="hidden eniOrgPage orgChartPage" data-project-theme="eni" data-mode="live">
+<div class="ramHeaderBar">
+  <div class="currentSelectBox">
+    <span class="caption">表示中</span>
+    <select id="eniRootAccountSelect" onchange="eniSwitchRootAccount(this.value)"></select>
+    <button class="addRootBtn" onclick="eniOpenRootQuickAdd()">＋</button>
+  </div>
+  <div class="ramNavActions">
+    <span id="eniModeBadge" class="compactBadge orgModeBadge--live">🟢 現在データ</span>
+    <span class="compactBadge" id="eniAccountBadge" onclick="eniShowMemberStats()" style="cursor:pointer">👤 0</span>
+    <span class="compactBadge" id="eniReflectBadge">📊 入力反映率 0%</span>
+    <button class="tabBtn active" onclick="showPage('eniOrg')">組織図</button>
+    <button class="tabBtn" onclick="eniOpenAggregationPanel()">集計</button>
+    <button class="tabBtn" onclick="eniOpenSimulationPanel()">シミュレーション</button>
+    <button class="tabBtn" onclick="eniOpenAccountManager()">管理</button>
+    <button class="tabBtn" onclick="showOrgProjectSelect()">プロジェクト選択</button>
   </div>
 </div>
+<div class="notice">⚠️ 入力内容をもとにした参考集計です。実際のステーキング額・チーム実績・チーム人数を保証するものではありません。</div>
+<section class="cards eniIncomeCards" id="eniIncomeCards">
+  <div class="card total"><div class="label">合計利益</div><div class="main" id="eniCardTotal">$0/月</div></div>
+  <div class="card"><div class="label">ステーキング報酬</div><div class="main" id="eniCardStaking">$0/月</div></div>
+  <div class="card"><div class="label">チーム報酬</div><div class="main" id="eniCardTeamReward">$0/月</div></div>
+  <div class="card"><div class="label">チーム実績</div><div class="main" id="eniCardTeamVolume">$0</div></div>
+</section>
+<section class="panel">
+  <div class="chartTop">
+    <div class="orgChartTitleRow">
+      <span class="orgChartTitleIcon" id="eniChartTitleIcon" aria-hidden="true"></span>
+      <div><b>ENI 組織図</b><div class="help">表示中アカウントを起点にチーム実績・人数を自動集計します</div></div>
+    </div>
+    <div>
+      <button type="button" onclick="eniAddChild(eniRootId)">＋ 追加</button>
+      <button type="button" class="btn2" onclick="eniZoomOut()">－</button>
+      <button type="button" class="btn2" onclick="eniZoomIn()">＋</button>
+      <button type="button" class="btn2" onclick="eniFitView()">全体表示</button>
+      <div class="zoomHint">Mac：ピンチ / ⌘+ホイールでズーム</div>
+    </div>
+  </div>
+  <div class="eniVolLegend" aria-label="チーム実績による色分け">
+    <span class="eniVolLegendTitle">チーム実績</span>
+    <span class="eniVolLegendItem eniVolTier-green"><i></i>～$9,999</span>
+    <span class="eniVolLegendItem eniVolTier-blue"><i></i>$10,000～$49,999</span>
+    <span class="eniVolLegendItem eniVolTier-purple"><i></i>$50,000～$99,999</span>
+    <span class="eniVolLegendItem eniVolTier-orange"><i></i>$100,000～$299,999</span>
+    <span class="eniVolLegendItem eniVolTier-gold"><i></i>$300,000～</span>
+  </div>
+  <div class="chartArea">
+    <div id="eniViewport" class="viewport">
+      <div id="eniCanvas" class="canvas">
+        <div id="eniTree" class="tree"></div>
+      </div>
+    </div>
+  </div>
+</section>
 </section>
 
 <section id="ramPage" class="hidden orgChartPage" data-project-theme="ram" data-mode="live">
@@ -426,6 +469,7 @@ input,select{width:100%;background:#081426;color:var(--text);border:1px solid #2
     <button class="tabBtn" onclick="showAccountManage()">集計</button>
     <button class="tabBtn" onclick="openSimulationPanel()">シミュレーション</button>
     <button class="tabBtn" onclick="openAccountManager()">管理</button>
+    <button class="tabBtn" onclick="showOrgProjectSelect()">プロジェクト選択</button>
   </div>
 </div>
 <div class="notice">⚠️ 入力内容をもとにした参考シミュレーションです。実際の報酬額・タイトル・ボリュームを保証するものではありません。</div><section class="cards" id="ramIncomeCards"><div class="card total" onclick="showCardDetail('total')"><div class="label">合計収益 <span class="helpQ" onclick="event.stopPropagation();showHelp('total')">?</span></div><div class="main" id="cTotal">$0/月</div><div class="subline" id="cTotalD">$0/日</div><div class="subline" id="cTotalY">約0円/月</div></div><div class="card" onclick="showCardDetail('personal')"><div class="label" id="cPersonalLabel">個人収益 <span class="helpQ" onclick="event.stopPropagation();showHelp('personal')">?</span></div><div class="main" id="cPersonal">$0/月</div><div class="subline" id="cPersonalD">$0/日</div><div class="subline" id="cRate">月利0% / 日利0%</div></div><div class="card" onclick="showCardDetail('direct')"><div class="label">紹介報酬（1段目） <span class="helpQ" onclick="event.stopPropagation();showHelp('direct')">?</span></div><div class="main" id="cDirect">$0/月</div><div class="subline" id="cDirectD">$0/日　20%</div></div><div class="card" onclick="showCardDetail('second')"><div class="label">紹介報酬（2段目） <span class="helpQ" onclick="event.stopPropagation();showHelp('second')">?</span></div><div class="main" id="cSecond">$0/月</div><div class="subline" id="cSecondD">$0/日　10%</div></div><div class="card" onclick="showCardDetail('title')"><div class="label">タイトル報酬 <span class="helpQ" onclick="event.stopPropagation();showHelp('title')">?</span></div><div class="main" id="cTitle">$0/月</div><div class="subline" id="cTitleD">$0/日</div></div><div class="card" onclick="showCardDetail('volume')"><div class="label">チームボリューム <span class="helpQ" onclick="event.stopPropagation();showHelp('volume')">?</span></div><div class="main" id="cVolume">$0</div><div class="subline">手入力値を優先</div></div></section><section class="panel"><div class="chartTop"><div class="orgChartTitleRow"><span class="orgChartTitleIcon" id="ramChartTitleIcon" aria-hidden="true"></span><div><b>RAM 組織図</b><div class="help">表示中の組織図を表示しています</div></div></div><div><button onclick="addChild(rootId)">＋ 追加</button><button class="btn2" onclick="zoomOut()">－</button><button class="btn2" onclick="zoomIn()">＋</button><button class="btn2" onclick="fitView()">全体表示</button><div class="zoomHint">Mac：ピンチ / ⌘+ホイールでズーム</div></div></div><div class="chartArea"><div id="viewport" class="viewport"><div id="canvas" class="canvas"><div id="tree" class="tree"></div></div></div></div></section></section>
@@ -1158,7 +1202,7 @@ function adjustAncestorManualVolumes(parentId,delta){delta=Number(delta)||0;if(!
 function saveMember(){let id=editId.value||'m'+Date.now(),isEdit=!!editId.value,old=isEdit?members.find(x=>x.id===id):null,oldParent=old?old.parent:null,oldLine=old?lineAmountOf(id):0,obj={id,parent:parentInput.value||null,name:(nameInput.value||usernameInput.value||'未入力'),username:usernameInput.value||'',rank:Number(rankInput.value),investment:Number(investmentInput.value)||0,manualVolume:Number(volumeInput.value)||0,open:true,bvMode:'MANUAL',bvPrompted:false};let newLine=(Number(obj.investment)||0)+(Number(obj.manualVolume)||0);if(isEdit&&old){obj.bvMode=old.bvMode||'MANUAL';obj.bvPrompted=old.bvPrompted||false;obj.open=old.open;obj.isGroup=old.isGroup;obj.groupCount=old.groupCount;members[members.findIndex(m=>m.id===id)]=obj;if(oldParent===obj.parent){adjustAncestorManualVolumes(obj.parent,newLine-oldLine)}else{adjustAncestorManualVolumes(oldParent,-oldLine);adjustAncestorManualVolumes(obj.parent,newLine)}}else{alert('新規メンバーは実績入力で登録後、組織図へ配置してください。');return}if(!obj.parent&&!rootAccountIds.includes(obj.id)){rootAccountIds.push(obj.id)}if(!obj.parent)rootId=obj.id;focusId=obj.id;settings.lastUpdate=new Date().toLocaleString();markActivity();closeModal();render()}
 function deleteMember(id){let target=members.find(x=>x.id===id);if(!target)return;if(!confirm('組織図から削除しますか？配下も組織図から削除されます。実績入力・収益履歴・売上履歴は保持されます。'))return;let parent=target.parent,line=lineAmountOf(id),rm=subtreeIds(id);if(typeof aimRemoveOrgMembersOnly==='function'){aimRemoveOrgMembersOnly('ram',rm)}else{let rmSet=new Set(rm);members=members.filter(x=>!rmSet.has(x.id));rootAccountIds=(rootAccountIds||[]).filter(x=>!rmSet.has(x))}adjustAncestorManualVolumes(parent,-line);markActivity();focusId=rootId;closeModal();render()}
 function closeModal(){modalBg.style.display='none'}function startSimulation(){if(!simMode){members=clone(currentData);simMode=true}render()}function restoreCurrent(){members=clone(currentData);simMode=false;focusId=rootId;render()}function saveScenario(){let name=prompt('シミュレーション名','配置シミュレーション');if(!name)return;scenarios.push({name,data:clone(members),created:new Date().toLocaleString()});render();alert('保存しました')}function openScenarioList(){modalTitle.textContent='保存済みシミュレーション';modalContent.innerHTML=scenarios.length?scenarios.map((s,i)=>`<div class="lineBox"><b>${s.name}</b><br>${s.created}<br><button onclick="loadScenario(${i})">開く</button></div>`).join(''):'保存済みシミュレーションはありません。';modalBg.style.display='flex'}function loadScenario(i){members=clone(scenarios[i].data);simMode=true;focusId=rootId;closeModal();render()}
-function zoomIn(){zoom=Math.min(2,zoom+.1);render();setTimeout(centerRootNode,120)}function zoomOut(){zoom=Math.max(.35,zoom-.1);render();setTimeout(centerRootNode,120)}function fitView(){zoom=.72;render();setTimeout(centerRootNode,120)}function toggleMenu(){menu.classList.toggle('open')}function setPageLocation(txt){if(typeof pageLocation!=='undefined')pageLocation.textContent=txt}function showPage(p){menu.classList.remove('open');let wasRam=!ramPage.classList.contains('hidden');homePage.classList.add('hidden');ramPage.classList.add('hidden');settingsPage.classList.add('hidden');if(typeof accountManagePage!=='undefined')accountManagePage.classList.add('hidden');if(typeof ochanRoomPage!=='undefined')ochanRoomPage.classList.add('hidden');if(typeof portfolioPage!=='undefined')portfolioPage.classList.add('hidden');if(typeof pfGoalSettingsPage!=='undefined')pfGoalSettingsPage.classList.add('hidden');if(typeof pfOperatingSettingsPage!=='undefined')pfOperatingSettingsPage.classList.add('hidden');if(typeof pfProfitSettingsPage!=='undefined')pfProfitSettingsPage.classList.add('hidden');if(typeof projectSettingsPage!=='undefined')projectSettingsPage.classList.add('hidden');if(typeof fxSettingsPage!=='undefined')fxSettingsPage.classList.add('hidden');if(typeof revenueManagePage!=='undefined')revenueManagePage.classList.add('hidden');if(typeof salesManagePage!=='undefined')salesManagePage.classList.add('hidden');if(typeof orgSelectPage!=='undefined')orgSelectPage.classList.add('hidden');if(typeof orcaOrgPage!=='undefined')orcaOrgPage.classList.add('hidden');if(typeof orcaAccountManagePage!=='undefined')orcaAccountManagePage.classList.add('hidden');if(typeof eniOrgPage!=='undefined')eniOrgPage.classList.add('hidden');if(p==='home'){homePage.classList.remove('hidden');setPageLocation('ホーム')}if(p==='ochanRoom'&&typeof ochanRoomPage!=='undefined'){ochanRoomPage.classList.remove('hidden');setPageLocation('おーちゃん部屋')}if(p==='ram'){ramPage.classList.remove('hidden');setPageLocation('RAM ｜ 組織図')}if(p==='portfolio'&&typeof portfolioPage!=='undefined'){portfolioPage.classList.remove('hidden');setPageLocation('ポートフォリオ');if(typeof pfSyncMainTabs==='function')pfSyncMainTabs('portfolio');if(typeof renderPortfolio==='function')renderPortfolio()}if(p==='projectSettings'&&typeof projectSettingsPage!=='undefined'){projectSettingsPage.classList.remove('hidden');setPageLocation('プロジェクト設定');if(typeof pmRenderProjectSettingsPage==='function')pmRenderProjectSettingsPage()}if(p==='fxSettings'&&typeof fxSettingsPage!=='undefined'){fxSettingsPage.classList.remove('hidden');setPageLocation('為替設定');if(typeof pmRenderFxSettingsPage==='function')pmRenderFxSettingsPage()}if(p==='revenueManage'&&typeof revenueManagePage!=='undefined'){revenueManagePage.classList.remove('hidden');setPageLocation('収益管理');if(typeof renderRevenueManage==='function')renderRevenueManage()}if(p==='salesManage'&&typeof salesManagePage!=='undefined'){salesManagePage.classList.remove('hidden');setPageLocation('売上管理');if(typeof renderSalesManage==='function')renderSalesManage()}if(p==='settings'){settingsPage.classList.remove('hidden');setPageLocation('設定');if(typeof renderSettingsHub==='function')renderSettingsHub();if(typeof renderSettings==='function')renderSettings()}if(p==='accountManage'&&typeof accountManagePage!=='undefined'){accountManagePage.classList.remove('hidden');setPageLocation('RAM ｜ 集計')}if(p==='orcaOrg'&&typeof orcaOrgPage!=='undefined'){orcaOrgPage.classList.remove('hidden');setPageLocation('ORCA ｜ 組織図');if(typeof orcaInitPinchZoom==='function')orcaInitPinchZoom();if(typeof orcaRender==='function')orcaRender();setTimeout(function(){if(typeof orcaCenterRootNode==='function')orcaCenterRootNode()},120)}if(p==='orcaAccountManage'&&typeof orcaAccountManagePage!=='undefined'){orcaAccountManagePage.classList.remove('hidden');setPageLocation('ORCA ｜ 集計');if(typeof orcaRenderAccountManage==='function')orcaRenderAccountManage()}if(p==='eniOrg'&&typeof eniOrgPage!=='undefined'){eniOrgPage.classList.remove('hidden');setPageLocation('ENI ｜ 組織図');if(typeof eniRenderComingSoon==='function')eniRenderComingSoon();else if(typeof eniRender==='function')eniRender()}if(p==='orgSelect'&&typeof orgSelectPage!=='undefined'){orgSelectPage.classList.remove('hidden');setPageLocation('組織図');if(typeof renderOrgProjectSelect==='function')renderOrgProjectSelect()}if(typeof syncMobileNav==='function')syncMobileNav(p);if(p!=='orcaOrg'&&p!=='orcaAccountManage'&&p!=='eniOrg'&&p!=='eniAccountManage')render();if(p==='ram'&&!wasRam)setTimeout(centerRootNode,120)}
+function zoomIn(){zoom=Math.min(2,zoom+.1);render();setTimeout(centerRootNode,120)}function zoomOut(){zoom=Math.max(.35,zoom-.1);render();setTimeout(centerRootNode,120)}function fitView(){zoom=.72;render();setTimeout(centerRootNode,120)}function toggleMenu(){menu.classList.toggle('open')}function setPageLocation(txt){if(typeof pageLocation!=='undefined')pageLocation.textContent=txt}function showPage(p){menu.classList.remove('open');let wasRam=!ramPage.classList.contains('hidden');homePage.classList.add('hidden');ramPage.classList.add('hidden');settingsPage.classList.add('hidden');if(typeof accountManagePage!=='undefined')accountManagePage.classList.add('hidden');if(typeof ochanRoomPage!=='undefined')ochanRoomPage.classList.add('hidden');if(typeof portfolioPage!=='undefined')portfolioPage.classList.add('hidden');if(typeof pfGoalSettingsPage!=='undefined')pfGoalSettingsPage.classList.add('hidden');if(typeof pfOperatingSettingsPage!=='undefined')pfOperatingSettingsPage.classList.add('hidden');if(typeof pfProfitSettingsPage!=='undefined')pfProfitSettingsPage.classList.add('hidden');if(typeof projectSettingsPage!=='undefined')projectSettingsPage.classList.add('hidden');if(typeof fxSettingsPage!=='undefined')fxSettingsPage.classList.add('hidden');if(typeof revenueManagePage!=='undefined')revenueManagePage.classList.add('hidden');if(typeof salesManagePage!=='undefined')salesManagePage.classList.add('hidden');if(typeof orgSelectPage!=='undefined')orgSelectPage.classList.add('hidden');if(typeof orcaOrgPage!=='undefined')orcaOrgPage.classList.add('hidden');if(typeof orcaAccountManagePage!=='undefined')orcaAccountManagePage.classList.add('hidden');if(typeof eniOrgPage!=='undefined')eniOrgPage.classList.add('hidden');if(p==='home'){homePage.classList.remove('hidden');setPageLocation('ホーム')}if(p==='ochanRoom'&&typeof ochanRoomPage!=='undefined'){ochanRoomPage.classList.remove('hidden');setPageLocation('おーちゃん部屋')}if(p==='ram'){ramPage.classList.remove('hidden');setPageLocation('RAM ｜ 組織図')}if(p==='portfolio'&&typeof portfolioPage!=='undefined'){portfolioPage.classList.remove('hidden');setPageLocation('ポートフォリオ');if(typeof pfSyncMainTabs==='function')pfSyncMainTabs('portfolio');if(typeof renderPortfolio==='function')renderPortfolio()}if(p==='projectSettings'&&typeof projectSettingsPage!=='undefined'){projectSettingsPage.classList.remove('hidden');setPageLocation('プロジェクト設定');if(typeof pmRenderProjectSettingsPage==='function')pmRenderProjectSettingsPage()}if(p==='fxSettings'&&typeof fxSettingsPage!=='undefined'){fxSettingsPage.classList.remove('hidden');setPageLocation('為替設定');if(typeof pmRenderFxSettingsPage==='function')pmRenderFxSettingsPage()}if(p==='revenueManage'&&typeof revenueManagePage!=='undefined'){revenueManagePage.classList.remove('hidden');setPageLocation('収益管理');if(typeof renderRevenueManage==='function')renderRevenueManage()}if(p==='salesManage'&&typeof salesManagePage!=='undefined'){salesManagePage.classList.remove('hidden');setPageLocation('売上管理');if(typeof renderSalesManage==='function')renderSalesManage()}if(p==='settings'){settingsPage.classList.remove('hidden');setPageLocation('設定');if(typeof renderSettingsHub==='function')renderSettingsHub();if(typeof renderSettings==='function')renderSettings()}if(p==='accountManage'&&typeof accountManagePage!=='undefined'){accountManagePage.classList.remove('hidden');setPageLocation('RAM ｜ 集計')}if(p==='orcaOrg'&&typeof orcaOrgPage!=='undefined'){orcaOrgPage.classList.remove('hidden');setPageLocation('ORCA ｜ 組織図');if(typeof orcaInitPinchZoom==='function')orcaInitPinchZoom();if(typeof orcaRender==='function')orcaRender();setTimeout(function(){if(typeof orcaCenterRootNode==='function')orcaCenterRootNode()},120)}if(p==='orcaAccountManage'&&typeof orcaAccountManagePage!=='undefined'){orcaAccountManagePage.classList.remove('hidden');setPageLocation('ORCA ｜ 集計');if(typeof orcaRenderAccountManage==='function')orcaRenderAccountManage()}if(p==='eniOrg'&&typeof eniOrgPage!=='undefined'){eniOrgPage.classList.remove('hidden');setPageLocation('ENI ｜ 組織図');if(typeof eniInitPinchZoom==='function')eniInitPinchZoom();if(typeof eniRender==='function')eniRender();setTimeout(function(){if(typeof eniCenterRootNode==='function')eniCenterRootNode()},120)}if(p==='orgSelect'&&typeof orgSelectPage!=='undefined'){orgSelectPage.classList.remove('hidden');setPageLocation('組織図');if(typeof renderOrgProjectSelect==='function')renderOrgProjectSelect()}if(typeof syncMobileNav==='function')syncMobileNav(p);if(p!=='orcaOrg'&&p!=='orcaAccountManage'&&p!=='eniOrg'&&p!=='eniAccountManage')render();if(p==='ram'&&!wasRam)setTimeout(centerRootNode,120)}
 function downloadBackup(){settings.lastBackup=new Date().toLocaleString();settings.lastUpdate=settings.lastBackup;let packed=typeof hubPackLocalData==='function'?hubPackLocalData():{members:members,currentData:currentData,settings:settings,scenarios:scenarios,rootId:rootId,rootAccountIds:rootAccountIds,orcaOrgChart:typeof orcaPackOrgChart==='function'?orcaPackOrgChart():{members:[],currentData:[],scenarios:[],rootId:'',rootAccountIds:[],zoom:1},eniOrgChart:typeof eniPackOrgChart==='function'?eniPackOrgChart():{members:[],currentData:[],scenarios:[],rootId:'',rootAccountIds:[],zoom:1}};if(typeof hubSaveNow==='function')hubSaveNow();else localStorage.setItem(typeof HUB_STORAGE_KEY!=='undefined'?HUB_STORAGE_KEY:'oukei_hub_v15_data',JSON.stringify(Object.assign(packed,{updatedAt:Date.now()})));let date=new Date().toISOString().slice(0,10).replaceAll('-','');let blob=new Blob([JSON.stringify({version:'1.5.8.8',app:'OUKEI HUB',members:packed.members,currentData:packed.currentData,settings:packed.settings,scenarios:packed.scenarios,rootId:packed.rootId,rootAccountIds:packed.rootAccountIds,orcaOrgChart:packed.orcaOrgChart,eniOrgChart:packed.eniOrgChart},null,2)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`OUKEI_HUB_${date}.hub`;a.click()}
 function restoreBackup(e){let f=e.target.files[0];if(!f)return;let r=new FileReader();r.onload=()=>{try{let d=JSON.parse(r.result);if(typeof hubApplyData==='function'){hubApplyData(d)}else{members=d.members||members;currentData=d.currentData||currentData;settings=typeof hubCreateDefaultSettings==='function'?Object.assign(hubCreateDefaultSettings(),d.settings||{}):Object.assign({},d.settings||{});scenarios=d.scenarios||[];rootId=d.rootId||rootId;rootAccountIds=d.rootAccountIds||rootAccountIds||[];if(typeof orcaApplyOrgChart==='function'){let oc=typeof hubResolveOrcaOrgChart==='function'?hubResolveOrcaOrgChart(d.orcaOrgChart,settings):d.orcaOrgChart;orcaApplyOrgChart(oc)}}focusId=rootId||focusId;if(typeof pmEnsureProjectMaster==='function')pmEnsureProjectMaster();if(typeof pmEnsureFxSettings==='function')pmEnsureFxSettings();if(typeof pfEnsureManageDisplayAccounts==='function')pfEnsureManageDisplayAccounts();if(typeof pfEnsurePerformanceInputHiddenAccounts==='function')pfEnsurePerformanceInputHiddenAccounts();if(typeof pfMigrateDisplaySettingsCompat==='function')pfMigrateDisplaySettingsCompat();if(typeof ensurePerformanceLogs==='function')ensurePerformanceLogs();settings.lastUpdate=new Date().toLocaleString();if(typeof hubSaveNow==='function')hubSaveNow();if(typeof render==='function')render();if(typeof orcaRender==='function')orcaRender();if(typeof renderPortfolio==='function'&&typeof portfolioPage!=='undefined'&&!portfolioPage.classList.contains('hidden'))renderPortfolio();if(typeof renderRevenueManage==='function'&&typeof revenueManagePage!=='undefined'&&!revenueManagePage.classList.contains('hidden'))renderRevenueManage();if(typeof renderSalesManage==='function'&&typeof salesManagePage!=='undefined'&&!salesManagePage.classList.contains('hidden'))renderSalesManage();if(typeof orcaRenderAccountManage==='function'&&typeof orcaAccountManagePage!=='undefined'&&!orcaAccountManagePage.classList.contains('hidden'))orcaRenderAccountManage();let finishRestore=function(msg){if(typeof showToast==='function')showToast(msg||'✅ バックアップを復元しました');else alert(msg||'復元しました')};finishRestore();if(typeof hubIsCloudReadEnabled==='function'&&hubIsCloudReadEnabled()&&typeof hubFetchCloudDoc==='function'&&typeof hubEnrichLocalOrcaFromCloud==='function'){hubFetchCloudDoc().then(function(cloudDoc){if(hubEnrichLocalOrcaFromCloud(cloudDoc)){if(typeof hubSaveNow==='function')hubSaveNow();if(typeof render==='function')render();if(typeof orcaRender==='function')orcaRender();finishRestore('✅ バックアップ復元＋クラウドからORCA組織を復旧しました')}}).catch(function(){})}}catch(err){alert('読込できませんでした。hub/jsonファイルを確認してください。')}e.target.value=''};r.readAsText(f)}
 

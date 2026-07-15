@@ -138,3 +138,199 @@
   --org-flash: rgba(163, 230, 53, .65);
   --org-flash-glow: rgba(132, 204, 22, .34);
 }
+
+/* ENI income cards — equal width 4-up / 2x2 on mobile
+ * Match RAM/ORCA card metrics (padding/radius/height/gap from shared .card)
+ * Spacing matches ORCA `.orcaIncomeCards { margin: 10px 0 12px }`
+ */
+#eniOrgPage .eniIncomeCards {
+  display: grid !important;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  gap: 10px;
+  align-items: stretch;
+  margin: 10px 0 12px !important;
+}
+
+#eniOrgPage .eniIncomeCards .card {
+  min-width: 0;
+  width: 100%;
+  height: 100%;
+  min-height: 106px;
+  box-sizing: border-box;
+  cursor: default;
+}
+
+#eniOrgPage .eniIncomeCards .card .label,
+#eniOrgPage .eniIncomeCards .card .main {
+  min-width: 0;
+}
+
+/* Upper cards: white values (node volume colors stay elsewhere) */
+#eniOrgPage .eniIncomeCards .card .main,
+#eniOrgPage .eniIncomeCards #eniCardTotal,
+#eniOrgPage .eniIncomeCards #eniCardStaking,
+#eniOrgPage .eniIncomeCards #eniCardTeamReward,
+#eniOrgPage .eniIncomeCards #eniCardTeamVolume {
+  color: #ffffff !important;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  font-size: 20px;
+  font-weight: 900;
+  margin-top: 5px;
+  line-height: 1.2;
+  word-break: break-word;
+}
+
+@media (max-width: 900px) {
+  #eniOrgPage .eniIncomeCards {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  #eniOrgPage .eniIncomeCards .card .main,
+  #eniOrgPage .eniIncomeCards #eniCardTeamVolume {
+    font-size: 17px;
+  }
+}
+
+#eniOrgPage .eniNodeInfo {
+  display: grid;
+  gap: 4px;
+}
+
+#eniOrgPage .eniNodeRow {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: baseline;
+}
+
+#eniOrgPage .eniNodeRow span {
+  color: #9fb3cc;
+}
+
+#eniOrgPage .eniNodeRow b {
+  color: #e8f0fa;
+  font-weight: 800;
+}
+
+#eniOrgPage .eniDepthBadge {
+  white-space: nowrap;
+  border: 1px solid transparent;
+}
+
+/* Volume tier colors: border + badge + team volume value (not full fill) */
+#eniOrgPage .eniNode.eniVolTier-green {
+  border-color: #34d399 !important;
+  box-shadow: 0 0 0 1px rgba(52, 211, 153, .22);
+}
+#eniOrgPage .eniNode.eniVolTier-blue {
+  border-color: #60a5fa !important;
+  box-shadow: 0 0 0 1px rgba(96, 165, 250, .25);
+}
+#eniOrgPage .eniNode.eniVolTier-purple {
+  border-color: #c084fc !important;
+  box-shadow: 0 0 0 1px rgba(192, 132, 252, .25);
+}
+#eniOrgPage .eniNode.eniVolTier-orange {
+  border-color: #fb923c !important;
+  box-shadow: 0 0 0 1px rgba(251, 146, 60, .28);
+}
+#eniOrgPage .eniNode.eniVolTier-gold {
+  border-color: #fbbf24 !important;
+  box-shadow: 0 0 0 2px rgba(251, 191, 36, .32);
+}
+
+#eniOrgPage .eniDepthBadge.eniVolTier-green,
+#eniOrgPage .eniVolValue.eniVolTier-green {
+  color: #6ee7b7 !important;
+  background: rgba(16, 185, 129, .16);
+  border-color: rgba(52, 211, 153, .45);
+}
+#eniOrgPage .eniDepthBadge.eniVolTier-blue,
+#eniOrgPage .eniVolValue.eniVolTier-blue {
+  color: #93c5fd !important;
+  background: rgba(37, 99, 235, .18);
+  border-color: rgba(96, 165, 250, .45);
+}
+#eniOrgPage .eniDepthBadge.eniVolTier-purple,
+#eniOrgPage .eniVolValue.eniVolTier-purple {
+  color: #d8b4fe !important;
+  background: rgba(147, 51, 234, .18);
+  border-color: rgba(192, 132, 252, .45);
+}
+#eniOrgPage .eniDepthBadge.eniVolTier-orange,
+#eniOrgPage .eniVolValue.eniVolTier-orange {
+  color: #fdba74 !important;
+  background: rgba(234, 88, 12, .18);
+  border-color: rgba(251, 146, 60, .45);
+}
+#eniOrgPage .eniDepthBadge.eniVolTier-gold,
+#eniOrgPage .eniVolValue.eniVolTier-gold {
+  color: #fde68a !important;
+  background: rgba(202, 138, 4, .2);
+  border-color: rgba(251, 191, 36, .5);
+}
+
+#eniOrgPage .eniVolValue {
+  font-weight: 900;
+}
+
+/* Compact team-volume color legend (top of chart) */
+#eniOrgPage .eniVolLegend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin: 0 0 10px;
+  padding: 6px 8px;
+  border-radius: 10px;
+  border: 1px solid rgba(53, 83, 117, .45);
+  background: rgba(8, 20, 38, .55);
+  font-size: 11px;
+  line-height: 1.2;
+  color: #9fb3cc;
+}
+
+#eniOrgPage .eniVolLegendTitle {
+  font-weight: 800;
+  color: #cbd5e1;
+  margin-right: 2px;
+  white-space: nowrap;
+}
+
+#eniOrgPage .eniVolLegendItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+  font-weight: 700;
+}
+
+#eniOrgPage .eniVolLegendItem i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+  display: inline-block;
+}
+
+#eniOrgPage .eniVolLegendItem.eniVolTier-green { color: #6ee7b7; }
+#eniOrgPage .eniVolLegendItem.eniVolTier-green i { background: #34d399; box-shadow: 0 0 6px rgba(52, 211, 153, .55); }
+#eniOrgPage .eniVolLegendItem.eniVolTier-blue { color: #93c5fd; }
+#eniOrgPage .eniVolLegendItem.eniVolTier-blue i { background: #60a5fa; box-shadow: 0 0 6px rgba(96, 165, 250, .55); }
+#eniOrgPage .eniVolLegendItem.eniVolTier-purple { color: #d8b4fe; }
+#eniOrgPage .eniVolLegendItem.eniVolTier-purple i { background: #c084fc; box-shadow: 0 0 6px rgba(192, 132, 252, .55); }
+#eniOrgPage .eniVolLegendItem.eniVolTier-orange { color: #fdba74; }
+#eniOrgPage .eniVolLegendItem.eniVolTier-orange i { background: #fb923c; box-shadow: 0 0 6px rgba(251, 146, 60, .55); }
+#eniOrgPage .eniVolLegendItem.eniVolTier-gold { color: #fde68a; }
+#eniOrgPage .eniVolLegendItem.eniVolTier-gold i { background: #fbbf24; box-shadow: 0 0 6px rgba(251, 191, 36, .55); }
+
+@media (max-width: 900px) {
+  #eniOrgPage .eniVolLegend {
+    gap: 5px 8px;
+    padding: 6px 8px;
+    font-size: 10px;
+  }
+}
+

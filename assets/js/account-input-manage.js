@@ -269,6 +269,7 @@ function aimGetOrgMemberDisplayName(projectKey, member) {
   if (!member) return '未入力';
   if (projectKey === 'orca' && typeof orcaDisplayName === 'function') return orcaDisplayName(member);
   if (projectKey === 'ram' && typeof displayName === 'function') return displayName(member);
+  if (projectKey === 'eni' && typeof eniDisplayName === 'function') return eniDisplayName(member);
   return member.name || member.username || member.id || '未入力';
 }
 
@@ -366,10 +367,12 @@ function aimBuildEniMemberFromInput(acc, parentId) {
   return {
     id: acc.id,
     parent: parentId || null,
-    name: acc.name || acc.username || '未入力',
-    username: acc.username || acc.name || '',
-    rank: Number(acc.rank) || 0,
+    name: acc.name || '',
+    username: acc.username || '',
+    walletAddress: acc.walletAddress || acc.username || '',
     investment: Number(acc.investment) || 0,
+    stakingReward: Number(acc.stakingReward) || 0,
+    teamReward: Number(acc.teamReward) || 0,
     open: true
   };
 }
@@ -446,6 +449,11 @@ function aimPlaceInputAccountInOrg(projectKey, accountId, parentId) {
     let existing = eniMembers.find(function (m) { return m.id === accountId; });
     if (existing) {
       existing.parent = parentId;
+      if (acc.name != null) existing.name = acc.name || existing.name || '';
+      if (acc.investment != null) existing.investment = Number(acc.investment) || 0;
+      if (!existing.walletAddress) {
+        existing.walletAddress = acc.walletAddress || acc.username || existing.username || '';
+      }
       aimApplyOrgMemberSeriesMeta(projectKey, existing, parentId);
       aimEnsureMemberSortOrderAtEnd(projectKey, existing);
     } else {
@@ -525,6 +533,7 @@ function aimRemoveOrgMembersOnly(projectKey, ids) {
     }
     if (typeof eniRootId !== 'undefined' && rm[eniRootId]) {
       eniRootId = eniRootAccountIds[0] || '';
+      if (typeof eniFocusId !== 'undefined') eniFocusId = eniRootId;
     }
   }
 }
@@ -597,95 +606,351 @@ function aimDeleteInputAccountFully(projectKey, accountId) {
   return removed;
 }
 
-function aimRenderOrgPlacementModal(projectKey, contextParentId, onPlaced) {
-  let available = aimGetAccountsForOrgPlacement(projectKey);
-  if (!available.length) {
-    alert('配置できる登録済みアカウントがありません。先に実績入力画面からアカウントを登録してください。');
+var aimCloseModalHooked = false;
+
+function aimEnsureCloseModalHook() {
+  if (aimCloseModalHooked) return;
+  if (typeof window === 'undefined' || typeof window.closeModal !== 'function') return;
+  var orig = window.closeModal;
+  window.closeModal = function () {
+    if (typeof modalBg !== 'undefined' && modalBg) {
+      modalBg.classList.remove('aimOrgAddOpen');
+      modalBg.removeAttribute('data-aim-project');
+    }
+    return orig.apply(this, arguments);
+  };
+  aimCloseModalHooked = true;
+}
+
+function aimOpenProjectRegisterFromOrg(projectKey, contextParentId) {
+  if (typeof modalBg !== 'undefined' && modalBg) {
+    modalBg.classList.remove('aimOrgAddOpen');
+    modalBg.removeAttribute('data-aim-project');
+  }
+  if (projectKey === 'ram' && typeof openRamAddAccountForm === 'function') {
+    openRamAddAccountForm();
     return;
   }
-  let esc = typeof escapeHtml === 'function' ? escapeHtml : function (t) { return String(t || ''); };
-  let opts = available.map(function (acc) {
-    let label = (acc.username || acc.name || acc.id);
-    return '<option value="' + acc.id + '">' + esc(label) + '</option>';
-  }).join('');
-  let parentOptions = aimGetOrgParentOptions(projectKey);
-  let parentOpts = parentOptions.map(function (p) {
-    let selected = contextParentId && contextParentId === p.id ? ' selected' : '';
+  if (projectKey === 'orca' && typeof openOrcaAddAccountForm === 'function') {
+    openOrcaAddAccountForm();
+    return;
+  }
+  if (projectKey === 'eni') {
+    aimRenderEniOrgRegisterAndPlaceForm(contextParentId || null);
+  }
+}
+
+function aimRenderEniOrgRegisterAndPlaceForm(contextParentId) {
+  aimEnsureCloseModalHook();
+  if (typeof modalBg !== 'undefined' && modalBg) {
+    modalBg.classList.add('aimOrgAddOpen');
+    modalBg.setAttribute('data-aim-project', 'eni');
+  }
+  if (typeof modalTitle !== 'undefined') modalTitle.textContent = '新しいENIアカウントを登録して配置';
+  if (typeof modalContent === 'undefined') return;
+  var esc = typeof escapeHtml === 'function' ? escapeHtml : function (t) { return String(t || ''); };
+  var parentOptions = aimGetOrgParentOptions('eni');
+  var parentOpts = parentOptions.map(function (p) {
+    var selected = contextParentId && contextParentId === p.id ? ' selected' : '';
     return '<option value="' + p.id + '"' + selected + '>' + esc(p.label) + '</option>';
   }).join('');
-  let contextParent = contextParentId
+  var canPlaceUnderParent = !!parentOptions.length || !!contextParentId;
+  var defaultMode = contextParentId ? 'child' : 'root';
+  modalContent.innerHTML =
+    '<div class="aimOrgAddModal">' +
+    '<p class="help aimOrgAddLead">名前は任意、ウォレットアドレスは必須です。登録と同時に組織図へ配置します。</p>' +
+    '<label>名前（任意）</label>' +
+    '<input id="aimEniRegName" type="text" placeholder="未入力時は「ウォレット XXXX」表示">' +
+    '<label>ウォレットアドレス（必須）</label>' +
+    '<input id="aimEniRegWallet" type="text" placeholder="0x... またはアドレス">' +
+    '<label>ステーキング額</label>' +
+    '<input id="aimEniRegStake" type="number" min="0" step="any" placeholder="例：10000" value="0">' +
+    '<div class="aimOrgAddChoiceGrid aimOrgAddPlaceModes">' +
+    '<label class="aimOrgAddChoice">' +
+    '<input type="radio" name="aimEniRegMode" value="child"' +
+    (defaultMode === 'child' ? ' checked' : '') + (canPlaceUnderParent ? '' : ' disabled') + '>' +
+    '<span class="aimOrgAddChoiceBody"><b>既存アカウント配下へ追加</b>' +
+    '<small>親アカウントを指定して配置</small></span></label>' +
+    '<label class="aimOrgAddChoice">' +
+    '<input type="radio" name="aimEniRegMode" value="root"' +
+    (defaultMode === 'root' ? ' checked' : '') + '>' +
+    '<span class="aimOrgAddChoiceBody"><b>新しい親系列として追加</b>' +
+    '<small>独立した系列の起点として配置</small></span></label>' +
+    '</div>' +
+    '<div id="aimEniRegParentWrap"' + (defaultMode === 'child' ? '' : ' class="hidden"') + '>' +
+    '<label>親アカウント</label>' +
+    (contextParentId
+      ? '<input type="hidden" id="aimEniRegParent" value="' + esc(contextParentId) + '">' +
+        '<p class="help">親：' + esc((function () {
+          var m = aimGetOrgMembersList('eni').find(function (x) { return x && x.id === contextParentId; });
+          return m ? aimGetOrgMemberDisplayName('eni', m) : contextParentId;
+        })()) + '</p>'
+      : '<select id="aimEniRegParent">' + parentOpts + '</select>') +
+    '</div>' +
+    '<div class="aimOrgAddFooter">' +
+    '<button type="button" class="btn2" id="aimEniRegCancelBtn">キャンセル</button>' +
+    '<button type="button" id="aimEniRegSaveBtn">登録して配置</button>' +
+    '</div></div>';
+
+  function syncEniRegMode() {
+    var modeEl = document.querySelector('input[name="aimEniRegMode"]:checked');
+    var mode = modeEl ? modeEl.value : 'root';
+    var wrap = document.getElementById('aimEniRegParentWrap');
+    if (wrap) wrap.classList.toggle('hidden', mode !== 'child');
+  }
+  document.querySelectorAll('input[name="aimEniRegMode"]').forEach(function (el) {
+    el.addEventListener('change', syncEniRegMode);
+  });
+  syncEniRegMode();
+
+  var cancelBtn = document.getElementById('aimEniRegCancelBtn');
+  if (cancelBtn) {
+    cancelBtn.onclick = function () {
+      aimRenderOrgPlacementModal('eni', contextParentId || null);
+    };
+  }
+  var saveBtn = document.getElementById('aimEniRegSaveBtn');
+  if (saveBtn) {
+    saveBtn.onclick = function () {
+      var name = String((document.getElementById('aimEniRegName') || {}).value || '').trim();
+      var wallet = String((document.getElementById('aimEniRegWallet') || {}).value || '').trim();
+      var stake = Number((document.getElementById('aimEniRegStake') || {}).value) || 0;
+      if (!wallet) {
+        if (typeof showToast === 'function') showToast('⚠️ ウォレットアドレスは必須です');
+        return;
+      }
+      var modeEl = document.querySelector('input[name="aimEniRegMode"]:checked');
+      var mode = modeEl ? modeEl.value : 'root';
+      var parentId = null;
+      if (mode === 'child') {
+        var parentSel = document.getElementById('aimEniRegParent');
+        parentId = parentSel ? (parentSel.value || null) : (contextParentId || null);
+        if (!parentId) {
+          if (typeof showToast === 'function') showToast('⚠️ 親アカウントを選択してください');
+          return;
+        }
+      }
+      var id = 'eni_' + Date.now();
+      if (typeof ensureEniInputAccounts === 'function') ensureEniInputAccounts();
+      else if (typeof settings !== 'undefined' && !Array.isArray(settings.eniInputAccounts)) {
+        settings.eniInputAccounts = [];
+      }
+      if (typeof settings !== 'undefined') {
+        settings.eniInputAccounts.push({
+          id: id,
+          username: wallet,
+          name: name,
+          walletAddress: wallet,
+          investment: stake
+        });
+      }
+      var dateKey = typeof todayKey === 'function' ? todayKey() : '';
+      if (typeof pdAddInvestmentRecord === 'function' && dateKey) {
+        pdAddInvestmentRecord(id, 'eni', dateKey, stake, 'initial');
+      } else if (typeof pdSetManualOperatingAmount === 'function' && dateKey) {
+        pdSetManualOperatingAmount(id, 'eni', dateKey, stake);
+      }
+      aimPlaceInputAccountInOrg('eni', id, parentId);
+      // Ensure wallet/name/investment on the org member after place
+      if (typeof eniMembers !== 'undefined') {
+        var m = eniMembers.find(function (x) { return x && x.id === id; });
+        if (m) {
+          m.walletAddress = wallet;
+          m.username = wallet;
+          m.name = name;
+          m.investment = stake;
+        }
+      }
+      if (typeof persistHubSettings === 'function') persistHubSettings();
+      if (typeof markActivity === 'function') markActivity();
+      if (typeof closeModal === 'function') closeModal();
+      if (typeof eniRender === 'function') eniRender();
+      if (typeof showToast === 'function') showToast('✅ アカウントを登録して配置しました');
+    };
+  }
+  if (typeof modalBg !== 'undefined') modalBg.style.display = 'flex';
+}
+
+function aimRenderOrgPlacementModal(projectKey, contextParentId, onPlaced) {
+  aimEnsureCloseModalHook();
+  var available = aimGetAccountsForOrgPlacement(projectKey);
+  var esc = typeof escapeHtml === 'function' ? escapeHtml : function (t) { return String(t || ''); };
+  var parentOptions = aimGetOrgParentOptions(projectKey);
+  var parentOpts = parentOptions.map(function (p) {
+    var selected = contextParentId && contextParentId === p.id ? ' selected' : '';
+    return '<option value="' + p.id + '"' + selected + '>' + esc(p.label) + '</option>';
+  }).join('');
+  var contextParent = contextParentId
     ? aimGetOrgMembersList(projectKey).find(function (m) { return m && m.id === contextParentId; })
     : null;
-  let contextParentLabel = contextParent
+  var contextParentLabel = contextParent
     ? aimGetOrgMemberDisplayName(projectKey, contextParent)
     : '';
-  let canPlaceUnderParent = !!parentOptions.length || !!contextParentId;
-  let defaultMode = contextParentId ? 'child' : (canPlaceUnderParent ? 'root' : 'root');
-  let childHint = contextParentId
-    ? ('親：' + esc(contextParentLabel))
-    : '親アカウントを選択してください';
-  if (typeof modalTitle !== 'undefined') {
-    modalTitle.textContent = '登録済みアカウントを配置';
+  var canPlaceUnderParent = !!parentOptions.length || !!contextParentId;
+  var defaultMode = contextParentId ? 'child' : 'root';
+  var defaultPath = available.length ? 'existing' : 'new';
+  var projectLabel = projectKey === 'ram' ? 'RAM' : projectKey === 'orca' ? 'ORCA' : 'ENI';
+
+  if (typeof modalBg !== 'undefined' && modalBg) {
+    modalBg.classList.add('aimOrgAddOpen');
+    modalBg.setAttribute('data-aim-project', projectKey === 'ram' || projectKey === 'orca' || projectKey === 'eni' ? projectKey : 'eni');
   }
-  if (typeof modalContent !== 'undefined') {
-    modalContent.innerHTML =
-      '<p class="help">実績入力で登録済みのアカウントを組織図に配置します。配置方法を選んでください。</p>' +
-      '<div class="lineBox aimPlaceModeBox">' +
-      '<label class="aimPlaceModeLabel"><input type="radio" name="aimPlaceMode" value="child"' +
-      (defaultMode === 'child' ? ' checked' : '') + (canPlaceUnderParent ? '' : ' disabled') + '> 既存アカウント配下へ追加</label>' +
-      '<div id="aimPlaceChildWrap" class="aimPlaceChildWrap">' +
-      '<p class="help aimPlaceChildHint" id="aimPlaceChildHint">' + childHint + '</p>' +
-      (contextParentId ? '<input type="hidden" id="aimPlaceParentSelect" value="' + esc(contextParentId) + '">' :
-        '<select id="aimPlaceParentSelect">' + parentOpts + '</select>') +
-      '</div>' +
-      '<label class="aimPlaceModeLabel"><input type="radio" name="aimPlaceMode" value="root"' +
-      (defaultMode === 'root' ? ' checked' : '') + '> 新しい親系列として追加</label>' +
-      '<p class="help">独立した系列の起点として配置します。</p>' +
-      '</div>' +
-      '<label>アカウント</label><select id="aimPlaceAccountSelect">' + opts + '</select>' +
-      '<div style="display:flex;gap:8px;margin-top:14px;justify-content:flex-end">' +
-      '<button class="btn2" onclick="closeModal()">キャンセル</button>' +
-      '<button id="aimPlaceAccountConfirmBtn">配置</button></div>';
+  if (typeof modalTitle !== 'undefined') modalTitle.textContent = 'アカウントを組織図へ追加';
+  if (typeof modalContent === 'undefined') return;
 
-    function syncPlaceModeUi() {
-      let modeEl = document.querySelector('input[name="aimPlaceMode"]:checked');
-      let mode = modeEl ? modeEl.value : 'root';
-      let wrap = document.getElementById('aimPlaceChildWrap');
-      if (wrap) wrap.style.display = mode === 'child' ? '' : 'none';
+  var accountOpts = available.map(function (acc) {
+    var label = acc.username || acc.name || acc.id;
+    if (projectKey === 'eni' && typeof eniWalletShort === 'function' && (acc.walletAddress || acc.username)) {
+      var short = eniWalletShort(acc.walletAddress || acc.username);
+      var nm = String(acc.name || '').trim();
+      label = nm ? (nm + '（' + short + '）') : ('ウォレット ' + short);
     }
-    document.querySelectorAll('input[name="aimPlaceMode"]').forEach(function (el) {
-      el.addEventListener('change', syncPlaceModeUi);
-    });
-    syncPlaceModeUi();
+    return '<option value="' + acc.id + '">' + esc(label) + '</option>';
+  }).join('');
 
-    let btn = document.getElementById('aimPlaceAccountConfirmBtn');
-    if (btn) {
-      btn.onclick = function () {
-        let sel = document.getElementById('aimPlaceAccountSelect');
-        let id = sel ? sel.value : '';
-        if (!id) return;
-        let modeEl = document.querySelector('input[name="aimPlaceMode"]:checked');
-        let mode = modeEl ? modeEl.value : 'root';
-        let parentId = null;
-        if (mode === 'child') {
-          let parentSel = document.getElementById('aimPlaceParentSelect');
-          parentId = parentSel ? (parentSel.value || null) : (contextParentId || null);
-          if (!parentId) {
-            alert('親アカウントを選択してください。');
-            return;
-          }
+  var existingPanel = available.length
+    ? ('<div id="aimOrgAddExistingPanel" class="aimOrgAddPanel">' +
+      '<label>未配置の登録済みアカウント</label>' +
+      '<select id="aimPlaceAccountSelect">' + accountOpts + '</select>' +
+      '<div class="aimOrgAddChoiceGrid aimOrgAddPlaceModes">' +
+      '<label class="aimOrgAddChoice">' +
+      '<input type="radio" name="aimPlaceMode" value="child"' +
+      (defaultMode === 'child' ? ' checked' : '') + (canPlaceUnderParent ? '' : ' disabled') + '>' +
+      '<span class="aimOrgAddChoiceBody"><b>既存アカウント配下へ追加</b>' +
+      '<small>' + (contextParentId ? ('親：' + esc(contextParentLabel)) : '親アカウントを選択') +
+      '</small></span></label>' +
+      '<label class="aimOrgAddChoice">' +
+      '<input type="radio" name="aimPlaceMode" value="root"' +
+      (defaultMode === 'root' ? ' checked' : '') + '>' +
+      '<span class="aimOrgAddChoiceBody"><b>新しい親系列として追加</b>' +
+      '<small>独立した系列の起点として配置</small></span></label>' +
+      '</div>' +
+      '<div id="aimPlaceChildWrap"' + (defaultMode === 'child' ? '' : ' class="hidden"') + '>' +
+      (contextParentId
+        ? '<input type="hidden" id="aimPlaceParentSelect" value="' + esc(contextParentId) + '">'
+        : '<label>親アカウント</label><select id="aimPlaceParentSelect">' + parentOpts + '</select>') +
+      '</div></div>')
+    : ('<div id="aimOrgAddExistingPanel" class="aimOrgAddPanel">' +
+      '<div class="aimOrgAddEmpty">' +
+      '<b>未配置の登録済みアカウントはありません</b>' +
+      '<p class="help">' + projectLabel + 'の登録済みアカウントは、すべて組織図へ配置済みか、まだ登録がありません。</p>' +
+      '<button type="button" class="aimOrgAddEmptyBtn" id="aimOrgAddEmptyToNewBtn">新しいアカウントを登録して配置</button>' +
+      '</div></div>');
+
+  modalContent.innerHTML =
+    '<div class="aimOrgAddModal">' +
+    '<p class="help aimOrgAddLead">登録済みアカウントを配置するか、新しいアカウントを登録してください。</p>' +
+    '<div class="aimOrgAddChoiceGrid" role="radiogroup" aria-label="追加方法">' +
+    '<label class="aimOrgAddChoice' + (available.length ? '' : ' isDisabled') + '">' +
+    '<input type="radio" name="aimOrgAddPath" value="existing"' +
+    (defaultPath === 'existing' ? ' checked' : '') + (available.length ? '' : ' disabled') + '>' +
+    '<span class="aimOrgAddChoiceBody"><b>登録済みアカウントを配置</b>' +
+    '<small>' + projectLabel + 'の未配置アカウントを組織図へ追加</small></span></label>' +
+    '<label class="aimOrgAddChoice">' +
+    '<input type="radio" name="aimOrgAddPath" value="new"' +
+    (defaultPath === 'new' ? ' checked' : '') + '>' +
+    '<span class="aimOrgAddChoiceBody"><b>新しいアカウントを登録して配置</b>' +
+    '<small>アカウントを新規登録してから組織図へ配置</small></span></label>' +
+    '</div>' +
+    existingPanel +
+    '<div id="aimOrgAddNewPanel" class="aimOrgAddPanel' + (defaultPath === 'new' ? '' : ' hidden') + '">' +
+    '<p class="help">「次へ」を押すと、' + projectLabel + 'のアカウント登録画面へ進みます。</p>' +
+    '</div>' +
+    '<div class="aimOrgAddFooter">' +
+    '<button type="button" class="btn2" id="aimOrgAddCancelBtn">キャンセル</button>' +
+    '<button type="button" id="aimOrgAddPrimaryBtn">' +
+    (defaultPath === 'existing' ? '配置する' : '次へ') + '</button>' +
+    '</div></div>';
+
+  function currentPath() {
+    var el = document.querySelector('input[name="aimOrgAddPath"]:checked');
+    return el ? el.value : defaultPath;
+  }
+
+  function syncPathUi() {
+    var path = currentPath();
+    var existingEl = document.getElementById('aimOrgAddExistingPanel');
+    var newEl = document.getElementById('aimOrgAddNewPanel');
+    var primary = document.getElementById('aimOrgAddPrimaryBtn');
+    if (existingEl) existingEl.classList.toggle('hidden', path !== 'existing');
+    if (newEl) newEl.classList.toggle('hidden', path !== 'new');
+    if (primary) primary.textContent = path === 'existing' ? '配置する' : '次へ';
+  }
+
+  function syncPlaceModeUi() {
+    var modeEl = document.querySelector('input[name="aimPlaceMode"]:checked');
+    var mode = modeEl ? modeEl.value : 'root';
+    var wrap = document.getElementById('aimPlaceChildWrap');
+    if (wrap) wrap.classList.toggle('hidden', mode !== 'child');
+  }
+
+  document.querySelectorAll('input[name="aimOrgAddPath"]').forEach(function (el) {
+    el.addEventListener('change', syncPathUi);
+  });
+  document.querySelectorAll('input[name="aimPlaceMode"]').forEach(function (el) {
+    el.addEventListener('change', syncPlaceModeUi);
+  });
+  syncPathUi();
+  syncPlaceModeUi();
+
+  var emptyToNew = document.getElementById('aimOrgAddEmptyToNewBtn');
+  if (emptyToNew) {
+    emptyToNew.onclick = function () {
+      var newRadio = document.querySelector('input[name="aimOrgAddPath"][value="new"]');
+      if (newRadio) {
+        newRadio.checked = true;
+        syncPathUi();
+      }
+      aimOpenProjectRegisterFromOrg(projectKey, contextParentId || null);
+    };
+  }
+
+  var cancelBtn = document.getElementById('aimOrgAddCancelBtn');
+  if (cancelBtn) {
+    cancelBtn.onclick = function () {
+      if (typeof closeModal === 'function') closeModal();
+    };
+  }
+
+  var primaryBtn = document.getElementById('aimOrgAddPrimaryBtn');
+  if (primaryBtn) {
+    primaryBtn.onclick = function () {
+      if (currentPath() === 'new') {
+        aimOpenProjectRegisterFromOrg(projectKey, contextParentId || null);
+        return;
+      }
+      if (!available.length) {
+        if (typeof showToast === 'function') {
+          showToast('⚠️ 未配置の登録済みアカウントはありません');
         }
-        aimPlaceInputAccountInOrg(projectKey, id, parentId);
-        if (typeof persistHubSettings === 'function') persistHubSettings();
-        if (typeof markActivity === 'function') markActivity();
-        if (typeof closeModal === 'function') closeModal();
-        if (projectKey === 'ram' && typeof render === 'function') render();
-        if (projectKey === 'orca' && typeof orcaRender === 'function') orcaRender();
-        if (projectKey === 'eni' && typeof eniRender === 'function') eniRender();
-        if (typeof onPlaced === 'function') onPlaced();
-      };
-    }
+        return;
+      }
+      var sel = document.getElementById('aimPlaceAccountSelect');
+      var id = sel ? sel.value : '';
+      if (!id) return;
+      var modeEl = document.querySelector('input[name="aimPlaceMode"]:checked');
+      var mode = modeEl ? modeEl.value : 'root';
+      var parentId = null;
+      if (mode === 'child') {
+        var parentSel = document.getElementById('aimPlaceParentSelect');
+        parentId = parentSel ? (parentSel.value || null) : (contextParentId || null);
+        if (!parentId) {
+          alert('親アカウントを選択してください。');
+          return;
+        }
+      }
+      // Placement logic unchanged
+      aimPlaceInputAccountInOrg(projectKey, id, parentId);
+      if (typeof persistHubSettings === 'function') persistHubSettings();
+      if (typeof markActivity === 'function') markActivity();
+      if (typeof closeModal === 'function') closeModal();
+      if (projectKey === 'ram' && typeof render === 'function') render();
+      if (projectKey === 'orca' && typeof orcaRender === 'function') orcaRender();
+      if (projectKey === 'eni' && typeof eniRender === 'function') eniRender();
+      if (typeof onPlaced === 'function') onPlaced();
+    };
   }
+
   if (typeof modalBg !== 'undefined') modalBg.style.display = 'flex';
 }
 
@@ -801,6 +1066,8 @@ if (typeof window !== 'undefined') {
   window.aimRemoveOrgMembersOnly = aimRemoveOrgMembersOnly;
   window.aimDeleteInputAccountFully = aimDeleteInputAccountFully;
   window.aimRenderOrgPlacementModal = aimRenderOrgPlacementModal;
+  window.aimOpenProjectRegisterFromOrg = aimOpenProjectRegisterFromOrg;
+  window.aimRenderEniOrgRegisterAndPlaceForm = aimRenderEniOrgRegisterAndPlaceForm;
   window.aimSortOrgMemberSiblings = aimSortOrgMemberSiblings;
   window.aimGetSortedOrgChildren = aimGetSortedOrgChildren;
   window.aimBuildOrgAccountTree = aimBuildOrgAccountTree;

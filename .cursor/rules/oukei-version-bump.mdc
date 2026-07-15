@@ -1,0 +1,36 @@
+---
+description: Commit/Push/Deploy前にアプリ Ver と Build 番号を必ず更新する
+alwaysApply: true
+---
+
+# OUKEI HUB バージョン更新ルール
+
+Commit・Push・Firebase Hosting デプロイの**直前に必ず**アプリのバージョン番号と Build 番号を更新する。
+
+## 更新ルール
+
+1. **バージョン番号**（セマンティック）を 1 つ上げる  
+   例: `Ver2.0.10` → `Ver2.0.11`
+2. **Build 番号**（日付 + 連番）を 1 つ上げる  
+   例: `Build 20260712-v314` → `Build 20260712-v315`  
+   - 日付が変わったら `YYYYMMDD-v001` からでよい  
+   - 同じ日なら末尾の v 番号だけ増やす
+3. **表示箇所を必ず一致**させる
+   - ホーム左上: `OUKEI HUB VerX.Y.Z`
+   - その直下: `Build YYYYMMDD-vNNN`
+   - `<title>` の Ver も同じ Ver に揃える
+4. 変更した JS/CSS の `?v=` キャッシュバスターも、今回の Build 番号に合わせて更新する（古い Safari キャッシュ回避）
+
+## デプロイ後の報告
+
+デプロイ完了後は次を必ず報告する。
+
+- バージョン番号（例: Ver2.0.11）
+- Build 番号（例: Build 20260712-v315）
+- 変更内容の要約
+- Hosting URL（https://oukei-hub.web.app）
+
+## 注意
+
+- `schemaVersion`（Cloud データ構造用）とは別物。schema が変わらない限り `HUB_SCHEMA_VERSION` は上げない
+- デプロイはユーザー明示承認後のみ（既存ワークフロー準拠）

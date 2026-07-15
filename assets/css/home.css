@@ -2952,6 +2952,8 @@
   align-items: center;
   gap: 8px;
   font-weight: 700;
+  writing-mode: horizontal-tb;
+  white-space: normal;
 }
 
 .aimPlaceChildWrap {
@@ -2960,6 +2962,215 @@
 
 .aimPlaceChildHint {
   margin: 0 0 6px;
+}
+
+/* Shared org-add modal (RAM / ORCA / ENI) — theme via data-aim-project */
+#modalBg.aimOrgAddOpen {
+  --aim-accent: #a3e635;
+  --aim-accent-mid: #84cc16;
+  --aim-accent-border: rgba(163, 230, 53, .55);
+  --aim-accent-glow: rgba(132, 204, 22, .22);
+}
+
+#modalBg.aimOrgAddOpen[data-aim-project="ram"] {
+  --aim-accent: #fb923c;
+  --aim-accent-mid: #f97316;
+  --aim-accent-border: rgba(251, 146, 60, .55);
+  --aim-accent-glow: rgba(249, 115, 22, .22);
+}
+
+#modalBg.aimOrgAddOpen[data-aim-project="orca"] {
+  --aim-accent: #60a5fa;
+  --aim-accent-mid: #3b82f6;
+  --aim-accent-border: rgba(96, 165, 250, .55);
+  --aim-accent-glow: rgba(59, 130, 246, .22);
+}
+
+#modalBg.aimOrgAddOpen[data-aim-project="eni"] {
+  --aim-accent: #a3e635;
+  --aim-accent-mid: #84cc16;
+  --aim-accent-border: rgba(163, 230, 53, .55);
+  --aim-accent-glow: rgba(132, 204, 22, .22);
+}
+
+#modalBg.aimOrgAddOpen .modal {
+  width: min(92vw, 600px);
+  max-width: 600px;
+  max-height: 80vh;
+}
+
+#modalBg.aimOrgAddOpen .modalBody {
+  padding-bottom: 8px;
+}
+
+#modalBg.aimOrgAddOpen .modalFooter {
+  display: none;
+}
+
+.aimOrgAddModal {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.aimOrgAddLead {
+  margin: 0;
+  line-height: 1.55;
+}
+
+.aimOrgAddChoiceGrid {
+  display: grid;
+  gap: 8px;
+}
+
+.aimOrgAddChoice {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0 !important;
+  padding: 12px 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(53, 83, 117, .7);
+  background: linear-gradient(180deg, rgba(19, 36, 61, .95), rgba(13, 27, 48, .98));
+  cursor: pointer;
+  writing-mode: horizontal-tb !important;
+  text-orientation: mixed !important;
+  white-space: normal !important;
+  word-break: normal;
+  overflow-wrap: anywhere;
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.aimOrgAddChoice.isDisabled {
+  opacity: .55;
+  cursor: not-allowed;
+}
+
+.aimOrgAddChoice input[type="radio"] {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  margin-top: 3px;
+  accent-color: var(--aim-accent-mid);
+}
+
+.aimOrgAddChoiceBody {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  flex: 1 1 auto;
+  writing-mode: horizontal-tb !important;
+  white-space: normal !important;
+}
+
+.aimOrgAddChoiceBody b {
+  display: block;
+  font-size: 14px;
+  line-height: 1.35;
+  color: #f1f5f9;
+  font-weight: 800;
+  white-space: normal;
+}
+
+.aimOrgAddChoiceBody small {
+  display: block;
+  font-size: 12px;
+  line-height: 1.45;
+  color: #9fb3cc;
+  white-space: normal;
+}
+
+.aimOrgAddChoice:has(input:checked) {
+  border-color: var(--aim-accent-border);
+  box-shadow: 0 0 0 1px var(--aim-accent-glow), inset 0 1px 0 rgba(255, 255, 255, .04);
+}
+
+#modalBg.aimOrgAddOpen #aimOrgAddPrimaryBtn,
+#modalBg.aimOrgAddOpen .aimOrgAddEmptyBtn {
+  background: linear-gradient(135deg, var(--aim-accent-mid), var(--aim-accent));
+  border-color: var(--aim-accent-border);
+  color: #0b1220;
+  font-weight: 800;
+  box-shadow: 0 0 18px var(--aim-accent-glow);
+}
+
+#modalBg.aimOrgAddOpen #aimOrgAddPrimaryBtn:hover,
+#modalBg.aimOrgAddOpen .aimOrgAddEmptyBtn:hover {
+  filter: brightness(1.06);
+}
+
+.aimOrgAddPanel {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.aimOrgAddPanel.hidden,
+#aimPlaceChildWrap.hidden,
+#aimEniRegParentWrap.hidden {
+  display: none !important;
+}
+
+.aimOrgAddEmpty {
+  padding: 14px 12px;
+  border-radius: 14px;
+  border: 1px dashed rgba(100, 116, 139, .65);
+  background: rgba(8, 20, 38, .72);
+  text-align: left;
+}
+
+.aimOrgAddEmpty b {
+  display: block;
+  margin-bottom: 6px;
+  color: #e2e8f0;
+}
+
+.aimOrgAddEmpty .help {
+  margin: 0 0 12px;
+}
+
+.aimOrgAddEmptyBtn {
+  width: 100%;
+}
+
+.aimOrgAddFooter {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  margin-top: 4px;
+  padding-top: 4px;
+}
+
+.aimOrgAddFooter .btn2,
+.aimOrgAddFooter button {
+  min-width: 108px;
+}
+
+@media (max-width: 900px) {
+  #modalBg.aimOrgAddOpen .modal {
+    width: min(94vw, 600px);
+    max-height: calc(100vh - 98px - env(safe-area-inset-bottom, 0px) - 24px);
+  }
+
+  .aimOrgAddChoice {
+    padding: 11px 10px;
+  }
+
+  .aimOrgAddFooter {
+    flex-wrap: wrap;
+  }
+
+  .aimOrgAddFooter .btn2,
+  .aimOrgAddFooter button {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
 }
 
 .ramInputDisplayPanel {
