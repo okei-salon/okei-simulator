@@ -624,6 +624,10 @@ function oiUndoImport() {
 }
 
 function openOrcaImportPage() {
+  if (typeof hubIsAdminUser === 'function' && !hubIsAdminUser()) {
+    if (typeof showToast === 'function') showToast('⚠️ ORCAデータ移行は管理者専用です');
+    return;
+  }
   if (typeof showPage === 'function') showPage('orcaImport');
 }
 
@@ -633,6 +637,10 @@ function oiHookShowPage() {
   let orig = showPage;
   window.showPage = function (p) {
     if (p === 'orcaImport') {
+      if (typeof hubIsAdminUser === 'function' && !hubIsAdminUser()) {
+        if (typeof showToast === 'function') showToast('⚠️ ORCAデータ移行は管理者専用です');
+        return typeof orig === 'function' ? orig('settings') : undefined;
+      }
       menu.classList.remove('open');
       homePage.classList.add('hidden');
       ramPage.classList.add('hidden');

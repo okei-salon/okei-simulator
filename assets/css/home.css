@@ -2521,9 +2521,76 @@
   .homeCalendarCard,
   .homeMonthlyCard,
   .homeTodayCard {
+    width: 100%;
+    max-width: 100%;
     min-height: 0;
     grid-column: auto;
     grid-row: auto;
+    box-sizing: border-box;
+  }
+
+  /* PC用 translate / 巨大リングが漏れないように打ち消し */
+  .homeInputStatBody--rate,
+  .homeInputRateRing {
+    transform: none !important;
+  }
+
+  .homeInputRateRing,
+  .homeInputRateRing svg,
+  .homeInputRateSvg {
+    width: 48px !important;
+    height: 48px !important;
+  }
+
+  .homeInputRatePct {
+    font-size: 11px !important;
+  }
+
+  .homeInputStatLabel {
+    font-size: 10px !important;
+  }
+
+  .homeInputStatBody--streak .homeInputStatVal {
+    font-size: 17px !important;
+  }
+
+  .homeCalendarPlaceholder {
+    flex: 0 0 auto;
+    min-height: 0;
+    overflow: visible;
+  }
+
+  .homeCalShell {
+    height: auto;
+    gap: 8px;
+  }
+
+  .homeCalGrid {
+    flex: 0 0 auto;
+    gap: 3px;
+  }
+
+  .homeCalDay {
+    min-height: 46px;
+    padding: 4px 2px 3px;
+    gap: 1px;
+    overflow: hidden;
+  }
+
+  .homeCalDayNum {
+    font-size: 11px;
+    line-height: 1.15;
+  }
+
+  .homeCalDayAmt {
+    font-size: 8px;
+    line-height: 1.1;
+    max-width: 100%;
+  }
+
+  .homeCalDayLabel {
+    font-size: 9px;
+    padding: 2px 0;
   }
 
   .ochanContainer {
@@ -2572,26 +2639,41 @@
   }
 
   .homeTodayCard .homeTodaySummaryHead {
-    grid-template-columns: 1fr auto;
-    align-items: start;
-    gap: 6px 8px;
+    grid-template-columns: 1fr;
+    align-items: stretch;
+    gap: 10px;
   }
 
   .homeTodayCard .homeTodayDonutWrap {
-    justify-self: end;
-    min-width: 88px;
-    margin-right: 40px;
-    gap: 2px;
+    justify-self: stretch;
+    align-self: stretch;
+    width: 100%;
+    min-width: 0;
+    margin-right: 0;
+    margin-top: 2px;
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 12px;
   }
 
   .homeTodayCard .homeTodayDonutInner,
   .homeTodayCard .homeTodayDonutSvg {
     width: 88px;
     height: 88px;
+    flex-shrink: 0;
   }
 
   .homeTodayCard .homeTodayDonutLegend {
-    max-width: 88px;
+    max-width: none;
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .homeTodayCard .homeTodayDonutTip {
+    left: 12px;
+    right: 12px;
+    max-width: none;
   }
 
   .homeTodayCard .homeTodayCompareItem {
@@ -2632,6 +2714,76 @@
 
   .homeTodayCard .homeTodayProjCardBar {
     height: 8px;
+  }
+}
+
+/* 狭いスマホ（375/390 相当） */
+@media (max-width: 480px) {
+  main {
+    padding-left: 8px;
+    padding-right: 8px;
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
+  body {
+    overflow-x: hidden;
+  }
+
+  .homeMainGrid {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .homeInputCard,
+  .homeCalendarCard,
+  .homeMonthlyCard,
+  .homeTodayCard {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .homeCalDay {
+    min-height: 44px;
+    border-radius: 8px;
+    padding: 3px 1px 2px;
+  }
+
+  .homeCalDayNum {
+    font-size: 10px;
+  }
+
+  .homeCalDayAmt {
+    font-size: 7.5px;
+    letter-spacing: -0.02em;
+  }
+
+  .homeMonthlyCard .homeMonthlySummaryAmt {
+    font-size: 24px;
+  }
+
+  .homeTodayCard .homeTodaySummaryAmt {
+    font-size: 24px;
+  }
+
+  .homeTodayCard .homeTodayDonutInner,
+  .homeTodayCard .homeTodayDonutSvg {
+    width: 80px;
+    height: 80px;
+  }
+
+  .homeMonthlyCard .homeMonthlyProjGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .homeMonthlyCard .homeMonthlyProjGrid[data-count="1"] {
+    grid-template-columns: 1fr;
+  }
+
+  .settingsHubShell,
+  .settingsHubList,
+  .settingsHubCard {
+    max-width: 100%;
   }
 }
 

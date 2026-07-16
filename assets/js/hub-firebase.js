@@ -693,13 +693,30 @@ function hubSyncHubData() {
 
   return hubFetchCloudDoc().then(function (cloudDoc) {
     if (!cloudDoc) {
-      if (!local.isNew) return hubRunCloudSave(true);
-      hubSetSyncStatus('done');
-      return true;
+      // クラウド未作成: 現在UIDの端末データ（空含む）を本人ドキュメントとして初回保存。
+      // 共有LocalStorageフォールバックは廃止済みのため、他ユーザーデータは混入しない。
+      return hubRunCloudSave(true);
     }
 
     let cloudUnpacked = hubUnpackFirestorePayload(cloudDoc);
-    let merged = hubMergeHubDocuments(local.data, cloudUnpacked);
+    let localEmpty = typeof hubIsEffectivelyEmptyHubData === 'function'
+      ? hubIsEffectivelyEmptyHubData(local.data)
+      : !!local.isNew;
+    let cloudEmpty = typeof hubIsEffectivelyEmptyHubData === 'function'
+      ? hubIsEffectivelyEmptyHubData(cloudUnpacked)
+      : false;
+
+    // 新規空ローカル × クラウドに既存データ → クラウドを採用（UID別なので本人データ）
+    // ローカルにデータ × クラウド空 → ローカルをプッシュ
+    // 両方データあり → 通常マージ
+    let merged;
+    if (localEmpty && !cloudEmpty) {
+      merged = cloudUnpacked;
+    } else if (!localEmpty && cloudEmpty) {
+      merged = local.data;
+    } else {
+      merged = hubMergeHubDocuments(local.data, cloudUnpacked);
+    }
     let mergedHash = hubComputeContentHash(merged);
     let cloudHash = hubComputeContentHash(cloudUnpacked);
     hubApplyMergedHubData(merged, cloudHash);

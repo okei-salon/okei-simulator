@@ -356,4 +356,30 @@
   .pmProjectCardRows {
     grid-template-columns: 1fr;
   }
+
+  .settingsHubShell {
+    max-width: 100%;
+  }
+
+  .settingsHubCard {
+    padding: 14px 12px;
+    gap: 12px;
+  }
+
+  .settingsHubTitle {
+    font-size: 15px;
+  }
+
+  .settingsHubDesc {
+    font-size: 11px;
+  }
+
+  .settingsRestoreBlock button {
+    min-height: 44px;
+  }
+
+  .ochanDialectOpts {
+    display: grid;
+    gap: 8px;
+  }
 }

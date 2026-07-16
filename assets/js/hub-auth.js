@@ -289,11 +289,29 @@ function hubPrepareApplicationData() {
 }
 
 function hubEnterApplication() {
+  // localhost検証ペルソナを復元（Auth UIDは変えずデータUIDのみ）
+  if (typeof hubApplyStoredVerifyPersona === 'function' &&
+      typeof hubIsDevVerifyAllowed === 'function' && hubIsDevVerifyAllowed()) {
+    hubApplyStoredVerifyPersona({ skipRender: true });
+  }
   hubPrepareApplicationData();
+  if (typeof hubApplyDevUiVisibility === 'function') hubApplyDevUiVisibility();
   if (typeof hubRenderLocalDevStatus === 'function') hubRenderLocalDevStatus();
+  if (typeof hubRefreshVerifyPanel === 'function') hubRefreshVerifyPanel();
   if (typeof render === 'function') render();
   if (typeof showPage === 'function') showPage('home');
   hubShowAppShell();
+}
+
+/** 新規ユーザーは role:user。管理者UIDのみ role:admin */
+function hubResolveProfileRoleForUid(uid, existingProfile) {
+  uid = String(uid || '');
+  if (typeof hubIsAdminUid === 'function' && hubIsAdminUid(uid)) return 'admin';
+  if (existingProfile && existingProfile.role === 'admin' &&
+      typeof hubIsAdminUid === 'function' && hubIsAdminUid(uid)) {
+    return 'admin';
+  }
+  return 'user';
 }
 
 function hubFetchProfile() {
@@ -315,11 +333,13 @@ function hubSaveProfile(username, user) {
   let ref = typeof hubProfileDocRef === 'function' ? hubProfileDocRef() : null;
   if (!user) return Promise.reject(new Error('profile unavailable'));
   let now = Date.now();
+  let role = hubResolveProfileRoleForUid(user.uid, hubCurrentProfile);
   let payload = {
     username: username,
     displayName: user.displayName || '',
     email: user.email || '',
     photoURL: user.photoURL || '',
+    role: role,
     lastLoginAt: now
   };
   payload.createdAt = (hubCurrentProfile && hubCurrentProfile.createdAt) ? hubCurrentProfile.createdAt : now;
@@ -327,28 +347,33 @@ function hubSaveProfile(username, user) {
     hubCurrentProfile = Object.assign({}, hubCurrentProfile || {}, payload);
     if (typeof hubSaveLocalDevProfile === 'function') hubSaveLocalDevProfile(hubCurrentProfile);
     hubRenderAccountSummary(user, hubCurrentProfile);
+    if (typeof hubApplyDevUiVisibility === 'function') hubApplyDevUiVisibility();
     return Promise.resolve();
   }
   if (!ref) return Promise.reject(new Error('profile unavailable'));
   return ref.set(payload, { merge: true }).then(function () {
     hubCurrentProfile = Object.assign({}, hubCurrentProfile || {}, payload);
     hubRenderAccountSummary(user, hubCurrentProfile);
+    if (typeof hubApplyDevUiVisibility === 'function') hubApplyDevUiVisibility();
   });
 }
 
 function hubTouchProfileLogin(user, profile) {
   let ref = typeof hubProfileDocRef === 'function' ? hubProfileDocRef() : null;
   if (!user) return Promise.resolve();
+  let role = hubResolveProfileRoleForUid(user.uid, profile);
   if (typeof hubIsLocalDevMode === 'function' && hubIsLocalDevMode()) {
     hubCurrentProfile = Object.assign({}, profile || {}, {
       username: profile && profile.username ? profile.username : '',
       displayName: user.displayName || (profile && profile.displayName) || '',
       email: user.email || (profile && profile.email) || '',
       photoURL: user.photoURL || (profile && profile.photoURL) || '',
+      role: role,
       lastLoginAt: Date.now()
     });
     if (typeof hubSaveLocalDevProfile === 'function') hubSaveLocalDevProfile(hubCurrentProfile);
     hubRenderAccountSummary(user, hubCurrentProfile);
+    if (typeof hubApplyDevUiVisibility === 'function') hubApplyDevUiVisibility();
     return Promise.resolve();
   }
   if (!ref) return Promise.resolve();
@@ -357,6 +382,7 @@ function hubTouchProfileLogin(user, profile) {
     displayName: user.displayName || (profile && profile.displayName) || '',
     email: user.email || (profile && profile.email) || '',
     photoURL: user.photoURL || (profile && profile.photoURL) || '',
+    role: role,
     createdAt: (profile && profile.createdAt) ? profile.createdAt : Date.now(),
     lastLoginAt: Date.now()
   }, { merge: true }).then(function () {
@@ -365,9 +391,11 @@ function hubTouchProfileLogin(user, profile) {
       displayName: user.displayName || (profile && profile.displayName) || '',
       email: user.email || (profile && profile.email) || '',
       photoURL: user.photoURL || (profile && profile.photoURL) || '',
+      role: role,
       lastLoginAt: Date.now()
     });
     hubRenderAccountSummary(user, hubCurrentProfile);
+    if (typeof hubApplyDevUiVisibility === 'function') hubApplyDevUiVisibility();
   });
 }
 

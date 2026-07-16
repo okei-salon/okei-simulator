@@ -1567,7 +1567,8 @@ function pdPersist() {
   }
   if (typeof localStorage === 'undefined' || typeof settings === 'undefined') return;
   try {
-    localStorage.setItem('oukei_hub_v15_data', JSON.stringify({
+    let key = typeof hubResolveStorageKey === 'function' ? hubResolveStorageKey() : 'oukei_hub_v15_data';
+    localStorage.setItem(key, JSON.stringify({
       members: typeof members !== 'undefined' ? members : [],
       currentData: typeof currentData !== 'undefined' ? currentData : [],
       settings: settings,

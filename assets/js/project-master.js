@@ -1,25 +1,30 @@
 /* OUKEI HUB Project Master — Ver1.8.2 */
 
 var PM_BUILTIN = {
-  ram: { key: 'ram', name: 'RAM', startDate: '2024/01/20', inclusionRate: 100, visible: true, registered: true },
-  orca: { key: 'orca', name: 'ORCA', startDate: '2024/04/15', inclusionRate: 100, visible: true, registered: true },
-  cary: { key: 'cary', name: 'Cary Pact', startDate: '2024/03/10', inclusionRate: 0, visible: true, registered: true },
+  ram: { key: 'ram', name: 'RAM', startDate: '2024/01/20', inclusionRate: 100, visible: true, registered: false },
+  orca: { key: 'orca', name: 'ORCA', startDate: '2024/04/15', inclusionRate: 100, visible: true, registered: false },
+  cary: { key: 'cary', name: 'Cary Pact', startDate: '2024/03/10', inclusionRate: 0, visible: true, registered: false },
   genesis: { key: 'genesis', name: 'Genesis', startDate: '2023/11/20', inclusionRate: 100, visible: false, registered: false }
 };
 
 var PM_VALID_CODES = {
+  RAM: 'ram',
   ENI: 'eni',
   ORCA: 'orca',
-  CARY: 'cary',
-  CARYPACT: 'cary',
   GENESIS: 'genesis',
   OUKEI2026: 'demo2026'
 };
 
+/** 追加受付を停止するコード（旧Cary等） */
+var PM_DISABLED_CODES = {
+  CARY: 1,
+  CARYPACT: 1
+};
+
 var PM_CODE_META = {
+  ram: { name: 'RAM', startDate: '2024/01/20' },
   eni: { name: 'ENI', startDate: '2026/07/11' },
   orca: { name: 'ORCA', startDate: '2024/04/15' },
-  cary: { name: 'Cary Pact', startDate: '2024/03/10' },
   genesis: { name: 'Genesis', startDate: '2023/11/20' },
   demo2026: { name: 'OUKEI 2026', startDate: '2026/01/01' }
 };
@@ -56,34 +61,37 @@ function pmEnsureProjectMaster() {
     if (!settings.projectMaster.projects[key]) {
       migrated = true;
       let base = PM_BUILTIN[key];
+      // カタログ定義のみ追加。registered は既存保存値を尊重し、新規は必ず false
       settings.projectMaster.projects[key] = {
         key: key,
         name: base.name,
         startDate: base.startDate,
         inclusionRate: pmDefaultInclusionRate(key),
-        visible: base.visible,
-        registered: base.registered
+        visible: base.visible !== false,
+        registered: false
       };
     }
   });
 
-  if (migrated || !settings.projectMaster.order.length) {
-    settings.projectMaster.order = ['ram', 'orca', 'cary'];
-    Object.keys(settings.projectMaster.projects).forEach(function (key) {
-      if (settings.projectMaster.order.indexOf(key) === -1) {
-        settings.projectMaster.order.push(key);
-      }
-    });
+  // order は registered 済みのみ（pmNormalizeProjects で再構築）
+  if (migrated && !settings.projectMaster.order.length) {
+    settings.projectMaster.order = [];
   }
 
   pmMigrateLegacySettings();
   pmNormalizeProjects();
+  pmSyncLegacyFlags();
 }
 
 function pmMigrateLegacySettings() {
   if (typeof settings === 'undefined' || !settings.projectMaster) return;
   if (settings.projectMaster._legacyMigrated) return;
 
+  // 旧フラグからの1回限り移行。新規空ユーザーは use* = false のため登録されない。
+  if (settings.useRAM && settings.projectMaster.projects.ram) {
+    settings.projectMaster.projects.ram.registered = true;
+    settings.projectMaster.projects.ram.visible = true;
+  }
   if (settings.useORCA && settings.projectMaster.projects.orca) {
     settings.projectMaster.projects.orca.registered = true;
     settings.projectMaster.projects.orca.visible = true;
@@ -200,21 +208,9 @@ function pmProjectMasterHasSaved() {
   return !!settings.projectMaster.savedAt;
 }
 
+/** 未登録ユーザー用の空ドラフト（カタログ全体を載せない） */
 function pmGetDefaultMasterState() {
-  let projects = {};
-  let order = ['ram', 'orca', 'cary'];
-  order.forEach(function (key) {
-    let base = PM_BUILTIN[key];
-    projects[key] = {
-      key: key,
-      name: base.name,
-      startDate: base.startDate,
-      inclusionRate: pmDefaultInclusionRate(key),
-      visible: true,
-      registered: true
-    };
-  });
-  return { projects: projects, order: order.slice() };
+  return { projects: {}, order: [] };
 }
 
 function pmSerializeMasterState(state) {
@@ -243,18 +239,43 @@ function pmGetSavedMasterState() {
   };
 }
 
+/**
+ * draft / 保存stateを反映。
+ * registered にするのは order にあるキー（または明示的に registered:true）だけ。
+ * カタログに残っている未登録キーを一括 true にしない。
+ */
 function pmApplyMasterState(state) {
   pmEnsureProjectMaster();
-  let incomingKeys = Object.keys(state.projects || {});
-  settings.projectMaster.order = (state.order || []).slice();
+  let incoming = (state && state.projects) || {};
+  let order = Array.isArray(state && state.order) ? state.order.slice() : [];
+  let registeredKeys = [];
+
+  order.forEach(function (key) {
+    if (key && incoming[key] && registeredKeys.indexOf(key) === -1) registeredKeys.push(key);
+  });
+  Object.keys(incoming).forEach(function (key) {
+    if (incoming[key] && incoming[key].registered && registeredKeys.indexOf(key) === -1) {
+      registeredKeys.push(key);
+    }
+  });
+
   Object.keys(settings.projectMaster.projects).forEach(function (key) {
-    if (incomingKeys.indexOf(key) === -1) {
+    if (registeredKeys.indexOf(key) === -1) {
       settings.projectMaster.projects[key].registered = false;
     }
   });
-  incomingKeys.forEach(function (key) {
-    settings.projectMaster.projects[key] = Object.assign({}, state.projects[key], { key: key, registered: true });
+
+  registeredKeys.forEach(function (key) {
+    let src = incoming[key] || {};
+    let prev = settings.projectMaster.projects[key] || {};
+    settings.projectMaster.projects[key] = Object.assign({}, prev, src, {
+      key: key,
+      registered: true,
+      visible: src.visible !== false
+    });
   });
+
+  settings.projectMaster.order = registeredKeys.slice();
   pmNormalizeProjects();
 }
 
@@ -277,7 +298,9 @@ function pmIconOptionsHtml(selected) {
 function pmValidateProjectCode(codeRaw) {
   let code = String(codeRaw || '').trim().toUpperCase();
   if (!code) return { ok: false, message: 'プロジェクトコードを入力してください。' };
-  if (code === 'RAM') return { ok: false, message: 'RAMは初期登録済みです。' };
+  if (PM_DISABLED_CODES[code]) {
+    return { ok: false, message: 'このプロジェクトコードは現在利用できません。' };
+  }
   let key = PM_VALID_CODES[code];
   if (!key) return { ok: false, message: 'プロジェクトコードが正しくありません。' };
   let existing = pmGetProject(key);
@@ -287,38 +310,64 @@ function pmValidateProjectCode(codeRaw) {
   return { ok: true, key: key, code: code };
 }
 
+/** 選択した1プロジェクトだけ registered:true にする（他は触らない） */
+function pmRegisterSingleProject(key, opts) {
+  opts = opts || {};
+  key = String(key || '');
+  if (!key) return { ok: false, message: 'プロジェクトが不正です。' };
+  pmEnsureProjectMaster();
+  let meta = PM_CODE_META[key] || PM_BUILTIN[key] || { name: key, startDate: '—' };
+  let prev = settings.projectMaster.projects[key] || {};
+  settings.projectMaster.projects[key] = Object.assign({}, prev, {
+    key: key,
+    name: opts.name || prev.name || meta.name || key,
+    startDate: opts.startDate || prev.startDate || meta.startDate || '—',
+    inclusionRate: typeof opts.inclusionRate === 'number'
+      ? opts.inclusionRate
+      : (typeof prev.inclusionRate === 'number' ? prev.inclusionRate : pmDefaultInclusionRate(key)),
+    visible: opts.visible !== false,
+    registered: true,
+    iconKey: opts.iconKey || prev.iconKey || key,
+    kind: opts.kind || prev.kind,
+    memo: typeof opts.memo === 'string' ? opts.memo : (prev.memo || '')
+  });
+  if (settings.projectMaster.order.indexOf(key) === -1) {
+    settings.projectMaster.order.push(key);
+  }
+  pmNormalizeProjects();
+  pmSyncLegacyFlags();
+  return { ok: true, key: key, name: settings.projectMaster.projects[key].name };
+}
+
 function pmRegisterProjectByCode(codeRaw) {
   let result = pmValidateProjectCode(codeRaw);
   if (!result.ok) return result;
-  pmEnsureProjectMaster();
-  let meta = PM_CODE_META[result.key] || { name: result.key, startDate: '—' };
-  settings.projectMaster.projects[result.key] = {
-    key: result.key,
-    name: meta.name,
-    startDate: meta.startDate,
-    inclusionRate: pmDefaultInclusionRate(result.key),
-    visible: true,
-    registered: true,
-    iconKey: result.key
-  };
-  if (settings.projectMaster.order.indexOf(result.key) === -1) {
-    settings.projectMaster.order.push(result.key);
-  }
-  pmSyncLegacyFlags();
-  return { ok: true, key: result.key, name: meta.name };
+  let reg = pmRegisterSingleProject(result.key);
+  if (!reg.ok) return reg;
+  return { ok: true, key: reg.key, name: reg.name };
 }
 
 function pmSyncLegacyFlags() {
   if (typeof settings === 'undefined') return;
-  settings.useRAM = !!(pmGetProject('ram') && pmGetProject('ram').registered && pmGetProject('ram').visible);
-  settings.useORCA = !!(pmGetProject('orca') && pmGetProject('orca').registered && pmGetProject('orca').visible);
-  settings.useCARY = !!(pmGetProject('cary') && pmGetProject('cary').registered && pmGetProject('cary').visible);
-  settings.customProjects = pmGetRegisteredProjects()
-    .filter(function (p) { return !PM_BUILTIN[p.key]; })
+  // pmGetProject / pmGetRegisteredProjects は pmEnsure を呼ぶため使わない（再入防止）
+  let projects = (settings.projectMaster && settings.projectMaster.projects) || {};
+  function flag(key) {
+    let p = projects[key];
+    return !!(p && p.registered && p.visible);
+  }
+  settings.useRAM = flag('ram');
+  settings.useORCA = flag('orca');
+  settings.useCARY = flag('cary');
+  let order = (settings.projectMaster && Array.isArray(settings.projectMaster.order))
+    ? settings.projectMaster.order : [];
+  settings.customProjects = order
+    .map(function (key) { return projects[key]; })
+    .filter(function (p) { return p && p.registered && !PM_BUILTIN[p.key]; })
     .map(function (p) { return { key: p.key, name: p.name, startDate: p.startDate, type: 'master' }; });
   if (settings.portfolioGoal && settings.portfolioGoal.rates) {
-    pmGetRegisteredProjects().forEach(function (p) {
-      settings.portfolioGoal.rates[p.key] = p.inclusionRate;
+    order.forEach(function (key) {
+      let p = projects[key];
+      if (p && p.registered) settings.portfolioGoal.rates[p.key] = p.inclusionRate;
     });
   }
 }
@@ -341,7 +390,8 @@ function pmPersistHubSettings() {
   }
   if (typeof localStorage === 'undefined' || typeof settings === 'undefined') return;
   try {
-    localStorage.setItem('oukei_hub_v15_data', JSON.stringify({
+    let key = typeof hubResolveStorageKey === 'function' ? hubResolveStorageKey() : 'oukei_hub_v15_data';
+    localStorage.setItem(key, JSON.stringify({
       members: typeof members !== 'undefined' ? members : [],
       currentData: typeof currentData !== 'undefined' ? currentData : [],
       settings: settings,

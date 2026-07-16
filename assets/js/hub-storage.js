@@ -11,7 +11,7 @@ function hubCreateDefaultSettings() {
   return {
     currencyMode: 'both',
     yenRate: 155,
-    useRAM: true,
+    useRAM: false,
     useORCA: false,
     useCARY: false,
     ochanDialect: 'standard',
@@ -370,12 +370,12 @@ function hubBindStorageToUid(uid) {
 }
 
 function hubClearStorageForLogout() {
+  // UID別データは削除しない（再ログイン・ユーザー切替で復元するため）。
+  // メモリ上のデータと「現在UID」だけ切る。共有キーは他ユーザー汚染防止で除去。
   try {
     if (typeof localStorage !== 'undefined') {
-      if (hubActiveUid) localStorage.removeItem(hubStorageKeyForUid(hubActiveUid));
       localStorage.removeItem(HUB_STORAGE_KEY);
       localStorage.removeItem(HUB_STORAGE_LEGACY_KEY);
-      localStorage.removeItem(HUB_DEMO_MODE_KEY);
       localStorage.removeItem(HUB_UID_KEY);
     }
   } catch (e) {}
@@ -1164,14 +1164,45 @@ function hubLoadFromStorage() {
   try {
     let key = hubResolveStorageKey();
     let raw = localStorage.getItem(key);
+    // ログイン中UIDがある場合、共有キーへフォールバックしない（他ユーザー／端末汚染防止）
+    // 管理者のみ：旧共有キーにデータが残っている場合は1回だけUIDキーへ移行
     if (!raw && hubActiveUid) {
-      raw = localStorage.getItem(HUB_STORAGE_KEY) || localStorage.getItem(HUB_STORAGE_LEGACY_KEY);
+      if (typeof hubIsAdminUid === 'function' && hubIsAdminUid(hubActiveUid)) {
+        let shared = localStorage.getItem(HUB_STORAGE_KEY);
+        if (shared) {
+          try {
+            localStorage.setItem(key, shared);
+            raw = shared;
+          } catch (migrateErr) {}
+        }
+      }
     }
     if (!raw) return { data: hubCreateEmptyData(), isNew: true };
     return { data: hubNormalizeLoadedData(JSON.parse(raw)), isNew: false };
   } catch (e) {
     return { data: hubCreateEmptyData(), isNew: true };
   }
+}
+
+function hubIsEffectivelyEmptyHubData(data) {
+  if (!data || typeof data !== 'object') return true;
+  let members = Array.isArray(data.members) ? data.members : [];
+  let orca = data.orcaOrgChart && Array.isArray(data.orcaOrgChart.members) ? data.orcaOrgChart.members : [];
+  let eni = data.eniOrgChart && Array.isArray(data.eniOrgChart.members) ? data.eniOrgChart.members : [];
+  let settingsObj = data.settings || {};
+  let ramIn = Array.isArray(settingsObj.ramInputAccounts) ? settingsObj.ramInputAccounts : [];
+  let orcaIn = Array.isArray(settingsObj.orcaInputAccounts) ? settingsObj.orcaInputAccounts : [];
+  let eniIn = Array.isArray(settingsObj.eniInputAccounts) ? settingsObj.eniInputAccounts : [];
+  let rev = settingsObj.revenueLog && typeof settingsObj.revenueLog === 'object'
+    ? Object.keys(settingsObj.revenueLog).length : 0;
+  let sales = settingsObj.salesLog && typeof settingsObj.salesLog === 'object'
+    ? Object.keys(settingsObj.salesLog).length : 0;
+  let pm = settingsObj.projectMaster && settingsObj.projectMaster.projects
+    ? settingsObj.projectMaster.projects : {};
+  let registered = Object.keys(pm).filter(function (k) { return pm[k] && pm[k].registered; }).length;
+  return !members.length && !orca.length && !eni.length &&
+    !ramIn.length && !orcaIn.length && !eniIn.length &&
+    !rev && !sales && !registered;
 }
 
 function hubSaveToStorage(options) {
@@ -1201,6 +1232,10 @@ function hubInitStorage() {
 }
 
 function hubLoadDevOrgSeed() {
+  if (typeof hubCanShowDevUi === 'function' && !hubCanShowDevUi()) {
+    if (typeof showToast === 'function') showToast('⚠️ 開発用機能は利用できません');
+    return;
+  }
   if (!confirm('サンプル組織図を読み込みます。現在のデータは上書きされます。よろしいですか？')) return;
   hubApplyData(HUB_DEV_ORG_SEED);
   if (typeof pmEnsureProjectMaster === 'function') pmEnsureProjectMaster();
@@ -1227,6 +1262,7 @@ function hubClearAllData() {
 
   try {
     if (typeof localStorage !== 'undefined') {
+      if (hubActiveUid) localStorage.removeItem(hubStorageKeyForUid(hubActiveUid));
       localStorage.removeItem(HUB_STORAGE_KEY);
       localStorage.removeItem(HUB_STORAGE_LEGACY_KEY);
       localStorage.removeItem(HUB_DEMO_MODE_KEY);
@@ -1251,6 +1287,7 @@ function hubClearAllData() {
     typeof hubDeleteCloudData === 'function') {
     hubDeleteCloudData();
   }
+  if (typeof hubApplyDevUiVisibility === 'function') hubApplyDevUiVisibility();
   if (typeof render === 'function') render();
   if (typeof showPage === 'function') showPage('home');
   if (typeof showToast === 'function') showToast('✅ 端末のデータを削除しました');
@@ -1277,6 +1314,9 @@ if (typeof window !== 'undefined') {
   window.hubResolveOrcaOrgChart = hubResolveOrcaOrgChart;
   window.hubApplyData = hubApplyData;
   window.hubLoadFromStorage = hubLoadFromStorage;
+  window.hubIsEffectivelyEmptyHubData = hubIsEffectivelyEmptyHubData;
+  window.hubResolveStorageKey = hubResolveStorageKey;
+  window.hubStorageKeyForUid = hubStorageKeyForUid;
   window.hubPackLocalData = hubPackLocalData;
   window.hubPackFirestorePayload = hubPackFirestorePayload;
   window.hubUnpackFirestorePayload = hubUnpackFirestorePayload;

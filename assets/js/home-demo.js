@@ -7,6 +7,13 @@
  * ============================================================ */
 var HOME_DEMO_STORAGE_KEY = 'oukei_home_demo_mode';
 
+function hubDemoModeStorageKey() {
+  var uid = '';
+  if (typeof hubGetActiveAuthUid === 'function') uid = hubGetActiveAuthUid() || '';
+  else if (typeof hubActiveUid !== 'undefined' && hubActiveUid) uid = String(hubActiveUid);
+  return uid ? HOME_DEMO_STORAGE_KEY + ':' + uid : HOME_DEMO_STORAGE_KEY;
+}
+
 var HOME_DEMO_YEAR = 2026;
 var HOME_DEMO_MONTH = 5; /* 0-indexed: 6月 */
 var HOME_DEMO_DAY = 30;
@@ -97,8 +104,9 @@ function buildHomeDemoTodayEntry() {
 }
 
 function loadHomeDemoMode() {
+  if (typeof hubCanShowDevUi === 'function' && !hubCanShowDevUi()) return false;
   try {
-    return localStorage.getItem(HOME_DEMO_STORAGE_KEY) === '1';
+    return localStorage.getItem(hubDemoModeStorageKey()) === '1';
   } catch (e) {
     return false;
   }
@@ -106,11 +114,12 @@ function loadHomeDemoMode() {
 
 function persistHomeDemoMode(on) {
   try {
-    localStorage.setItem(HOME_DEMO_STORAGE_KEY, on ? '1' : '0');
+    localStorage.setItem(hubDemoModeStorageKey(), on ? '1' : '0');
   } catch (e) {}
 }
 
 function isHomeDemoActive() {
+  if (typeof hubCanShowDevUi === 'function' && !hubCanShowDevUi()) return false;
   return !!HOME_DEMO_MODE;
 }
 
@@ -247,6 +256,13 @@ function applyHomeDemoState() {
 }
 
 function toggleHomeDemoMode(on) {
+  if (on && typeof hubCanShowDevUi === 'function' && !hubCanShowDevUi()) {
+    HOME_DEMO_MODE = false;
+    persistHomeDemoMode(false);
+    syncHomeDemoToolbar();
+    removeHomeDemoBanner();
+    return;
+  }
   HOME_DEMO_MODE = !!on;
   persistHomeDemoMode(HOME_DEMO_MODE);
   resetHomeCalViewForMode();
@@ -279,6 +295,11 @@ function patchHomeDemoRender() {
 function initHomeDemo() {
   applyHomeDemoState();
   patchHomeDemoRender();
+  if (typeof hubApplyDevUiVisibility === 'function') hubApplyDevUiVisibility();
+}
+
+if (typeof window !== 'undefined') {
+  window.hubDemoModeStorageKey = hubDemoModeStorageKey;
 }
 
 if (typeof document !== 'undefined') {

@@ -14,8 +14,9 @@ function pmInitDraftFromCurrent() {
 }
 
 function pmInitDraftDefaults() {
+  // 未保存ユーザーは空ドラフト（built-in全件を載せない）
   pmDraftState = pmCloneMasterState(pmGetDefaultMasterState());
-  pmDraftSnapshot = pmSerializeMasterState(pmGetSavedMasterState());
+  pmDraftSnapshot = pmSerializeMasterState(pmDraftState);
 }
 
 function pmReadDraftState() {
@@ -25,7 +26,11 @@ function pmReadDraftState() {
 function pmIsDraftDirty() {
   let current = pmSerializeMasterState(pmReadDraftState());
   if (!pmProjectMasterHasSaved()) {
-    return current !== pmSerializeMasterState(pmGetDefaultMasterState());
+    let draft = pmReadDraftState();
+    return !!(draft.order && draft.order.length) ||
+      Object.keys(draft.projects || {}).some(function (k) {
+        return draft.projects[k] && draft.projects[k].registered;
+      });
   }
   return current !== pmDraftSnapshot;
 }
@@ -267,24 +272,57 @@ function pmConfirmOtherProjectAdd() {
     }
     return;
   }
-  if (!pmDraftState) pmInitDraftDefaults();
+  if (!pmDraftState) pmInitDraftFromCurrentOrEmpty();
+  let prevKeys = typeof pmGetRegisteredProjects === 'function'
+    ? pmGetRegisteredProjects().map(function (p) { return p.key; })
+    : [];
   let key = pmSlugProjectKey(name, pmDraftState.projects);
-  pmDraftState.projects[key] = {
-    key: key,
-    name: name,
-    startDate: (startEl && startEl.value.trim()) || '—',
-    inclusionRate: Math.max(0, Math.min(100, Number(rateEl && rateEl.value) || 100)),
-    visible: !!(visibleEl && visibleEl.checked),
-    registered: true,
-    kind: 'other',
-    iconKey: 'custom',
-    memo: memoEl ? memoEl.value.trim() : ''
-  };
-  if (pmDraftState.order.indexOf(key) === -1) {
-    pmDraftState.order.push(key);
+  let startDate = (startEl && startEl.value.trim()) || '—';
+  let inclusionRate = Math.max(0, Math.min(100, Number(rateEl && rateEl.value) || 100));
+  let visible = !!(visibleEl && visibleEl.checked);
+  let memo = memoEl ? memoEl.value.trim() : '';
+
+  // 選択した1件だけ登録（他プロジェクトは変更しない）
+  if (typeof pmRegisterSingleProject === 'function') {
+    pmRegisterSingleProject(key, {
+      name: name,
+      startDate: startDate,
+      inclusionRate: inclusionRate,
+      visible: visible,
+      kind: 'other',
+      iconKey: 'custom',
+      memo: memo
+    });
   }
   closeModal();
+  pmFinalizeSingleProjectAdd(name, prevKeys);
+}
+
+function pmInitDraftFromCurrentOrEmpty() {
+  if (pmProjectMasterHasSaved()) pmInitDraftFromCurrent();
+  else pmInitDraftDefaults();
+}
+
+function pmFinalizeSingleProjectAdd(name, prevKeys) {
+  let nextKeys = typeof pmGetRegisteredProjects === 'function'
+    ? pmGetRegisteredProjects().map(function (p) { return p.key; })
+    : [];
+  if (typeof pmOnProjectsCommitted === 'function') {
+    pmOnProjectsCommitted(prevKeys || [], nextKeys);
+  }
+  settings.projectMaster.savedAt = new Date().toLocaleString();
+  settings.lastUpdate = settings.projectMaster.savedAt;
+  if (typeof pmPersistHubSettings === 'function') pmPersistHubSettings();
+  pmDraftSnapshot = pmSerializeMasterState(pmGetSavedMasterState());
+  pmInitDraftFromCurrent();
   pmRenderProjectSettingsList();
+  pmHideProjectOverwriteConfirm();
+  if (typeof renderDynamicProjects === 'function') renderDynamicProjects();
+  if (typeof renderPortfolio === 'function') renderPortfolio();
+  if (typeof renderRevenueManage === 'function') renderRevenueManage();
+  if (typeof renderSalesManage === 'function') renderSalesManage();
+  if (typeof render === 'function') render();
+  if (typeof hubRefreshVerifyPanel === 'function') hubRefreshVerifyPanel();
   if (typeof showToast === 'function') showToast('✅ ' + name + ' を追加しました');
 }
 
@@ -301,22 +339,20 @@ function pmConfirmProjectAdd() {
     return;
   }
   let meta = PM_CODE_META[result.key] || { name: result.key, startDate: '—' };
-  if (!pmDraftState) pmInitDraftDefaults();
-  pmDraftState.projects[result.key] = {
-    key: result.key,
-    name: meta.name,
-    startDate: meta.startDate,
-    inclusionRate: pmDefaultInclusionRate(result.key),
-    visible: true,
-    registered: true,
-    iconKey: result.key
-  };
-  if (pmDraftState.order.indexOf(result.key) === -1) {
-    pmDraftState.order.push(result.key);
+  if (!pmDraftState) pmInitDraftFromCurrentOrEmpty();
+  let prevKeys = typeof pmGetRegisteredProjects === 'function'
+    ? pmGetRegisteredProjects().map(function (p) { return p.key; })
+    : [];
+
+  // 選択した1プロジェクトだけ registered:true（他は一切変更しない）
+  if (typeof pmRegisterSingleProject === 'function') {
+    pmRegisterSingleProject(result.key);
+  } else if (typeof pmRegisterProjectByCode === 'function') {
+    pmRegisterProjectByCode(code);
   }
+
   closeModal();
-  pmRenderProjectSettingsList();
-  if (typeof showToast === 'function') showToast('✅ ' + meta.name + ' を追加しました');
+  pmFinalizeSingleProjectAdd(meta.name, prevKeys);
 }
 
 function pmOnProjectSettingsInput() {
@@ -447,8 +483,25 @@ function addProjectByCode() {
   openProjectAdd();
 }
 
+/** 一般ユーザーは必要最小限のみ。管理者専用は hubIsAdminUser() で制御 */
+function hubApplySettingsVisibility() {
+  let isAdmin = typeof hubIsAdminUser === 'function' ? hubIsAdminUser() : false;
+  document.querySelectorAll('[data-hub-admin-only="1"]').forEach(function (el) {
+    el.classList.toggle('hidden', !isAdmin);
+    if (el.tagName === 'BUTTON' || el.getAttribute('role') === 'button') {
+      el.setAttribute('aria-hidden', isAdmin ? 'false' : 'true');
+    }
+  });
+  // Excelインポートは現状常時非表示（管理者でもhiddenのまま）
+  let excel = document.querySelector('.settingsHubCard[onclick="openExcelImportPage()"]');
+  if (excel) {
+    excel.classList.add('hidden');
+    excel.setAttribute('aria-hidden', 'true');
+  }
+}
+
 function renderSettingsHub() {
-  /* settings hub is static */
+  hubApplySettingsVisibility();
 }
 
 function renderSettings() {
@@ -465,11 +518,14 @@ function renderSettings() {
   else if (typeof hubRenderAccountSummary === 'function') hubRenderAccountSummary();
 }
 
+if (typeof window !== 'undefined') {
+  window.hubApplySettingsVisibility = hubApplySettingsVisibility;
+}
+
 function saveSettings() {
   settings.currencyMode = 'both';
   settings.yenRate = pmGetFxRate();
   settings.ochanDialect = (document.querySelector('input[name=ochanDialect]:checked') || {}).value || 'standard';
-  settings.useRAM = true;
   pmSyncLegacyFlags();
   settings.lastUpdate = new Date().toLocaleString();
   if (typeof markActivity === 'function') markActivity();

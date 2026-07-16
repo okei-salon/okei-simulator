@@ -12,12 +12,28 @@ function hubIsLocalDevMode() {
   return hubIsLocalDevHost();
 }
 
+function hubIsVerifyCloudBlocked() {
+  // 検証用UID使用中は本番クラウドへ絶対に触れない
+  if (typeof hubIsUserVerifyActive !== 'function' || !hubIsUserVerifyActive()) return false;
+  let real = typeof hubGetRealLoginUid === 'function' ? hubGetRealLoginUid() : '';
+  let data = typeof hubActiveUid !== 'undefined' ? String(hubActiveUid || '') : '';
+  if (data && real && data !== real) return true;
+  if (data && typeof hubIsAdminUid === 'function' && !hubIsAdminUid(data) &&
+      data.indexOf('test_') === 0) {
+    return true;
+  }
+  return false;
+}
+
 function hubIsCloudReadEnabled() {
-  return !hubIsLocalDevMode();
+  if (hubIsLocalDevMode()) return false;
+  if (hubIsVerifyCloudBlocked()) return false;
+  return true;
 }
 
 function hubIsCloudWriteEnabled() {
   if (hubIsLocalDevMode()) return false;
+  if (hubIsVerifyCloudBlocked()) return false;
   if (typeof hubIsVersionWriteAllowed === 'function' && !hubIsVersionWriteAllowed()) {
     return false;
   }
@@ -27,8 +43,14 @@ function hubIsCloudWriteEnabled() {
 function hubRenderLocalDevStatus() {
   let bar = document.getElementById('hubLocalDevBar');
   let syncEl = document.getElementById('hubSyncStatus');
-  if (!hubIsLocalDevMode()) {
+  let allowDevUi = typeof hubCanShowDevUi === 'function' ? hubCanShowDevUi() : false;
+  if (!hubIsLocalDevMode() || !allowDevUi) {
     if (bar) bar.classList.add('hidden');
+    if (syncEl && hubIsLocalDevMode() && !allowDevUi) {
+      syncEl.classList.remove('is-syncing', 'is-done', 'is-dev');
+      syncEl.classList.add('is-offline');
+      syncEl.textContent = '—';
+    }
     return;
   }
   if (bar) bar.classList.remove('hidden');

@@ -13,7 +13,7 @@
 <style>
 :root{--bg:#07111f;--panel:#0f1d31;--line:#294361;--text:#eef7ff;--muted:#9fb3cc;--pink:#ff4f91;--blue:#60a5fa;--gold:#fbbf24}
 *{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at top left,#142a55,#07111f 42%,#040812);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",Meiryo,sans-serif}
-header{padding:12px;border-bottom:1px solid var(--line);position:sticky;top:0;background:rgba(7,17,31,.96);z-index:20;display:flex;gap:10px;align-items:center}.logo{width:42px;height:42px;border-radius:12px;object-fit:cover;border:1px solid #44617f}h1{font-size:18px;margin:0}.sub{font-size:11px;color:var(--muted)}.buildInfo{font-size:10px;color:#7f97b3;margin-top:2px;line-height:1.3}.hubSyncStatus{font-size:10px;color:#94a3b8;margin-top:2px;line-height:1.3}.hubSyncStatus.is-syncing{color:#93c5fd}.hubSyncStatus.is-done{color:#86efac}.hubSyncStatus.is-offline{color:#94a3b8}
+header{padding:12px;border-bottom:1px solid var(--line);position:sticky;top:0;background:rgba(7,17,31,.96);z-index:20;display:flex;gap:10px;align-items:center}.logo{width:42px;height:42px;border-radius:12px;object-fit:cover;border:1px solid #44617f}h1{font-size:18px;margin:0}.sub{font-size:11px;color:var(--muted)}.buildInfo{font-size:10px;color:#7f97b3;margin-top:2px;line-height:1.3}.hubSyncStatus{font-size:10px;color:#94a3b8;margin-top:2px;line-height:1.3}.hubSyncStatus.is-syncing{color:#93c5fd}.hubSyncStatus.is-done{color:#86efac}.hubSyncStatus.is-offline{color:#94a3b8}html.hub-dev-ui-hidden #homeDemoToolbar,html.hub-dev-ui-hidden #hubDevToolsBlock,html.hub-dev-ui-hidden #hubLocalDevBar,html.hub-dev-ui-hidden .buildInfo{display:none!important}
 main{padding:10px;max-width:1800px;margin:auto}.hidden{display:none!important}button{border:0;border-radius:12px;padding:10px 12px;background:#2563eb;color:#fff;font-weight:800}.btn2{background:#132842;border:1px solid #355777}.btnDanger{background:#be123c}
 .badge{display:inline-block;margin:3px;padding:7px 9px;border:1px solid #355777;border-radius:999px;background:#0d1b30;font-size:12px;font-weight:800}.sim{border-color:#fb923c;color:#ffedd5;background:rgba(251,146,60,.12)}
 .notice{font-size:12px;color:#bfd0e6;background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.25);border-radius:12px;padding:8px;margin:10px 0}.panel,.card,.projectCard{background:linear-gradient(180deg,#13243d,#0d1b30);border:1px solid var(--line);border-radius:16px;padding:12px}.cards{display:grid;grid-template-columns:repeat(6,minmax(140px,1fr));gap:10px}.card{min-height:106px;cursor:pointer}.card.total{border-color:var(--blue)}.label{font-size:12px;color:#b7c9df;font-weight:700}.main{font-size:20px;font-weight:900;margin-top:5px}.subline,.help{font-size:11px;color:var(--muted);line-height:1.55}.panelTitle{font-size:15px;font-weight:900;margin:0 0 10px}
@@ -189,10 +189,10 @@ input,select{width:100%;background:#081426;color:var(--text);border:1px solid #2
 
 </style>
 <link rel="stylesheet" href="assets/css/project-icons.css?v=20260714-icon-stable">
-<link rel="stylesheet" href="assets/css/home.css?v=20260715-aim-hub-ui">
+<link rel="stylesheet" href="assets/css/home.css?v=20260716-iframe-v1">
 <link rel="stylesheet" href="assets/css/portfolio-ui.css?v=20260713-v322">
-<link rel="stylesheet" href="assets/css/settings-ui.css?v=20260708-v254">
-<link rel="stylesheet" href="assets/css/hub-auth.css?v=20260712-v400">
+<link rel="stylesheet" href="assets/css/settings-ui.css?v=20260716-mobile-v1">
+<link rel="stylesheet" href="assets/css/hub-auth.css?v=20260716-iframe-v1">
 <link rel="stylesheet" href="assets/css/excel-import.css?v=20260705-v243">
 <link rel="stylesheet" href="assets/css/orca-import.css?v=20260628-v205">
 <link rel="stylesheet" href="assets/css/revenue-manage.css?v=20260707-sales-total-panel-v1">
@@ -203,15 +203,15 @@ input,select{width:100%;background:#081426;color:var(--text);border:1px solid #2
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="assets/js/project-theme.js?v=20260712-v311"></script>
 <script src="assets/js/project-icons.js?v=20260714-icon-stable"></script>
-<script src="assets/js/performance-data.js?v=20260714-icon-stable"></script>
+<script src="assets/js/performance-data.js?v=20260716-newuser-v1"></script>
 <script src="assets/js/account-input-manage.js?v=20260715-org-add-v1"></script>
-<script src="assets/js/home.js?v=20260714-icon-stable"></script>
-<script src="assets/js/home-demo.js?v=20260708-v254"></script>
-<script src="assets/js/orca-import.js?v=20260628-v207"></script>
+<script src="assets/js/home.js?v=20260716-newuser-v1"></script>
+<script src="assets/js/home-demo.js?v=20260716-newuser-v1"></script>
+<script src="assets/js/orca-import.js?v=20260716-mobile-v1"></script>
 <script src="assets/js/excel-import.js?v=20260705-multi-project-v1"></script>
-<script src="assets/js/portfolio.js?v=20260714-icon-stable"></script>
-<script src="assets/js/project-master.js?v=20260711-eni-v1"></script>
-<script src="assets/js/settings-ui.js?v=20260711-eni-v1"></script>
+<script src="assets/js/portfolio.js?v=20260716-newuser-v1"></script>
+<script src="assets/js/project-master.js?v=20260717-reg1-v1"></script>
+<script src="assets/js/settings-ui.js?v=20260717-reg1-v1"></script>
 <script src="assets/js/manage-entry-ui.js?v=20260715-org-add-v1"></script>
 <script src="assets/js/revenue-manage.js?v=20260714-icon-stable"></script>
 <script src="assets/js/sales-manage.js?v=20260714-icon-stable"></script>
@@ -271,10 +271,12 @@ input,select{width:100%;background:#081426;color:var(--text);border:1px solid #2
 <script src="assets/js/firebase-config.js?v=20260704-v237"></script>
 <script src="assets/js/hub-app-version.js?v=20260712-v400"></script>
 <script src="assets/js/hub-version-guard.js?v=20260712-v400"></script>
-<script src="assets/js/hub-dev-mode.js?v=20260712-v400"></script>
-<script src="assets/js/hub-storage.js?v=20260712-v400"></script>
-<script src="assets/js/hub-firebase.js?v=20260714-icon-stable"></script>
-<script src="assets/js/hub-auth.js?v=20260712-v314"></script>
+<script src="assets/js/hub-dev-mode.js?v=20260716-verify-v1"></script>
+<script src="assets/js/hub-admin.js?v=20260716-mobile-v1"></script>
+<script src="assets/js/hub-user-verify.js?v=20260716-iframe-v1"></script>
+<script src="assets/js/hub-storage.js?v=20260716-newuser-v1"></script>
+<script src="assets/js/hub-firebase.js?v=20260716-newuser-v1"></script>
+<script src="assets/js/hub-auth.js?v=20260716-verify-v1"></script>
 <script src="assets/js/pwa-splash.js?v=20260628-splash177"></script>
 <div class="menu" id="menu">
   <div class="oukeiSidebarBrand">
@@ -694,17 +696,17 @@ input,select{width:100%;background:#081426;color:var(--text);border:1px solid #2
 <span class="settingsHubIcon settingsHubIcon--import" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M5 21h14"/></svg></span>
 <div><div class="settingsHubTitle">Excelインポート</div><p class="settingsHubDesc">RAM管理Excelから過去実績（収益R7.12月）を移行します。</p></div>
 </button>
-<button type="button" class="settingsHubCard" onclick="openOrcaImportPage()">
+<button type="button" class="settingsHubCard" id="hubSettingsOrcaImportCard" data-hub-admin-only="1" onclick="openOrcaImportPage()">
 <span class="settingsHubIcon settingsHubIcon--import" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M9 3h6"/><path d="M8 7h8"/><path d="M7 11h10"/><path d="M6 15h12"/><path d="M5 19h14"/></svg></span>
 <div><div class="settingsHubTitle">ORCAデータ移行</div><p class="settingsHubDesc">AI利益履歴・USDTウォレット履歴を貼り付けてORCA実績を移行します。</p></div>
 </button>
 </div>
-<div class="settingBlock settingsRestoreBlock">
+<div class="settingBlock settingsRestoreBlock" id="hubDevToolsBlock" data-hub-admin-only="1">
 <div class="settingBlockTitle">開発用</div>
 <button type="button" class="btn2" onclick="hubLoadDevOrgSeed()">サンプル組織図を読み込む</button>
 <p class="help">説明・デモ用のサンプルデータです。現在のデータは上書きされます。通常利用では不要です。</p>
 </div>
-<div class="settingBlock settingsRestoreBlock">
+<div class="settingBlock settingsRestoreBlock" id="hubSettingsOchanBlock">
 <div class="settingBlockTitle">おーちゃん</div>
 <label>おーちゃんの話し方</label>
 <div class="ochanDialectOpts" role="radiogroup" aria-label="おーちゃんの話し方">
@@ -713,7 +715,7 @@ input,select{width:100%;background:#081426;color:var(--text);border:1px solid #2
 </div>
 <p class="help">ホーム画面の吹き出しにすぐ反映されます。</p>
 </div>
-<div class="settingBlock settingsRestoreBlock">
+<div class="settingBlock settingsRestoreBlock" id="hubSettingsAccountBlock">
 <div class="settingBlockTitle">アカウント情報</div>
 <div class="hubAccountInfoCard">
 <div class="hubAccountInfoHead">
@@ -746,22 +748,24 @@ input,select{width:100%;background:#081426;color:var(--text);border:1px solid #2
 <div id="hubAccountInfoMessage" class="hubAccountInfoMessage"></div>
 <button type="button" class="btnDanger hubAccountLogoutBtn" onclick="hubLogout()">ログアウト</button>
 </div>
+</div>
+<div class="settingBlock settingsRestoreBlock" id="hubSettingsDataManageBlock" data-hub-admin-only="1">
 <div class="settingBlockTitle">データ管理</div>
 <div class="notice">💾 データは各自の端末に保存されます。大きな変更前や機種変更時は、バックアップ作成を行ってください。</div>
 <p class="dangerNote">誤って取り込んだデータなどを消す場合、端末内のすべてのデータを削除して空の状態から再スタートできます。</p>
 <button type="button" class="btnDanger" onclick="hubClearAllData()">端末のデータをすべて削除</button>
 <p class="help">組織図・収益入力・設定など、この端末の LocalStorage に保存された内容がすべて消えます。復元には事前のバックアップが必要です。</p>
 </div>
-<div class="settingBlock settingsRestoreBlock">
+<div class="settingBlock settingsRestoreBlock" id="hubSettingsBackupBlock" data-hub-admin-only="1">
 <div class="settingBlockTitle">バックアップ</div>
 <button type="button" onclick="downloadBackup()">バックアップ作成</button>
 </div>
-<div class="settingBlock settingsRestoreBlock">
+<div class="settingBlock settingsRestoreBlock" id="hubSettingsRestoreBlock" data-hub-admin-only="1">
 <div class="settingBlockTitle">バックアップ読み込み</div>
 <button type="button" class="btn2" onclick="restoreFile.click()">バックアップ読込</button>
 <input id="restoreFile" type="file" accept="" class="hidden" onchange="restoreBackup(event)">
 </div>
-<div class="settingBlock settingsRestoreBlock">
+<div class="settingBlock settingsRestoreBlock" id="hubSettingsSaveBlock" data-hub-admin-only="1">
 <div class="settingBlockTitle">編集後の保存</div>
 <button type="button" onclick="saveSettings()">💾 設定を保存</button>
 <div class="backupInfo">最終保存：<span id="settingsLastUpdate">-</span><br>最終バックアップ：<span id="settingsLastBackup">-</span></div>

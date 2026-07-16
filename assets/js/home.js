@@ -45,10 +45,10 @@ function getEnabledHomeProjects() {
     return pmGetEnabledProjects();
   }
   let list = [];
-  if (settings.useRAM !== false) list.push({ key: 'ram', name: 'RAM', dot: 'ram' });
+  if (settings.useRAM) list.push({ key: 'ram', name: 'RAM', dot: 'ram' });
   if (settings.useORCA) list.push({ key: 'orca', name: 'ORCA', dot: 'orca' });
   if (settings.useCARY) list.push({ key: 'cary', name: 'Cary Pact', dot: 'cary' });
-  return list.length ? list : [{ key: 'ram', name: 'RAM', dot: 'ram' }];
+  return list;
 }
 
 var HOME_ACTION_ICON_PENDING = '<span class="homeActionItemIcon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/></svg></span>';
@@ -828,7 +828,8 @@ function persistHubSettings() {
   }
   if (typeof localStorage === 'undefined' || typeof settings === 'undefined') return;
   try {
-    localStorage.setItem('oukei_hub_v15_data', JSON.stringify({
+    let key = typeof hubResolveStorageKey === 'function' ? hubResolveStorageKey() : 'oukei_hub_v15_data';
+    localStorage.setItem(key, JSON.stringify({
       members: typeof members !== 'undefined' ? members : [],
       currentData: typeof currentData !== 'undefined' ? currentData : [],
       settings: settings,
