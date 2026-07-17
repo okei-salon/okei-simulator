@@ -216,8 +216,8 @@ input,select{width:100%;background:#081426;color:var(--text);border:1px solid #2
 <script src="assets/js/revenue-manage.js?v=20260714-icon-stable"></script>
 <script src="assets/js/sales-manage.js?v=20260714-icon-stable"></script>
 <script src="assets/js/org-nav.js?v=20260715-v001"></script>
-<script src="assets/js/orca-org.js?v=20260715-org-add-v1"></script>
-<script src="assets/js/eni-org.js?v=20260715-org-add-v1"></script>
+<script src="assets/js/orca-org.js?v=20260717-orgview-v1"></script>
+<script src="assets/js/eni-org.js?v=20260717-orgview-v1"></script>
 <script src="assets/js/eni-project.js?v=20260712-v310"></script>
 <script src="assets/js/eni-revenue-input.js?v=20260713-v321"></script>
 <script src="assets/js/ochan-room.js?v=20260711-room-main-v2"></script>
@@ -275,7 +275,8 @@ input,select{width:100%;background:#081426;color:var(--text);border:1px solid #2
 <script src="assets/js/hub-admin.js?v=20260717-v001"></script>
 <script src="assets/js/hub-user-verify.js?v=20260717-v001"></script>
 <script src="assets/js/hub-storage.js?v=20260717-v001"></script>
-<script src="assets/js/hub-firebase.js?v=20260717-v001"></script>
+<script src="assets/js/hub-org-view-state.js?v=20260717-orgview-v1"></script>
+<script src="assets/js/hub-firebase.js?v=20260717-orgview-v1"></script>
 <script src="assets/js/hub-auth.js?v=20260717-v001"></script>
 <script src="assets/js/pwa-splash.js?v=20260628-splash177"></script>
 <div class="menu" id="menu">
@@ -940,7 +941,10 @@ function ensureRootAccounts(){
    let roots=members.filter(m=>!m.parent).map(m=>m.id);
    rootAccountIds=roots.length?roots:[rootId];
  }
- if(!rootAccountIds.includes(rootId))rootId=rootAccountIds[0]||rootId;
+ // 表示中アカウントがメンバーに残っている限り維持（同期後にメインへ戻さない）
+ if(!rootAccountIds.includes(rootId)){
+   if(!members.some(m=>m.id===rootId))rootId=rootAccountIds[0]||rootId;
+ }
 }
 function renderRootAccounts(){
  ensureRootAccounts();

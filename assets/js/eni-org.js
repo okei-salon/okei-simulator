@@ -288,8 +288,11 @@ function eniEnsureRootAccounts() {
     var roots = eniMembers.filter(function (m) { return !m.parent; }).map(function (m) { return m.id; });
     eniRootAccountIds = roots.length ? roots : [eniRootId].filter(Boolean);
   }
+  // 表示中アカウントがメンバーに残っている限り維持（同期後にメインへ戻さない）
   if (!eniRootAccountIds.includes(eniRootId)) {
-    eniRootId = eniRootAccountIds[0] || eniRootId || '';
+    if (!eniFindMember(eniRootId)) {
+      eniRootId = eniRootAccountIds[0] || eniRootId || '';
+    }
   }
 }
 

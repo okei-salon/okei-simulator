@@ -575,8 +575,12 @@ function hubDeleteCloudData() {
   return ref.delete().catch(function () { return false; });
 }
 
-function hubRefreshViewsAfterSync() {
+function hubRefreshViewsAfterSync(viewState) {
   // render() → renderHome() → updateHomeDashboard() already calls renderPortfolio()
+  // 組織図を開いているときは表示アカウント・ズームを再適用してから描画する
+  if (viewState && typeof hubRestoreOrgChartViewState === 'function') {
+    hubRestoreOrgChartViewState(viewState);
+  }
   if (typeof render === 'function') render();
   if (typeof orcaRender === 'function' &&
       typeof orcaOrgPage !== 'undefined' &&
@@ -584,14 +588,24 @@ function hubRefreshViewsAfterSync() {
       !orcaOrgPage.classList.contains('hidden')) {
     orcaRender();
   }
+  if (viewState && typeof hubRestoreOrgChartScrollState === 'function') {
+    hubRestoreOrgChartScrollState(viewState);
+  }
 }
 
 function hubApplyMergedHubData(merged, cloudHash) {
   if (!merged || typeof hubApplyData !== 'function') return false;
+  let viewState = typeof hubCaptureOrgChartViewState === 'function'
+    ? hubCaptureOrgChartViewState()
+    : null;
   let beforeHash = typeof hubComputeContentHash === 'function'
     ? hubComputeContentHash(hubPackLocalData())
     : '';
   hubApplyData(merged, { skipMerge: true });
+  // 同期マージで rootId がメインへ上書きされても、表示中アカウントが残っていれば復元
+  if (viewState && typeof hubRestoreOrgChartViewState === 'function') {
+    hubRestoreOrgChartViewState(viewState);
+  }
   if (typeof pmEnsureProjectMaster === 'function') pmEnsureProjectMaster();
   if (typeof pmEnsureFxSettings === 'function') pmEnsureFxSettings();
   if (typeof pfEnsureManageDisplayAccounts === 'function') pfEnsureManageDisplayAccounts();
@@ -602,7 +616,7 @@ function hubApplyMergedHubData(merged, cloudHash) {
     ? hubComputeContentHash(hubPackLocalData())
     : '';
   hubLastPushedHash = cloudHash || hubLastPushedHash;
-  if (beforeHash !== afterHash) hubRefreshViewsAfterSync();
+  if (beforeHash !== afterHash) hubRefreshViewsAfterSync(viewState);
   return beforeHash !== afterHash;
 }
 

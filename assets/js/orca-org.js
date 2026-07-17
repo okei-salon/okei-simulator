@@ -539,8 +539,11 @@ function orcaEnsureRootAccounts() {
     var roots = orcaMembers.filter(function (m) { return !m.parent; }).map(function (m) { return m.id; });
     orcaRootAccountIds = roots.length ? roots : [orcaRootId].filter(Boolean);
   }
+  // 表示中アカウントがメンバーに残っている限り維持（同期後にメインへ戻さない）
   if (!orcaRootAccountIds.includes(orcaRootId)) {
-    orcaRootId = orcaRootAccountIds[0] || orcaRootId;
+    if (!orcaMembers.some(function (m) { return m.id === orcaRootId; })) {
+      orcaRootId = orcaRootAccountIds[0] || orcaRootId || '';
+    }
   }
 }
 
