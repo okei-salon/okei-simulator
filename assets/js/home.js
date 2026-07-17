@@ -1597,6 +1597,7 @@ function updateHomeDashboard(sAll) {
   if (typeof salesManagePage !== 'undefined' && !salesManagePage.classList.contains('hidden') && typeof renderSalesManage === 'function') {
     renderSalesManage();
   }
+  // おーちゃん: 抽選はホーム入場時のみ。同期・収益数値更新・タブ復帰では文章も吹き出しDOMも変えない
   if (typeof updateOchanMessage === 'function') updateOchanMessage();
   if (typeof renderPortfolio === 'function') renderPortfolio();
 }

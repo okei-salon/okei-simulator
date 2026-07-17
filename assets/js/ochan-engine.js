@@ -42,7 +42,7 @@ function getOchanDialect() {
 function setOchanDialect(value) {
   settings.ochanDialect = value === 'kansai' ? 'kansai' : 'standard';
   if (typeof markSettingsDirty === 'function') markSettingsDirty();
-  if (typeof updateOchanMessage === 'function') updateOchanMessage();
+  // 方言変更はホーム再入場時の新規抽選で反映（滞在中の吹き出しは固定）
 }
 
 function setOchanDialectLive(value) {
@@ -373,13 +373,28 @@ function evaluateOchanMatches(ctx) {
   return matches;
 }
 
-function pickOchanLine(ctx) {
+/** ホーム滞在中に固定する吹き出し（入場時に1回だけ抽選） */
+var ochanHomeSession = null; // { id: string, text: string } | null
+
+var OCHAN_DEFAULT_LINE = { id: '__default__', text: '今日も一緒にいこう！' };
+
+function ochanIsHomeVisible() {
+  return typeof homePage !== 'undefined' && homePage && !homePage.classList.contains('hidden');
+}
+
+function clearOchanHomeSession() {
+  ochanHomeSession = null;
+}
+
+function pickOchanLineChoice(ctx) {
   if (typeof OCHAN_LINES_BY_CATEGORY === 'undefined' || typeof OCHAN_CATEGORY_META === 'undefined') {
-    return '今日も一緒にいこう！';
+    return { id: OCHAN_DEFAULT_LINE.id, text: OCHAN_DEFAULT_LINE.text };
   }
 
   let matches = evaluateOchanMatches(ctx);
-  if (!matches.length) return '今日も一緒にいこう！';
+  if (!matches.length) {
+    return { id: OCHAN_DEFAULT_LINE.id, text: OCHAN_DEFAULT_LINE.text };
+  }
 
   matches.sort(function (a, b) {
     if (a.priority !== b.priority) return a.priority - b.priority;
@@ -393,30 +408,109 @@ function pickOchanLine(ctx) {
   let active = pool.filter(function (line) {
     return isOchanLineActive(line, ctx);
   });
-  if (!active.length) return '今日も一緒にいこう！';
+  if (!active.length) {
+    return { id: OCHAN_DEFAULT_LINE.id, text: OCHAN_DEFAULT_LINE.text };
+  }
 
   let line = active[Math.floor(Math.random() * active.length)];
   let dialect = getOchanDialect();
   let raw = dialect === 'kansai' ? (line.kansai || line.standard) : (line.standard || line.kansai);
-  return applyOchanTemplate(raw, chosen.vars);
+  return {
+    id: line.id || (chosen.category + '_anon'),
+    text: applyOchanTemplate(raw, chosen.vars)
+  };
 }
 
-function updateOchanMessage() {
+function pickOchanLine(ctx) {
+  return pickOchanLineChoice(ctx).text;
+}
+
+function applyOchanHomeMessageToDom(choice) {
+  let el = document.getElementById('ochanMessageText');
+  if (!el || !choice) return;
+  el.textContent = choice.text;
+  if (choice.id) el.setAttribute('data-ochan-line-id', choice.id);
+}
+
+/**
+ * 吹き出し更新。
+ * - ホーム表示中かつセッションあり: 抽選しない（文言が同じなら DOM も触らない）
+ * - ホーム表示中かつセッションなし: 1回抽選して固定
+ * - ホーム非表示: 何もしない（破棄は showPage フック側。収益保存の showPage('home') 一瞬 hide で消えないようにする）
+ * opts.forceRepick / opts.reset は明示的な再抽選用（通常のホーム再描画では使わない）
+ */
+function updateOchanMessage(opts) {
+  opts = opts || {};
   let el = document.getElementById('ochanMessageText');
   if (!el) return;
-  let ctx = buildOchanContext();
-  el.textContent = pickOchanLine(ctx);
+
+  if (opts.reset) clearOchanHomeSession();
+
+  if (!ochanIsHomeVisible()) {
+    return;
+  }
+
+  if (!opts.forceRepick && ochanHomeSession && ochanHomeSession.text) {
+    if (el.textContent !== ochanHomeSession.text) {
+      applyOchanHomeMessageToDom(ochanHomeSession);
+    }
+    return;
+  }
+
+  let choice = pickOchanLineChoice(buildOchanContext());
+  ochanHomeSession = choice;
+  applyOchanHomeMessageToDom(choice);
 }
 
 function notifyOchanSpecialEvent(on) {
   settings.ochanSpecialEventActive = !!on;
   if (typeof markSettingsDirty === 'function') markSettingsDirty();
-  if (typeof updateOchanMessage === 'function') updateOchanMessage();
+  // ホーム滞在中の同期・再描画では変えない。特別イベントは次回ホーム入場で反映。
 }
 
 function notifyOchanProjectAdded(name) {
   settings.ochanLastProjectAddedAt = new Date().toISOString();
   settings.ochanLastProjectName = name || '';
   if (typeof markSettingsDirty === 'function') markSettingsDirty();
-  if (typeof updateOchanMessage === 'function') updateOchanMessage();
+  // 同上。滞在中は吹き出しを据え置き、再入場時に抽選。
+}
+
+/**
+ * showPage の最外側にフックし、ホーム再入場前にセッションを破棄する。
+ * （orcaOrg など render() 省略経路でも、戻ったときに新規抽選できるようにする）
+ */
+var ochanShowPageOrig = null;
+
+function ochanHookShowPageForSession() {
+  if (typeof window === 'undefined' || typeof showPage !== 'function') return;
+
+  if (!window.__ochanShowPageWrapper) {
+    window.__ochanShowPageWrapper = function (p) {
+      let wasHome = ochanIsHomeVisible();
+      if (p === 'home' && !wasHome) {
+        clearOchanHomeSession();
+      } else if (wasHome && p !== 'home') {
+        clearOchanHomeSession();
+      }
+      return ochanShowPageOrig.apply(this, arguments);
+    };
+  }
+
+  // 他フックより外側を維持（内側の実装は ochanShowPageOrig に保持）
+  if (showPage !== window.__ochanShowPageWrapper) {
+    ochanShowPageOrig = showPage;
+    window.showPage = window.__ochanShowPageWrapper;
+  }
+}
+
+if (typeof document !== 'undefined') {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', ochanHookShowPageForSession);
+  } else {
+    ochanHookShowPageForSession();
+  }
+  // excel/orca import の showPage ラップより後で外側に付け直す
+  setTimeout(ochanHookShowPageForSession, 0);
+  setTimeout(ochanHookShowPageForSession, 100);
+  setTimeout(ochanHookShowPageForSession, 500);
 }
