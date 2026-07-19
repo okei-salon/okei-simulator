@@ -107,6 +107,51 @@ function renderEniInputProgress(existing) {
     '</div>';
 }
 
+function getEniCalendarPrevDayEntry(accountId) {
+  let yKey = typeof yesterdayKey === 'function' ? yesterdayKey() : null;
+  if (!yKey || !accountId) return null;
+  let entry = typeof getRevenueEntry === 'function' ? getRevenueEntry(yKey) : null;
+  let ae = entry && entry.eniAccounts ? entry.eniAccounts[accountId] : null;
+  if (!ae || (typeof pdIsEniAccountEntryPresent === 'function' && !pdIsEniAccountEntryPresent(ae))) {
+    return null;
+  }
+  if (ae.usdtBalance == null && ae.dailyProfit == null) return null;
+  return { dateKey: yKey, entry: ae };
+}
+
+function hasEniPrevDayRevenue(accountId) {
+  return !!getEniCalendarPrevDayEntry(accountId);
+}
+
+function applyEniPrevDayRevenue(accountId) {
+  let prev = getEniCalendarPrevDayEntry(accountId);
+  let usdtEl = document.getElementById('eniUsdt_' + accountId);
+  let withdrawEl = document.getElementById('eniWithdraw_' + accountId);
+  if (!prev || !usdtEl) {
+    if (typeof showToast === 'function') showToast('⚠️ 前日の収益データがありません');
+    return;
+  }
+  let prevUsdt = Number(prev.entry.usdtBalance) || 0;
+  let prevProfit = prev.entry.dailyProfit != null && prev.entry.dailyProfit !== ''
+    ? Number(prev.entry.dailyProfit)
+    : (typeof pdEniAccountRevenueTotal === 'function' ? pdEniAccountRevenueTotal(prev.entry) : 0);
+  let withdrawRaw = withdrawEl ? String(withdrawEl.value || '').trim() : '';
+  let withdraw = withdrawRaw === '' ? 0 : Number(withdrawRaw);
+  if (!isFinite(withdraw) || withdraw < 0) withdraw = 0;
+  let nextUsdt = prevUsdt + prevProfit - withdraw;
+  if (typeof pdRoundEni === 'function') nextUsdt = pdRoundEni(nextUsdt);
+  else nextUsdt = Math.round(nextUsdt * 1000) / 1000;
+  if (nextUsdt < 0) nextUsdt = 0;
+  usdtEl.value = String(nextUsdt);
+  if (typeof usdtEl.dispatchEvent === 'function') {
+    usdtEl.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+  updateEniDerivedPreview(accountId);
+  if (typeof flashPrevDayAppliedMsg === 'function') {
+    flashPrevDayAppliedMsg('eniPrevDayMsg_' + accountId);
+  }
+}
+
 function renderEniInputAccountCard(acc, existing) {
   let dateKey = getEniEntryDateKey();
   let ae = existing ? getEniAccountEntry(existing, acc.id) : null;
@@ -122,8 +167,8 @@ function renderEniInputAccountCard(acc, existing) {
     ? '昨日のUSDT残高 0（初回）'
     : '昨日のUSDT残高 ' + eniFormatUsdt(prevUsdt);
   let totalHint = isFirst
-    ? '昨日の総実績 0（初回）'
-    : '昨日の総実績 ' + eniFormatNum(prevTotal);
+    ? '昨日の総実績 0（初回）／未入力なら前日総実績を引き継ぎ'
+    : '昨日の総実績 ' + eniFormatNum(prevTotal) + '（未入力なら引き継ぎ）';
 
   let operatingUsd = ae && ae.operationAmount != null
     ? ae.operationAmount
@@ -137,6 +182,9 @@ function renderEniInputAccountCard(acc, existing) {
   let totalPerfVal = ae && ae.totalPerformance != null ? ae.totalPerformance : '';
 
   let esc = typeof escapeHtml === 'function' ? escapeHtml : function (t) { return String(t || ''); };
+  let prevDayBtn = typeof renderPrevDayRevenueButton === 'function'
+    ? renderPrevDayRevenueButton('eni', acc.id, hasEniPrevDayRevenue(acc.id))
+    : '';
 
   // Markup mirrors RAM/ORCA cards: shared ramInput* classes only (project accent via badge token).
   return '<section class="ramInputAccount" data-acc="' + acc.id + '">' +
@@ -146,6 +194,7 @@ function renderEniInputAccountCard(acc, existing) {
     '<div class="ramInputRow"><span class="ramInputLabel">現在運用額</span><div class="ramInputField"><input type="number" step="any" min="0" id="eniOp_' + acc.id + '" class="ramInputOptional" inputmode="decimal" placeholder="0" value="' + (operatingUsd != null ? operatingUsd : '') + '"><span class="ramInputUnit">USDT</span><span class="ramInputHint">誤りがあれば修正して保存</span></div></div>' +
     '<div class="ramInputRow ramInputRow--main"><span class="ramInputLabel ramInputLabel--hero">本日のUSDT残高</span><div class="ramInputField ramInputField--hero"><input type="number" step="any" min="0" id="eniUsdt_' + acc.id + '" class="ramInputMain" inputmode="decimal" placeholder="例：2.835" value="' + usdtVal + '"><span class="ramInputUnit">USDT</span><span class="ramInputBadge">毎日入力</span><span class="ramInputHint">' + usdtHint + '</span></div></div>' +
     '<div class="ramInputRow"><span class="ramInputLabel">本日の出金額</span><div class="ramInputField"><input type="number" step="any" min="0" id="eniWithdraw_' + acc.id + '" class="ramInputOptional" inputmode="decimal" placeholder="0" value="' + withdrawVal + '"><span class="ramInputUnit">USDT</span><span class="ramInputHint">出金した日のみ。未入力は0</span></div></div>' +
+    prevDayBtn +
     '<div class="ramInputRow ramInputRow--main"><span class="ramInputLabel ramInputLabel--hero">総実績</span><div class="ramInputField ramInputField--hero"><input type="number" step="any" min="0" id="eniTotalPerf_' + acc.id + '" class="ramInputMain" inputmode="decimal" placeholder="0" value="' + totalPerfVal + '"><span class="ramInputBadge">毎日入力</span><span class="ramInputHint">' + totalHint + '</span></div></div>' +
     '<div class="ramInputRow ramInputRow--readonly"><span class="ramInputLabel">本日の利益</span><span class="ramInputVal ramInputVal--gold" id="eniDailyProfit_' + acc.id + '">—</span></div>' +
     '<div class="ramInputRow ramInputRow--readonly"><span class="ramInputLabel">本日売上</span><span class="ramInputVal ramInputVal--gold" id="eniDailySales_' + acc.id + '">—</span></div>' +
@@ -189,28 +238,42 @@ function updateEniDerivedPreview(accountId) {
   let withdraw = eniReadNonNegNumber(withdrawEl, true);
   if (withdraw == null) withdraw = 0;
 
-  if (usdt == null || totalPerf == null || isNaN(usdt) || isNaN(totalPerf) || isNaN(withdraw)) {
+  if (usdt == null || isNaN(usdt) || isNaN(withdraw)) {
     profitEl.textContent = '—';
     salesEl.textContent = '—';
     return;
+  }
+
+  // 総実績未入力時は前日総実績を仮置きして利益だけ表示（本日売上は0想定）
+  let totalForCalc = totalPerf;
+  let salesIsCarry = false;
+  if (totalForCalc == null || isNaN(totalForCalc)) {
+    let prev = typeof pdGetEniPreviousAccountEntry === 'function'
+      ? pdGetEniPreviousAccountEntry(accountId, dateKey)
+      : null;
+    totalForCalc = prev && prev.entry.totalPerformance != null
+      ? (Number(prev.entry.totalPerformance) || 0)
+      : 0;
+    salesIsCarry = true;
   }
 
   let calc = typeof pdCalcEniDailyMetrics === 'function'
     ? pdCalcEniDailyMetrics(accountId, dateKey, {
       usdtBalance: usdt,
       withdrawalAmount: withdraw,
-      totalPerformance: totalPerf
+      totalPerformance: totalForCalc
     })
     : { dailyProfit: 0, dailySales: 0 };
 
   profitEl.textContent = eniFormatUsdt(calc.dailyProfit);
-  salesEl.textContent = eniFormatNum(calc.dailySales);
+  salesEl.textContent = salesIsCarry ? eniFormatNum(0) : eniFormatNum(calc.dailySales);
 }
 
 function collectEniRevenueFromForm() {
   let accounts = getEniInputAccounts();
   let eniAccounts = {};
   let errors = [];
+  let dateKey = getEniEntryDateKey();
   accounts.forEach(function (acc) {
     let opEl = document.getElementById('eniOp_' + acc.id);
     let usdtEl = document.getElementById('eniUsdt_' + acc.id);
@@ -227,16 +290,27 @@ function collectEniRevenueFromForm() {
 
     let op = opRaw === '' ? null : Number(opRaw);
     let usdt = Number(usdtRaw);
-    let totalPerf = Number(totalRaw);
     let withdraw = withdrawRaw === '' ? 0 : Number(withdrawRaw);
+    let totalPerf;
 
     if (usdtRaw === '' || !isFinite(usdt) || usdt < 0) {
       errors.push(acc.username + ': 本日のUSDT残高は0以上の数値で入力してください');
       return;
     }
-    if (totalRaw === '' || !isFinite(totalPerf) || totalPerf < 0) {
-      errors.push(acc.username + ': 総実績は0以上の数値で入力してください');
-      return;
+    if (totalRaw === '') {
+      // 総実績未入力: 前日の総実績を引き継ぎ（本日売上=0）
+      let prev = typeof pdGetEniPreviousAccountEntry === 'function'
+        ? pdGetEniPreviousAccountEntry(acc.id, dateKey)
+        : null;
+      totalPerf = prev && prev.entry.totalPerformance != null
+        ? (Number(prev.entry.totalPerformance) || 0)
+        : 0;
+    } else {
+      totalPerf = Number(totalRaw);
+      if (!isFinite(totalPerf) || totalPerf < 0) {
+        errors.push(acc.username + ': 総実績は0以上の数値で入力してください');
+        return;
+      }
     }
     if (op != null && (!isFinite(op) || op < 0)) {
       errors.push(acc.username + ': 現在の運用額は0以上の数値で入力してください');
@@ -308,7 +382,7 @@ function openEniRevenueInput(opts) {
   let existing = getTodayEniRevenueEntry();
   modalContent.innerHTML =
     renderEniInputProgress(existing) +
-    '<p class="help ramInputLead">毎日「本日のUSDT残高」と「総実績」を入力してください。出金した日のみ出金額を入力します。本日の利益・本日売上は自動計算されます。</p>' +
+    '<p class="help ramInputLead">毎日「本日のUSDT残高」を入力してください。「前日の収益を反映」で前日利益分を残高へ加算できます。総実績は未入力でも保存でき、その場合は前日総実績を引き継ぎます（本日売上0）。出金した日のみ出金額を入力します。</p>' +
     '<div class="ramInputList">' + accounts.map(function (acc) {
       return renderEniInputAccountCard(acc, existing);
     }).join('') + '</div>' + renderEniInputFooter();
@@ -350,7 +424,7 @@ function saveEniRevenueInput() {
       return;
     }
     if (!Object.keys(collected.eniAccounts).length) {
-      alert('保存する内容がありません。USDT残高と総実績を入力してください。');
+      alert('保存する内容がありません。本日のUSDT残高を入力してください。');
       return;
     }
 

@@ -32,6 +32,95 @@ function yesterdayKey() {
   return revenueDateKey(t.getFullYear(), t.getMonth(), t.getDate());
 }
 
+/** 前日の収益反映ボタン（アカウント単位・押下時のみ） */
+function renderPrevDayRevenueButton(projectKey, accountId, enabled) {
+  let fn = projectKey === 'ram'
+    ? 'applyRamPrevDayRevenue'
+    : (projectKey === 'orca' ? 'applyOrcaPrevDayRevenue' : 'applyEniPrevDayRevenue');
+  let btnId = projectKey + 'PrevDayBtn_' + accountId;
+  let msgId = projectKey + 'PrevDayMsg_' + accountId;
+  return '<div class="ramInputRow ramInputRow--prevDay">' +
+    '<button type="button" class="btn2 ramInputPrevDayBtn" id="' + btnId + '" ' +
+    'onclick="' + fn + '(\'' + accountId + '\')"' +
+    (enabled ? '' : ' disabled aria-disabled="true"') +
+    '>前日の収益を反映</button>' +
+    '<span class="ramInputPrevDayMsg" id="' + msgId + '" aria-live="polite"></span>' +
+    '</div>';
+}
+
+function flashPrevDayAppliedMsg(msgId) {
+  let el = document.getElementById(msgId);
+  if (!el) return;
+  el.textContent = '反映しました';
+  if (el._prevDayTimer) clearTimeout(el._prevDayTimer);
+  el._prevDayTimer = setTimeout(function () {
+    if (el) el.textContent = '';
+  }, 1600);
+}
+
+function getRamPrevDayAccountEntry(accountId) {
+  let yKey = yesterdayKey();
+  if (!yKey || !accountId) return null;
+  let entry = getRevenueEntry(yKey);
+  return getRamAccountEntry(entry, accountId);
+}
+
+function hasRamPrevDayRevenue(accountId) {
+  let ae = getRamPrevDayAccountEntry(accountId);
+  return !!(ae && ae.todayRevenue != null && ae.todayRevenue !== '');
+}
+
+function applyRamPrevDayRevenue(accountId) {
+  let ae = getRamPrevDayAccountEntry(accountId);
+  let revEl = document.getElementById('ramTodayRev_' + accountId);
+  if (!revEl || !ae || ae.todayRevenue == null || ae.todayRevenue === '') {
+    showToast('⚠️ 前日の収益データがありません');
+    return;
+  }
+  revEl.value = String(Number(ae.todayRevenue) || 0);
+  if (typeof revEl.dispatchEvent === 'function') {
+    revEl.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+  flashPrevDayAppliedMsg('ramPrevDayMsg_' + accountId);
+}
+
+function getOrcaPrevDayAccountEntry(accountId) {
+  let yKey = yesterdayKey();
+  if (!yKey || !accountId) return null;
+  let entry = getRevenueEntry(yKey);
+  return getOrcaAccountEntry(entry, accountId);
+}
+
+function hasOrcaPrevDayRevenue(accountId) {
+  let ae = getOrcaPrevDayAccountEntry(accountId);
+  if (!ae) return false;
+  return ae.yesterdayAiProfit != null || ae.todayAffiliateProfit != null;
+}
+
+function applyOrcaPrevDayRevenue(accountId) {
+  let ae = getOrcaPrevDayAccountEntry(accountId);
+  let yesterdayEl = document.getElementById('orcaYesterdayAi_' + accountId);
+  let affEl = document.getElementById('orcaTodayAff_' + accountId);
+  if (!ae || (!yesterdayEl && !affEl)) {
+    showToast('⚠️ 前日の収益データがありません');
+    return;
+  }
+  if (yesterdayEl) {
+    yesterdayEl.value = String(Number(ae.yesterdayAiProfit) || 0);
+    if (typeof yesterdayEl.dispatchEvent === 'function') {
+      yesterdayEl.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+  }
+  if (affEl) {
+    affEl.value = String(Number(ae.todayAffiliateProfit) || 0);
+    if (typeof affEl.dispatchEvent === 'function') {
+      affEl.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+  }
+  if (typeof updateOrcaInputDerived === 'function') updateOrcaInputDerived(accountId);
+  flashPrevDayAppliedMsg('orcaPrevDayMsg_' + accountId);
+}
+
 function formatCalLabel(y, m) {
   return y + '年' + (m + 1) + '月';
 }
@@ -411,11 +500,21 @@ function formatRamTodaySalesPreview(accountId, totalSalesRaw) {
 
 function collectRamSalesFromForm() {
   let out = {};
+  let dateKey = todayKey();
   getRamInputAccounts().forEach(function (acc) {
     let el = document.getElementById('ramTotalSales_' + acc.id);
     if (el && el.value !== '' && !isNaN(Number(el.value))) {
       out[acc.id] = Number(el.value);
+      return;
     }
+    // 総売上未入力でも保存可: 本日売上=0 / 総売上=前日総売上を引き継ぐ
+    let revEl = document.getElementById('ramTodayRev_' + acc.id);
+    let hasRev = revEl && revEl.value !== '' && !isNaN(Number(revEl.value));
+    if (!hasRev) return;
+    let prev = typeof pdGetRamPreviousTotalSales === 'function'
+      ? pdGetRamPreviousTotalSales(acc.id, dateKey)
+      : null;
+    if (prev != null) out[acc.id] = prev;
   });
   return out;
 }
@@ -732,7 +831,8 @@ function renderRamInputAccountCard(acc, existing) {
     '<div class="ramInputRow"><span class="ramInputLabel">追加投資額</span><div class="ramInputField"><input type="number" step="1" min="0" id="ramAddInv_' + acc.id + '" class="ramInputOptional" placeholder="0" value="' + addInv + '"><span class="ramInputUnit">ドル</span><span class="ramInputHint">追加投資があった時のみ入力</span></div></div>' +
     '<div class="ramInputRow ramInputRow--readonly"><span class="ramInputLabel">運用</span><span class="ramInputVal ramInputVal--gold" id="ramProfit_' + acc.id + '">' + money(calcRamOperatingProfit(effectiveInv)) + '</span></div>' +
     '<div class="ramInputRow ramInputRow--main"><span class="ramInputLabel ramInputLabel--hero">本日収益</span><div class="ramInputField ramInputField--hero"><input type="number" step="0.01" min="0" id="ramTodayRev_' + acc.id + '" class="ramInputMain" inputmode="decimal" placeholder="0" value="' + todayRev + '"><span class="ramInputUnit">ドル</span><span class="ramInputBadge">毎日入力</span></div></div>' +
-    '<div class="ramInputRow"><span class="ramInputLabel">総売上</span><div class="ramInputField"><input type="number" step="0.01" id="ramTotalSales_' + acc.id + '" class="ramInputOptional" inputmode="decimal" placeholder="0" value="' + totalSalesVal + '"><span class="ramInputUnit">ドル</span><span class="ramInputHint">' + salesHint + '</span></div></div>' +
+    renderPrevDayRevenueButton('ram', acc.id, hasRamPrevDayRevenue(acc.id)) +
+    '<div class="ramInputRow"><span class="ramInputLabel">総売上</span><div class="ramInputField"><input type="number" step="0.01" id="ramTotalSales_' + acc.id + '" class="ramInputOptional" inputmode="decimal" placeholder="0" value="' + totalSalesVal + '"><span class="ramInputUnit">ドル</span><span class="ramInputHint">' + salesHint + '（未入力なら前日総売上を引き継ぎ）</span></div></div>' +
     '<div class="ramInputRow ramInputRow--readonly"><span class="ramInputLabel">本日売上</span><span class="ramInputVal" id="ramTodaySales_' + acc.id + '">' + todaySalesPreview + '</span></div>' +
     (typeof aimRenderInputAccountActions === 'function'
       ? aimRenderInputAccountActions('ram', acc.id, acc.username, 'openRamRevenueInput')
@@ -1714,7 +1814,7 @@ function openRamRevenueInput() {
 
   modalContent.innerHTML =
     renderRamInputProgress(existing) +
-    '<p class="help ramInputLead">「現在運用額」は誤りがあれば修正できます。追加投資があった日は「追加投資額」を入力すると運用額に自動加算されます。毎日入力するのは「本日収益」と「総売上」です。</p>' +
+    '<p class="help ramInputLead">「現在運用額」は誤りがあれば修正できます。追加投資があった日は「追加投資額」を入力すると運用額に自動加算されます。毎日の「本日収益」は「前日の収益を反映」でも入れられます。総売上は未入力でも保存でき、その場合は前日総売上を引き継ぎます（本日売上0）。</p>' +
     '<div class="ramInputList">' + cards + '</div>' +
     renderRamInputFooter();
 
@@ -2087,11 +2187,23 @@ function orcaInputDiffersFromSaved(collected, existing) {
 
 function collectOrcaSalesFromForm() {
   let out = {};
+  let dateKey = todayKey();
   getOrcaInputAccounts().forEach(function (acc) {
     let el = document.getElementById('orcaTotalSales_' + acc.id);
     if (el && el.value !== '' && !isNaN(Number(el.value))) {
       out[acc.id] = Number(el.value);
+      return;
     }
+    // 総売上未入力でも保存可: 本日売上=0 / 総売上=前日総売上を引き継ぐ
+    let yesterdayEl = document.getElementById('orcaYesterdayAi_' + acc.id);
+    let affEl = document.getElementById('orcaTodayAff_' + acc.id);
+    let hasRev = (yesterdayEl && yesterdayEl.value !== '' && !isNaN(Number(yesterdayEl.value))) ||
+      (affEl && affEl.value !== '' && !isNaN(Number(affEl.value)));
+    if (!hasRev) return;
+    let prev = typeof pdGetOrcaPreviousTotalSales === 'function'
+      ? pdGetOrcaPreviousTotalSales(acc.id, dateKey)
+      : null;
+    if (prev != null) out[acc.id] = prev;
   });
   return out;
 }
@@ -2300,8 +2412,9 @@ function renderOrcaInputAccountCard(acc, existing) {
     '<div class="ramInputRow"><span class="ramInputLabel">現在運用額</span><div class="ramInputField"><input type="number" step="1" min="0" id="orcaOp_' + acc.id + '" class="ramInputOptional" inputmode="decimal" placeholder="0" value="' + operatingUsd + '"><span class="ramInputUnit">ドル</span><span class="ramInputHint">誤りがあれば修正して保存</span></div></div>' +
     '<div class="ramInputRow ramInputRow--main"><span class="ramInputLabel ramInputLabel--hero">昨日AI利益</span><div class="ramInputField ramInputField--hero"><input type="number" step="0.01" min="0" id="orcaYesterdayAi_' + acc.id + '" class="ramInputMain" inputmode="decimal" placeholder="0" value="' + yesterdayAi + '"><span class="ramInputUnit">ドル</span><span class="ramInputBadge">毎日入力</span></div></div>' +
     '<div class="ramInputRow ramInputRow--main"><span class="ramInputLabel ramInputLabel--hero">本日AF収益</span><div class="ramInputField ramInputField--hero"><input type="number" step="0.01" min="0" id="orcaTodayAff_' + acc.id + '" class="ramInputMain" inputmode="decimal" placeholder="0" value="' + todayAff + '"><span class="ramInputUnit">ドル</span><span class="ramInputBadge">毎日入力</span></div></div>' +
+    renderPrevDayRevenueButton('orca', acc.id, hasOrcaPrevDayRevenue(acc.id)) +
     '<div class="ramInputRow ramInputRow--readonly"><span class="ramInputLabel">本日のORCA合計</span><span class="ramInputVal ramInputVal--gold" id="orcaTotal_' + acc.id + '">' + money(total) + '</span></div>' +
-    '<div class="ramInputRow"><span class="ramInputLabel">総売上</span><div class="ramInputField"><input type="number" step="0.01" id="orcaTotalSales_' + acc.id + '" class="ramInputOptional" inputmode="decimal" placeholder="0" value="' + totalSalesVal + '"><span class="ramInputUnit">ドル</span><span class="ramInputHint">' + salesHint + '</span></div></div>' +
+    '<div class="ramInputRow"><span class="ramInputLabel">総売上</span><div class="ramInputField"><input type="number" step="0.01" id="orcaTotalSales_' + acc.id + '" class="ramInputOptional" inputmode="decimal" placeholder="0" value="' + totalSalesVal + '"><span class="ramInputUnit">ドル</span><span class="ramInputHint">' + salesHint + '（未入力なら前日総売上を引き継ぎ）</span></div></div>' +
     '<div class="ramInputRow ramInputRow--readonly"><span class="ramInputLabel">本日売上</span><span class="ramInputVal" id="orcaTodaySales_' + acc.id + '">' + todaySalesPreview + '</span></div>' +
     (typeof aimRenderInputAccountActions === 'function'
       ? aimRenderInputAccountActions('orca', acc.id, acc.username, 'openOrcaRevenueInput')
@@ -2329,7 +2442,7 @@ function openOrcaRevenueInput() {
 
   modalContent.innerHTML =
     renderOrcaInputProgress(existing) +
-    '<p class="help ramInputLead">毎日入力するのは「昨日AI利益」と「本日AF収益」です。合計は自動で「本日のORCA合計」として全画面に反映されます。</p>' +
+    '<p class="help ramInputLead">毎日入力するのは「昨日AI利益」と「本日AF収益」です。「前日の収益を反映」で同じ値を入れられます。総売上は未入力でも保存でき、その場合は前日総売上を引き継ぎます（本日売上0）。</p>' +
     '<div class="ramInputList">' + cards + '</div>' +
     renderOrcaInputFooter();
 

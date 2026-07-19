@@ -3587,6 +3587,33 @@
   width: 100%;
 }
 
+.ramInputRow--prevDay {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 2px 0 8px;
+}
+
+.ramInputPrevDayBtn {
+  min-height: 36px;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 800;
+  border-radius: 10px;
+}
+
+.ramInputPrevDayBtn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.ramInputPrevDayMsg {
+  font-size: 12px;
+  font-weight: 700;
+  color: #6ee7a8;
+}
+
 @media (max-width: 900px) {
   .ramInputRow {
     grid-template-columns: 1fr;
