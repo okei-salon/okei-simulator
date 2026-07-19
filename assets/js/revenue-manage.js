@@ -16,12 +16,9 @@ var RM_ACCOUNT_DETAIL_DEFS = {
     { key: 'total', label: '合計' }
   ],
   eni: [
-    { key: 'operationAmount', label: '運用額' },
-    { key: 'usdtBalance', label: 'USDT残高' },
-    { key: 'withdrawalAmount', label: '出金額' },
-    { key: 'totalPerformance', label: '総実績' },
-    { key: 'dailyProfit', label: '本日の利益' },
-    { key: 'dailySales', label: '本日売上' }
+    // 収益管理は日付ごとの利益推移をシンプルに確認する画面。
+    // 運用額・USDT残高・出金額・総実績・本日売上は実績入力側の項目のためここでは出さない。
+    { key: 'dailyProfit', label: '本日の利益' }
   ]
 };
 
