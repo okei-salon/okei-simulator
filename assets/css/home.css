@@ -2311,6 +2311,33 @@
   color: var(--text);
 }
 
+.homeSummaryList--dayDetail {
+  margin-top: 0;
+}
+
+.homeSummaryDivider {
+  height: 0;
+  margin: 4px 2px 2px;
+  border: 0;
+  border-top: 1px solid #3a5478;
+}
+
+.homeSummaryRow--total {
+  background: #0c1a30;
+  border-color: #3d5f8f;
+  font-weight: 700;
+}
+
+.homeSummaryRow--total b {
+  font-size: 15px;
+  color: #fff;
+}
+
+.homeSummaryTotalYen {
+  margin: 2px 2px 0;
+  text-align: right;
+}
+
 .homeSummaryProjLabel {
   display: inline-flex;
   align-items: center;

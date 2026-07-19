@@ -1610,33 +1610,29 @@ function showRevenueDayDetail(key) {
   if (!entry) {
     modalContent.innerHTML = '<div class="lineBox"><b>未入力</b><p class="help">この日付の実績はまだ記録されていません。</p></div>';
   } else {
-    let dayTotal = sumEntryRegisteredTotal(entry, key);
+    // カレンダー詳細はプロジェクト単位のみ（アカウント別内訳は出さない）
     let projectRows = getHomeProjectRegistry().map(function (p) {
       let amt = getHomeTodayProjectAmount(p.key, entry, key);
       return { proj: p, amt: amt || 0 };
-    }).filter(function (row) { return row.amt > 0; });
+    });
+    let dayTotal = projectRows.reduce(function (sum, row) {
+      return sum + (Number(row.amt) || 0);
+    }, 0);
     let projectHtml = projectRows.map(function (row) {
       return '<div class="homeSummaryRow"><span class="homeSummaryProjLabel">' +
         renderHomeProjIcon(row.proj.key, 'homeSummaryProjIcon') +
         '<span>' + escapeHtml(row.proj.name) + '</span></span><b>' + money(row.amt) + '</b></div>';
     }).join('');
-    let ramDetail = '';
-    if (entry.ramAccounts && typeof getRamInputAccounts === 'function' &&
-      getHomeProjectRegistry().some(function (p) { return p.key === 'ram'; })) {
-      let rows = getRamInputAccounts().map(function (acc) {
-        let ae = entry.ramAccounts[acc.id];
-        if (!ae) return '';
-        let total = typeof pdRamAccountRevenueTotal === 'function'
-          ? pdRamAccountRevenueTotal(ae, acc.id, key)
-          : (ae.todayRevenue || 0);
-        return '<div class="homeSummaryRow"><span>' + escapeHtml(acc.username) + '</span><b>' + money(total) + '</b></div>';
-      }).join('');
-      if (rows) ramDetail = '<div class="lineBox" style="margin-top:10px"><b>RAM アカウント別</b><div class="homeSummaryList">' + rows + '</div></div>';
-    }
+    let totalHtml =
+      '<div class="homeSummaryDivider" aria-hidden="true"></div>' +
+      '<div class="homeSummaryRow homeSummaryRow--total">' +
+      '<span>合計</span><b>' + money(dayTotal) + '</b></div>' +
+      '<div class="help homeSummaryTotalYen">' + yen(dayTotal) + '</div>';
     modalContent.innerHTML =
-      '<div class="lineBox"><b>合計</b><div class="amount">' + money(dayTotal) + '</div><div class="help">' + yen(dayTotal) + '</div></div>' +
-      (projectHtml ? '<div class="homeSummaryList" style="margin-top:10px">' + projectHtml + '</div>' : '') +
-      ramDetail +
+      '<div class="homeSummaryList homeSummaryList--dayDetail">' +
+      (projectHtml || '<div class="help">この日のプロジェクト収益はありません。</div>') +
+      totalHtml +
+      '</div>' +
       (entry.savedAt ? '<p class="help" style="margin-top:10px">記録：' + entry.savedAt + '</p>' : '');
   }
   modalBg.style.display = 'flex';
