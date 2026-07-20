@@ -160,6 +160,345 @@
   cursor: default;
 }
 
+#eniOrgPage .eniIncomeCards .eniHelpQ {
+  float: right;
+  border-color: rgba(163, 230, 53, 0.45);
+  background: rgba(13, 27, 48, 0.88);
+  box-shadow: 0 0 10px rgba(163, 230, 53, 0.18);
+  color: #ecfccb;
+}
+
+#eniOrgPage .eniIncomeCards .eniHelpQ:hover {
+  border-color: #a3e635;
+  box-shadow: 0 0 14px rgba(163, 230, 53, 0.32);
+}
+
+#eniOrgPage .eniIncomeCards .eniCardClickable {
+  cursor: pointer;
+}
+
+#eniOrgPage .eniIncomeCards .eniCardClickable:hover {
+  border-color: rgba(163, 230, 53, 0.45);
+  box-shadow: 0 0 18px rgba(163, 230, 53, 0.16);
+}
+
+/* Team reward breakdown modal */
+.eniTeamBreakdown {
+  display: grid;
+  gap: 12px;
+  padding-bottom: 4px;
+}
+
+.eniGenCard {
+  padding: 14px 14px 12px;
+  border-radius: 16px;
+  border: 1px solid rgba(163, 230, 53, 0.22);
+  background: linear-gradient(160deg, rgba(20, 36, 58, 0.94), rgba(10, 22, 38, 0.9));
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.eniGenCardHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.eniGenTitle {
+  font-size: 24px;
+  font-weight: 900;
+  color: #ecfccb;
+  letter-spacing: 0.02em;
+  line-height: 1.2;
+}
+
+.eniGenCountBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(163, 230, 53, 0.35);
+  background: rgba(163, 230, 53, 0.12);
+  color: #d9f99d;
+  font-size: 12px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.eniGenRewardBlock {
+  margin-bottom: 12px;
+}
+
+.eniGenRewardLabel {
+  font-size: 12px;
+  font-weight: 800;
+  color: #9fb3cc;
+  margin-bottom: 4px;
+}
+
+.eniGenReward {
+  font-size: 20px;
+  font-weight: 900;
+  line-height: 1.2;
+  color: #fef08a;
+  letter-spacing: -0.01em;
+}
+
+.eniGenMeta {
+  display: grid;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(84, 120, 160, 0.28);
+}
+
+.eniGenMetaRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+  font-size: 13px;
+}
+
+.eniGenMetaRow span {
+  color: #c6d4e6;
+  font-weight: 800;
+}
+
+.eniGenMetaRow b {
+  color: #e8f0fa;
+  font-weight: 800;
+  text-align: right;
+}
+
+.eniGenFormula {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(84, 120, 160, 0.35);
+  background: rgba(8, 20, 38, 0.55);
+}
+
+.eniGenFormulaTitle {
+  font-size: 12px;
+  font-weight: 900;
+  color: #bef264;
+  margin-bottom: 6px;
+}
+
+.eniGenFormulaBody {
+  font-size: 13px;
+  line-height: 1.65;
+  color: #d7e6f7;
+  font-weight: 700;
+}
+
+.eniGenFormulaResult {
+  display: inline-block;
+  margin-top: 4px;
+  color: #fef08a;
+  font-weight: 900;
+}
+
+.eniGenEmpty {
+  padding: 18px 14px;
+  border-radius: 14px;
+  border: 1px dashed rgba(84, 120, 160, 0.45);
+  color: #9fb3cc;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.eniTeamBreakdownTotal {
+  margin-top: 6px;
+  padding: 18px 16px;
+  text-align: center;
+  border-radius: 18px;
+  border: 1px solid rgba(250, 204, 21, 0.35);
+  background: linear-gradient(165deg, rgba(42, 36, 18, 0.95), rgba(16, 24, 18, 0.96));
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(254, 240, 138, 0.12);
+}
+
+.eniTeamBreakdownTotalLabel {
+  font-size: 13px;
+  font-weight: 900;
+  color: #d9f99d;
+  letter-spacing: 0.06em;
+}
+
+.eniTeamBreakdownTotalValue {
+  margin-top: 8px;
+  font-size: 28px;
+  font-weight: 900;
+  color: #fef08a;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+}
+
+@media (max-width: 900px) {
+  .eniTeamBreakdown {
+    gap: 10px;
+  }
+
+  .eniGenCard {
+    padding: 13px 12px 11px;
+    border-radius: 14px;
+  }
+
+  .eniGenTitle {
+    font-size: 22px;
+  }
+
+  .eniGenReward {
+    font-size: 18px;
+  }
+
+  .eniTeamBreakdownTotal {
+    padding: 16px 14px;
+    border-radius: 16px;
+  }
+
+  .eniTeamBreakdownTotalValue {
+    font-size: 24px;
+  }
+
+  .eniGenMetaRow,
+  .eniGenFormulaBody {
+    font-size: 12.5px;
+  }
+}
+
+/* ENI card help modal (glass) */
+.eniHelpExplain {
+  color: #d7e6f7;
+  font-size: 14px;
+  line-height: 1.65;
+  padding-bottom: 4px;
+}
+
+.eniHelpExplain .eniHelpLead {
+  margin: 0 0 12px;
+  color: #e8f0fa;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.eniHelpExplain .eniHelpCard {
+  margin: 0 0 12px;
+  padding: 12px 13px;
+  border-radius: 14px;
+  border: 1px solid rgba(163, 230, 53, 0.22);
+  background: linear-gradient(160deg, rgba(20, 36, 58, 0.92), rgba(10, 22, 38, 0.88));
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.eniHelpExplain .eniHelpCardTitle {
+  font-weight: 900;
+  font-size: 13px;
+  letter-spacing: 0.02em;
+  color: #d9f99d;
+  margin: 0 0 8px;
+}
+
+.eniHelpExplain .eniHelpCardBody {
+  color: #e8f0fa;
+  font-size: 13.5px;
+  line-height: 1.7;
+  font-weight: 650;
+}
+
+.eniHelpExplain .eniHelpExampleLabel,
+.eniHelpExplain .eniHelpExampleSub {
+  font-weight: 900;
+  color: #f0fdf4;
+  margin: 0 0 6px;
+}
+
+.eniHelpExplain .eniHelpExampleSub {
+  margin-top: 2px;
+  color: #bef264;
+  font-size: 12.5px;
+}
+
+.eniHelpExplain .eniHelpExampleLines {
+  color: #e8f0fa;
+}
+
+.eniHelpExplain .eniHelpExampleLines b {
+  color: #fef08a;
+  font-weight: 900;
+}
+
+.eniHelpExplain .eniHelpNote {
+  margin: 10px 0 0;
+  font-size: 12px;
+  line-height: 1.55;
+  color: #9fb3cc;
+}
+
+.eniHelpExplain .eniHelpTable {
+  width: 100%;
+  margin-top: 2px;
+  font-size: 12px;
+}
+
+.eniHelpExplain .eniHelpTable th,
+.eniHelpExplain .eniHelpTable td {
+  padding: 8px 6px;
+  border-bottom: 1px solid rgba(84, 120, 160, 0.35);
+  text-align: left;
+  vertical-align: top;
+}
+
+.eniHelpExplain .eniHelpTable th {
+  color: #bef264;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.eniHelpExplain .eniHelpTable td {
+  color: #e8f0fa;
+  font-weight: 650;
+}
+
+.eniHelpExplain .eniHelpTable tr:last-child td {
+  border-bottom: none;
+}
+
+@media (max-width: 900px) {
+  .eniHelpExplain {
+    font-size: 13.5px;
+  }
+
+  .eniHelpExplain .eniHelpLead {
+    font-size: 13.5px;
+    margin-bottom: 10px;
+  }
+
+  .eniHelpExplain .eniHelpCard {
+    padding: 11px 12px;
+    margin-bottom: 10px;
+    border-radius: 12px;
+  }
+
+  .eniHelpExplain .eniHelpCardBody,
+  .eniHelpExplain .eniHelpTable {
+    font-size: 12.5px;
+  }
+
+  .eniHelpExplain .eniHelpTable th,
+  .eniHelpExplain .eniHelpTable td {
+    padding: 7px 4px;
+  }
+}
+
 #eniOrgPage .eniIncomeCards .card .label,
 #eniOrgPage .eniIncomeCards .card .main {
   min-width: 0;

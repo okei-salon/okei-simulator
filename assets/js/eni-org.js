@@ -194,34 +194,72 @@ function eniMonthlyFromDaily(daily) {
   return eniRoundReward((Number(daily) || 0) * ENI_REWARD_MONTH_DAYS);
 }
 
+/** 世代解放に必要な直紹介人数（将来の「あと○人で解放」表示用） */
+function eniDirectsNeededForGen(gen) {
+  var g = Number(gen) || 0;
+  if (g === 1) return 1;
+  if (g === 2) return 2;
+  if (g === 3) return 3;
+  if (g === 4) return 4;
+  if (g === 5) return 5;
+  if (g === 6) return 6;
+  if (g >= 7 && g <= 20) return 7;
+  if (g >= 21 && g <= 30) return 8;
+  if (g >= 31 && g <= 100) return 9;
+  return null;
+}
+
+function eniEmptyRewardState() {
+  return {
+    stakingDaily: 0,
+    stakingMonthly: 0,
+    teamDaily: 0,
+    teamMonthly: 0,
+    totalMonthly: 0,
+    teamVolume: 0,
+    directCount: 0,
+    generations: [],
+    visibleGenerations: []
+  };
+}
+
+function eniFormatUsdtAmount(n) {
+  var v = Number(n);
+  if (!isFinite(v)) v = 0;
+  v = eniRoundReward(v);
+  var text = v.toLocaleString('en-US', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2
+  });
+  return text + ' USDT';
+}
+
+function eniFormatRatePct(rate) {
+  var pct = (Number(rate) || 0) * 100;
+  var rounded = Math.round(pct * 1000) / 1000;
+  return String(rounded) + '%';
+}
+
+function eniFormatPlainAmount(n) {
+  var v = Number(n);
+  if (!isFinite(v)) v = 0;
+  v = eniRoundReward(v);
+  return v.toLocaleString('en-US', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2
+  });
+}
+
 /**
- * 指定アカウントを基点にした報酬・実績。
+ * 指定アカウントを基点にした報酬・実績・世代内訳。
  * 各ノードは「そのノード自身の直紹介人数・世代解放」で独立計算する。
  */
 function eniCalcRewardsFor(rootId) {
-  if (!rootId) {
-    return {
-      stakingDaily: 0,
-      stakingMonthly: 0,
-      teamDaily: 0,
-      teamMonthly: 0,
-      totalMonthly: 0,
-      teamVolume: 0,
-      directCount: 0
-    };
-  }
+  if (!rootId) return eniEmptyRewardState();
   if (eniRewardCache[rootId]) return eniRewardCache[rootId];
   var root = eniFindMember(rootId);
   if (!root || !eniIsMemberActive(root)) {
-    var empty = {
-      stakingDaily: 0,
-      stakingMonthly: 0,
-      teamDaily: 0,
-      teamMonthly: 0,
-      totalMonthly: 0,
-      teamVolume: 0,
-      directCount: 0
-    };
+    var empty = eniEmptyRewardState();
     eniRewardCache[rootId] = empty;
     return empty;
   }
@@ -233,6 +271,7 @@ function eniCalcRewardsFor(rootId) {
   var directs = eniChildrenOf(rootId);
   var directCount = directs.length;
   var teamDaily = 0;
+  var byGen = {};
   var visited = {};
   visited[rootId] = true;
 
@@ -249,10 +288,18 @@ function eniCalcRewardsFor(rootId) {
     if (!member || !eniIsMemberActive(member)) continue;
     if (item.gen < 1 || item.gen > ENI_MAX_REWARD_GEN) continue;
 
+    var childStake = eniGetStakingAmount(item.id);
+    if (!byGen[item.gen]) {
+      byGen[item.gen] = { count: 0, stakeTotal: 0, daily: 0 };
+    }
+    byGen[item.gen].count += 1;
+    byGen[item.gen].stakeTotal += childStake;
+
     var rate = eniGenerationRate(item.gen, directCount);
     if (rate > 0) {
-      var childStake = eniGetStakingAmount(item.id);
-      teamDaily += eniDailyStakingReward(childStake) * rate;
+      var memberDaily = eniDailyStakingReward(childStake) * rate;
+      byGen[item.gen].daily += memberDaily;
+      teamDaily += memberDaily;
     }
 
     if (item.gen < ENI_MAX_REWARD_GEN) {
@@ -264,18 +311,112 @@ function eniCalcRewardsFor(rootId) {
 
   teamDaily = eniRoundReward(teamDaily);
   var teamMonthly = eniMonthlyFromDaily(teamDaily);
-  var teamVolume = eniCalcTeamVolume(rootId);
+  var generations = [];
+  var visibleGenerations = [];
+  for (var g = 1; g <= ENI_MAX_REWARD_GEN; g++) {
+    var bucket = byGen[g] || { count: 0, stakeTotal: 0, daily: 0 };
+    var genRate = eniGenerationRate(g, directCount);
+    var unlocked = genRate > 0;
+    var directsNeeded = eniDirectsNeededForGen(g);
+    var directsRemaining = unlocked || directsNeeded == null
+      ? 0
+      : Math.max(0, directsNeeded - directCount);
+    var genMonthly = unlocked ? eniMonthlyFromDaily(bucket.daily) : 0;
+    var row = {
+      gen: g,
+      count: bucket.count,
+      stakeTotal: eniRoundReward(bucket.stakeTotal),
+      rate: genRate,
+      daily: unlocked ? eniRoundReward(bucket.daily) : 0,
+      monthly: genMonthly,
+      unlocked: unlocked,
+      directsNeeded: directsNeeded,
+      directsRemaining: directsRemaining
+    };
+    generations.push(row);
+    if (unlocked && row.count > 0) visibleGenerations.push(row);
+  }
+
   var result = {
     stakingDaily: stakingDaily,
     stakingMonthly: stakingMonthly,
     teamDaily: teamDaily,
     teamMonthly: teamMonthly,
     totalMonthly: eniRoundReward(stakingMonthly + teamMonthly),
-    teamVolume: teamVolume,
-    directCount: directCount
+    teamVolume: eniCalcTeamVolume(rootId),
+    directCount: directCount,
+    generations: generations,
+    visibleGenerations: visibleGenerations
   };
   eniRewardCache[rootId] = result;
   return result;
+}
+
+/** チーム報酬の世代別内訳（上部カードと同値） */
+function eniCalcTeamRewardBreakdown(rootId) {
+  var rewards = eniCalcRewardsFor(rootId);
+  return {
+    directCount: rewards.directCount,
+    generations: rewards.generations || [],
+    visibleGenerations: rewards.visibleGenerations || [],
+    teamDaily: rewards.teamDaily,
+    teamMonthly: rewards.teamMonthly
+  };
+}
+
+function eniShowTeamRewardDetail() {
+  if (typeof modalTitle === 'undefined' || typeof modalContent === 'undefined' || typeof modalBg === 'undefined') {
+    return;
+  }
+  var root = eniRootId ? eniFindMember(eniRootId) : null;
+  if (!root || !eniIsMemberActive(root)) {
+    if (typeof showToast === 'function') showToast('⚠️ 表示中のアカウントがありません');
+    return;
+  }
+  var breakdown = eniCalcTeamRewardBreakdown(root.id);
+  var cards = breakdown.visibleGenerations.map(function (row) {
+    var stakeText = eniFormatPlainAmount(row.stakeTotal);
+    var rateText = eniFormatRatePct(row.rate);
+    var monthlyText = eniFormatUsdtAmount(row.monthly);
+    return '<div class="eniGenCard">' +
+      '<div class="eniGenCardHead">' +
+      '<div class="eniGenTitle">第' + row.gen + '世代</div>' +
+      '<span class="eniGenCountBadge">' + row.count + '人</span>' +
+      '</div>' +
+      '<div class="eniGenRewardBlock">' +
+      '<div class="eniGenRewardLabel">月間報酬</div>' +
+      '<div class="eniGenReward">' + eniEscape(monthlyText) + '</div>' +
+      '</div>' +
+      '<div class="eniGenMeta">' +
+      '<div class="eniGenMetaRow"><span>💰 ステーキング合計</span><b>' +
+      eniEscape(stakeText + ' USDT') + '</b></div>' +
+      '<div class="eniGenMetaRow"><span>📈 報酬率</span><b>' +
+      eniEscape(rateText) + '</b></div>' +
+      '</div>' +
+      '<div class="eniGenFormula">' +
+      '<div class="eniGenFormulaTitle">【計算式】</div>' +
+      '<div class="eniGenFormulaBody">' +
+      eniEscape(stakeText) + ' × 0.9%<br>' +
+      '× 30日<br>' +
+      '× ' + eniEscape(rateText) + '<br>' +
+      '<span class="eniGenFormulaResult">＝ ' + eniEscape(monthlyText) + '／月</span>' +
+      '</div>' +
+      '</div>' +
+      '</div>';
+  }).join('');
+
+  modalTitle.textContent = 'チーム報酬内訳';
+  modalContent.innerHTML =
+    '<div class="eniTeamBreakdown">' +
+    (cards || '<div class="eniGenEmpty">解放済み世代にメンバーがいません</div>') +
+    '<div class="eniTeamBreakdownTotal">' +
+    '<div class="eniTeamBreakdownTotalLabel">チーム報酬合計</div>' +
+    '<div class="eniTeamBreakdownTotalValue">' +
+    eniEscape(eniFormatUsdtAmount(breakdown.teamMonthly)) + '／月</div>' +
+    '</div>' +
+    '</div>';
+  modalBg.style.display = 'flex';
+  if (modalContent.scrollTop != null) modalContent.scrollTop = 0;
 }
 
 /** ウォレット下4桁（0x除去後）。 */
@@ -453,6 +594,97 @@ function eniReflectionRate() {
     }
   });
   return Math.round((entered / total) * 100);
+}
+
+function eniHelpCard(title, bodyHtml) {
+  return '<div class="eniHelpCard">' +
+    '<div class="eniHelpCardTitle">' + title + '</div>' +
+    '<div class="eniHelpCardBody">' + bodyHtml + '</div>' +
+    '</div>';
+}
+
+function eniCardHelpTotalBody() {
+  return '<p class="eniHelpLead">ステーキング報酬とチーム報酬を合計した予測月間利益です。</p>' +
+    eniHelpCard('計算式', '合計利益 ＝ ステーキング報酬 ＋ チーム報酬');
+}
+
+function eniCardHelpStakingBody() {
+  return '<p class="eniHelpLead">ステーキング額に応じて毎日発生する報酬です。</p>' +
+    eniHelpCard('計算式', 'ステーキング額 × 0.9% × 30日') +
+    eniHelpCard('計算例',
+      '<div class="eniHelpExampleLabel">300USDTの場合</div>' +
+      '<div class="eniHelpExampleLines">' +
+      '300 × 0.9% × 30日<br>' +
+      '＝ <b>81USDT／月</b>' +
+      '</div>');
+}
+
+function eniCardHelpTeamBody() {
+  var rows = [
+    ['直紹介1人', '第1世代', '5%'],
+    ['直紹介2人', '第2世代', '6%'],
+    ['直紹介3人', '第3世代', '7%'],
+    ['直紹介4人', '第4世代', '8%'],
+    ['直紹介5人', '第5世代', '9%'],
+    ['直紹介6人', '第6世代', '10%'],
+    ['直紹介7人', '第7〜20世代', '3%'],
+    ['直紹介8人', '第21〜30世代', '2%'],
+    ['直紹介9人', '第31〜100世代', '0.5%']
+  ];
+  var table = '<table class="helpTable eniHelpTable">' +
+    '<thead><tr><th>直紹介人数</th><th>報酬対象</th><th>報酬率</th></tr></thead><tbody>' +
+    rows.map(function (r) {
+      return '<tr><td>' + r[0] + '</td><td>' + r[1] + '</td><td>' + r[2] + '</td></tr>';
+    }).join('') +
+    '</tbody></table>';
+  return '<p class="eniHelpLead">配下メンバーのステーキング報酬から発生する紹介報酬です。</p>' +
+    eniHelpCard('世代解放条件', table +
+      '<p class="eniHelpNote">※直紹介9人で最大100世代までのチーム報酬を受け取ることができます。</p>') +
+    eniHelpCard('計算例',
+      '<div class="eniHelpExampleLabel">第1世代に300USDTのメンバーがいる場合</div>' +
+      '<div class="eniHelpExampleLines">' +
+      '<div class="eniHelpExampleSub">ステーキング報酬</div>' +
+      '300 × 0.9% × 30日<br>' +
+      '＝ 81USDT／月<br><br>' +
+      '<div class="eniHelpExampleSub">チーム報酬</div>' +
+      '81 × 5%<br>' +
+      '＝ <b>4.05USDT／月</b>' +
+      '</div>');
+}
+
+function eniCardHelpVolumeBody() {
+  return '<p class="eniHelpLead">自分より下のメンバー全員のステーキング額合計です。</p>' +
+    '<p class="eniHelpLead">組織全体の規模や成長状況を確認するための指標として表示しています。</p>' +
+    eniHelpCard('計算例',
+      '<div class="eniHelpExampleLines">' +
+      'Aさん：300USDT<br>' +
+      'Bさん：600USDT<br>' +
+      'Cさん：1,000USDT<br><br>' +
+      'チーム実績<br>' +
+      '＝ <b>1,900USDT</b>' +
+      '</div>');
+}
+
+function eniCardHelpMap() {
+  return {
+    total: { title: '合計利益とは？', body: eniCardHelpTotalBody() },
+    staking: { title: 'ステーキング報酬とは？', body: eniCardHelpStakingBody() },
+    team: { title: 'チーム報酬とは？', body: eniCardHelpTeamBody() },
+    volume: { title: 'チーム実績とは？', body: eniCardHelpVolumeBody() }
+  };
+}
+
+function eniShowCardHelp(type) {
+  var map = eniCardHelpMap();
+  var entry = map[type];
+  if (!entry || typeof modalTitle === 'undefined' || typeof modalContent === 'undefined' || typeof modalBg === 'undefined') {
+    return;
+  }
+  modalTitle.textContent = entry.title;
+  modalContent.innerHTML = '<div class="explain eniHelpExplain">' + (entry.body || '説明は準備中です。') + '</div>';
+  modalBg.style.display = 'flex';
+  var body = document.getElementById('modalContent');
+  if (body) body.scrollTop = 0;
 }
 
 function eniRenderCards() {
