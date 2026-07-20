@@ -82,6 +82,10 @@ function aimUpdateInputAccountInvestment(projectKey, accountId, amount) {
     let om = orcaMembers.find(function (x) { return x.id === accountId; });
     if (om) om.investment = amount;
   }
+  if (projectKey === 'eni' && typeof eniMembers !== 'undefined') {
+    let em = eniMembers.find(function (x) { return x.id === accountId; });
+    if (em) em.investment = amount;
+  }
   if (typeof pdSetManualOperatingAmount === 'function' && projectKey === 'ram') {
     let dateKey = typeof todayKey === 'function' ? todayKey() : '';
     if (dateKey) pdSetManualOperatingAmount(accountId, 'ram', dateKey, amount, { skipPersist: true });

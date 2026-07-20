@@ -15,6 +15,13 @@ var eniPinchStartZoom = 1;
 var eniVolCache = {};
 var eniCountCache = {};
 var eniDepthCache = {};
+var eniRewardCache = {};
+var eniStakeCache = {};
+
+/** USDT 日利（配当内訳の USDT 0.9%）。ENI/EPAY 分は組織図では扱わない */
+var ENI_USDT_DAILY_RATE = 0.009;
+var ENI_REWARD_MONTH_DAYS = 30;
+var ENI_MAX_REWARD_GEN = 100;
 
 function eniClone(data) {
   return JSON.parse(JSON.stringify(data));
@@ -28,10 +35,20 @@ function eniEscape(text) {
     .replace(/"/g, '&quot;');
 }
 
+function eniRoundReward(n) {
+  var v = Number(n);
+  if (!isFinite(v)) return 0;
+  if (typeof pdRoundEni === 'function') return pdRoundEni(v);
+  return Math.round(v * 10000) / 10000;
+}
+
 function eniMoney(n) {
   var v = Number(n) || 0;
   if (typeof money === 'function') return money(v);
-  return '$' + v.toLocaleString('en-US', { maximumFractionDigits: 2 });
+  return '$' + v.toLocaleString('en-US', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2
+  });
 }
 
 function eniPackOrgChart() {
@@ -76,10 +93,26 @@ function eniClearAggCache() {
   eniVolCache = {};
   eniCountCache = {};
   eniDepthCache = {};
+  eniRewardCache = {};
+  eniStakeCache = {};
+}
+
+function eniIsMemberActive(m) {
+  if (!m || !m.id) return false;
+  if (m.deleted === true || m.isDeleted === true) return false;
+  if (m.inactive === true || m.disabled === true || m.suspended === true) return false;
+  if (m.active === false || m.enabled === false) return false;
+  if (m.status != null) {
+    var st = String(m.status).toLowerCase();
+    if (st === 'deleted' || st === 'inactive' || st === 'disabled' || st === 'suspended') return false;
+  }
+  return true;
 }
 
 function eniChildrenOf(id) {
-  var kids = eniMembers.filter(function (m) { return m.parent === id; });
+  var kids = eniMembers.filter(function (m) {
+    return m && m.parent === id && eniIsMemberActive(m);
+  });
   return kids.slice().sort(function (a, b) {
     var sa = a.sortOrder != null ? Number(a.sortOrder) : 0;
     var sb = b.sortOrder != null ? Number(b.sortOrder) : 0;
@@ -90,6 +123,159 @@ function eniChildrenOf(id) {
 
 function eniFindMember(id) {
   return eniMembers.find(function (m) { return m.id === id; }) || null;
+}
+
+/**
+ * ステーキング額（運用額）
+ * - 実績入力アカウント：現在運用額（investmentHistory）を優先
+ * - 組織図のみの人物：ノードの investment
+ */
+function eniGetStakingAmount(id) {
+  if (!id) return 0;
+  if (eniStakeCache[id] != null) return eniStakeCache[id];
+  var m = eniFindMember(id);
+  if (!m || !eniIsMemberActive(m)) {
+    eniStakeCache[id] = 0;
+    return 0;
+  }
+  var amount = Number(m.investment) || 0;
+  var inputAcc = typeof aimFindInputAccount === 'function'
+    ? aimFindInputAccount('eni', id)
+    : null;
+  if (inputAcc) {
+    amount = Number(inputAcc.investment) || 0;
+    var dateKey = typeof todayKey === 'function' ? todayKey() : '';
+    if (dateKey && typeof pdGetOperatingUsdAsOf === 'function' &&
+        typeof settings !== 'undefined' && settings.investmentHistory) {
+      var hist = settings.investmentHistory[id];
+      if (hist && hist.projectKey === 'eni' && Array.isArray(hist.records) && hist.records.length) {
+        amount = Number(pdGetOperatingUsdAsOf(id, 'eni', dateKey)) || 0;
+      }
+    }
+  } else if (typeof settings !== 'undefined' && settings.investmentHistory) {
+    var histOnly = settings.investmentHistory[id];
+    var dateKey2 = typeof todayKey === 'function' ? todayKey() : '';
+    if (histOnly && histOnly.projectKey === 'eni' &&
+        Array.isArray(histOnly.records) && histOnly.records.length &&
+        dateKey2 && typeof pdGetOperatingUsdAsOf === 'function') {
+      amount = Number(pdGetOperatingUsdAsOf(id, 'eni', dateKey2)) || 0;
+    }
+  }
+  amount = eniRoundReward(amount);
+  eniStakeCache[id] = amount;
+  return amount;
+}
+
+/**
+ * 直紹介人数に応じた世代別報酬率。
+ * 解放されていない世代は 0。
+ */
+function eniGenerationRate(gen, directCount) {
+  var g = Number(gen) || 0;
+  var d = Number(directCount) || 0;
+  if (g < 1 || g > ENI_MAX_REWARD_GEN) return 0;
+  if (g === 1) return d >= 1 ? 0.05 : 0;
+  if (g === 2) return d >= 2 ? 0.06 : 0;
+  if (g === 3) return d >= 3 ? 0.07 : 0;
+  if (g === 4) return d >= 4 ? 0.08 : 0;
+  if (g === 5) return d >= 5 ? 0.09 : 0;
+  if (g === 6) return d >= 6 ? 0.10 : 0;
+  if (g >= 7 && g <= 20) return d >= 7 ? 0.03 : 0;
+  if (g >= 21 && g <= 30) return d >= 8 ? 0.02 : 0;
+  if (g >= 31 && g <= 100) return d >= 9 ? 0.005 : 0;
+  return 0;
+}
+
+function eniDailyStakingReward(stake) {
+  return eniRoundReward((Number(stake) || 0) * ENI_USDT_DAILY_RATE);
+}
+
+function eniMonthlyFromDaily(daily) {
+  return eniRoundReward((Number(daily) || 0) * ENI_REWARD_MONTH_DAYS);
+}
+
+/**
+ * 指定アカウントを基点にした報酬・実績。
+ * 各ノードは「そのノード自身の直紹介人数・世代解放」で独立計算する。
+ */
+function eniCalcRewardsFor(rootId) {
+  if (!rootId) {
+    return {
+      stakingDaily: 0,
+      stakingMonthly: 0,
+      teamDaily: 0,
+      teamMonthly: 0,
+      totalMonthly: 0,
+      teamVolume: 0,
+      directCount: 0
+    };
+  }
+  if (eniRewardCache[rootId]) return eniRewardCache[rootId];
+  var root = eniFindMember(rootId);
+  if (!root || !eniIsMemberActive(root)) {
+    var empty = {
+      stakingDaily: 0,
+      stakingMonthly: 0,
+      teamDaily: 0,
+      teamMonthly: 0,
+      totalMonthly: 0,
+      teamVolume: 0,
+      directCount: 0
+    };
+    eniRewardCache[rootId] = empty;
+    return empty;
+  }
+
+  var stake = eniGetStakingAmount(rootId);
+  var stakingDaily = eniDailyStakingReward(stake);
+  var stakingMonthly = eniMonthlyFromDaily(stakingDaily);
+
+  var directs = eniChildrenOf(rootId);
+  var directCount = directs.length;
+  var teamDaily = 0;
+  var visited = {};
+  visited[rootId] = true;
+
+  var queue = [];
+  directs.forEach(function (c) {
+    queue.push({ id: c.id, gen: 1 });
+  });
+
+  while (queue.length) {
+    var item = queue.shift();
+    if (!item || !item.id || visited[item.id]) continue;
+    visited[item.id] = true;
+    var member = eniFindMember(item.id);
+    if (!member || !eniIsMemberActive(member)) continue;
+    if (item.gen < 1 || item.gen > ENI_MAX_REWARD_GEN) continue;
+
+    var rate = eniGenerationRate(item.gen, directCount);
+    if (rate > 0) {
+      var childStake = eniGetStakingAmount(item.id);
+      teamDaily += eniDailyStakingReward(childStake) * rate;
+    }
+
+    if (item.gen < ENI_MAX_REWARD_GEN) {
+      eniChildrenOf(item.id).forEach(function (c) {
+        if (!visited[c.id]) queue.push({ id: c.id, gen: item.gen + 1 });
+      });
+    }
+  }
+
+  teamDaily = eniRoundReward(teamDaily);
+  var teamMonthly = eniMonthlyFromDaily(teamDaily);
+  var teamVolume = eniCalcTeamVolume(rootId);
+  var result = {
+    stakingDaily: stakingDaily,
+    stakingMonthly: stakingMonthly,
+    teamDaily: teamDaily,
+    teamMonthly: teamMonthly,
+    totalMonthly: eniRoundReward(stakingMonthly + teamMonthly),
+    teamVolume: teamVolume,
+    directCount: directCount
+  };
+  eniRewardCache[rootId] = result;
+  return result;
 }
 
 /** ウォレット下4桁（0x除去後）。 */
@@ -118,12 +304,20 @@ function eniDisplayName(m) {
 /**
  * チーム実績 = 配下全員のステーキング額合計（本人のステーキング額は含まない）
  */
-function eniCalcTeamVolume(id) {
+function eniCalcTeamVolume(id, _visited) {
   if (eniVolCache[id] != null) return eniVolCache[id];
+  var visited = _visited || {};
+  if (visited[id]) {
+    eniVolCache[id] = 0;
+    return 0;
+  }
+  visited[id] = true;
   var sum = 0;
   eniChildrenOf(id).forEach(function (c) {
-    sum += (Number(c.investment) || 0) + eniCalcTeamVolume(c.id);
+    if (visited[c.id]) return;
+    sum += eniGetStakingAmount(c.id) + eniCalcTeamVolume(c.id, visited);
   });
+  sum = eniRoundReward(sum);
   eniVolCache[id] = sum;
   return sum;
 }
@@ -131,11 +325,18 @@ function eniCalcTeamVolume(id) {
 /**
  * チーム人数 = 配下人数（本人を含まない）
  */
-function eniCalcTeamCount(id) {
+function eniCalcTeamCount(id, _visited) {
   if (eniCountCache[id] != null) return eniCountCache[id];
+  var visited = _visited || {};
+  if (visited[id]) {
+    eniCountCache[id] = 0;
+    return 0;
+  }
+  visited[id] = true;
   var n = 0;
   eniChildrenOf(id).forEach(function (c) {
-    n += 1 + eniCalcTeamCount(c.id);
+    if (visited[c.id]) return;
+    n += 1 + eniCalcTeamCount(c.id, visited);
   });
   eniCountCache[id] = n;
   return n;
@@ -151,6 +352,7 @@ function eniBuildDepthMap(rootId) {
     var id = queue.shift();
     var d = map[id];
     eniChildrenOf(id).forEach(function (c) {
+      if (map[c.id] != null) return; // 循環参照ガード
       map[c.id] = d + 1;
       queue.push(c.id);
     });
@@ -261,21 +463,18 @@ function eniRenderCards() {
   var zMonth = eniMoney(0) + '/月';
   var zVol = eniMoney(0);
   var root = eniRootId ? eniFindMember(eniRootId) : null;
-  if (!root) {
+  if (!root || !eniIsMemberActive(root)) {
     set('eniCardTotal', zMonth);
     set('eniCardStaking', zMonth);
     set('eniCardTeamReward', zMonth);
     set('eniCardTeamVolume', zVol);
     return;
   }
-  var staking = Number(root.stakingReward) || 0;
-  var teamReward = Number(root.teamReward) || 0;
-  var total = staking + teamReward;
-  var teamVol = eniCalcTeamVolume(root.id);
-  set('eniCardStaking', eniMoney(staking) + '/月');
-  set('eniCardTeamReward', eniMoney(teamReward) + '/月');
-  set('eniCardTotal', eniMoney(total) + '/月');
-  set('eniCardTeamVolume', eniMoney(teamVol));
+  var rewards = eniCalcRewardsFor(root.id);
+  set('eniCardStaking', eniMoney(rewards.stakingMonthly) + '/月');
+  set('eniCardTeamReward', eniMoney(rewards.teamMonthly) + '/月');
+  set('eniCardTotal', eniMoney(rewards.totalMonthly) + '/月');
+  set('eniCardTeamVolume', eniMoney(rewards.teamVolume));
   var volEl = document.getElementById('eniCardTeamVolume');
   if (volEl) volEl.className = 'main';
 }
@@ -327,7 +526,7 @@ function eniNodeHtml(m, kidCount) {
   var tier = eniVolumeTier(teamVol);
   var nm = eniDisplayName(m);
   var wallet = eniWalletLabel(m.walletAddress);
-  var stake = Number(m.investment) || 0;
+  var stake = eniGetStakingAmount(m.id);
   return '<div class="node eniNode eniVolTier-' + tier +
     (m.id === eniRootId ? ' root' : '') +
     '" onclick="flashEl(this)">' +
@@ -443,15 +642,13 @@ function eniOpenEdit(data) {
     eniEscape(data.name || '') + '">' +
     '<label>ウォレットアドレス（必須）</label><input id="eniWalletInput" placeholder="0x... またはアドレス" value="' +
     eniEscape(data.walletAddress || '') + '">' +
-    '<div class="grid2">' +
-    '<div><label>ステーキング額</label><input id="eniInvestmentInput" type="number" min="0" step="any" value="' +
-    (data.investment != null ? eniEscape(data.investment) : '') + '"></div>' +
-    '<div><label>ステーキング報酬</label><input id="eniStakingRewardInput" type="number" min="0" step="any" value="' +
-    (data.stakingReward != null ? eniEscape(data.stakingReward) : '0') + '"></div>' +
-    '</div>' +
-    '<label>チーム報酬</label><input id="eniTeamRewardInput" type="number" min="0" step="any" value="' +
-    (data.teamReward != null ? eniEscape(data.teamReward) : '0') + '">' +
-    '<p class="help">チーム実績・チーム人数は配下データから自動集計します。ウォレットは組織図上では下4桁のみ表示されます。</p>' +
+    '<label>ステーキング額</label><input id="eniInvestmentInput" type="number" min="0" step="any" value="' +
+    (data.investment != null ? eniEscape(data.investment) : '') + '">' +
+    '<input type="hidden" id="eniStakingRewardInput" value="' +
+    eniEscape(data.stakingReward != null ? data.stakingReward : 0) + '">' +
+    '<input type="hidden" id="eniTeamRewardInput" value="' +
+    eniEscape(data.teamReward != null ? data.teamReward : 0) + '">' +
+    '<p class="help">ステーキング報酬・チーム報酬・月間報酬・チーム実績は組織図データから自動計算します。ウォレットは組織図上では下4桁のみ表示されます。</p>' +
     '<div style="display:flex;gap:8px;margin-top:14px;justify-content:flex-end">' +
     '<button type="button" class="btn2" onclick="closeModal()">キャンセル</button>' +
     '<button type="button" onclick="eniSaveMember()">保存</button></div>';
@@ -559,7 +756,7 @@ function eniShowDetail(id) {
     '<div class="detailBox"><div class="label">ウォレット下4桁</div><div class="val">' +
     eniEscape(eniWalletLabel(m.walletAddress)) + '</div></div>' +
     '<div class="detailBox"><div class="label">段数</div><div class="val">' + eniEscape(eniDepthLabel(depth)) + '</div></div>' +
-    '<div class="detailBox"><div class="label">ステーキング額</div><div class="val">' + eniMoney(m.investment) + '</div></div>' +
+    '<div class="detailBox"><div class="label">ステーキング額</div><div class="val">' + eniMoney(eniGetStakingAmount(id)) + '</div></div>' +
     '<div class="detailBox"><div class="label">チーム実績</div><div class="val eniVolValue eniVolTier-' + tier + '">' +
     eniMoney(teamVol) + '</div></div>' +
     '<div class="detailBox"><div class="label">チーム人数</div><div class="val">' + teamCount + '人</div></div>' +
