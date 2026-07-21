@@ -51,7 +51,8 @@
 
 /* ── Simulation theme (purple accents) ── */
 #ramPage[data-mode="simulation"],
-#orcaOrgPage[data-mode="simulation"] {
+#orcaOrgPage[data-mode="simulation"],
+#eniOrgPage[data-mode="simulation"] {
   --org-accent: #c084fc;
   --org-accent-mid: #a855f7;
   --org-accent-deep: #7e22ce;

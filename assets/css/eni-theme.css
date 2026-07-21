@@ -157,7 +157,7 @@
   height: 100%;
   min-height: 106px;
   box-sizing: border-box;
-  cursor: default;
+  cursor: pointer;
 }
 
 #eniOrgPage .eniIncomeCards .eniHelpQ {
@@ -673,3 +673,145 @@
   }
 }
 
+
+/* Aggregation / Simulation panels */
+.eniAggPanel,
+.eniSimPanel {
+  display: grid;
+  gap: 12px;
+  padding-bottom: 4px;
+}
+
+.eniAggPanel .help,
+.eniSimPanel .help {
+  margin: 0 0 4px;
+}
+
+.eniAggTeamAllList {
+  display: grid;
+  gap: 8px;
+}
+
+.eniAggTeamAllRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(84, 120, 160, 0.28);
+  background: rgba(8, 20, 38, 0.45);
+}
+
+.eniAggTeamAllName {
+  font-size: 14px;
+  font-weight: 900;
+  color: #ecfccb;
+  min-width: 0;
+  word-break: break-word;
+}
+
+.eniAggTeamAllVal {
+  font-size: 14px;
+  font-weight: 800;
+  color: #ffffff;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* ENI org chart: taller viewport (no compare panel) */
+#eniOrgPage .chartArea {
+  height: calc(100vh - 268px);
+  min-height: 620px;
+}
+
+@media (max-width: 900px) {
+  #eniOrgPage .chartArea {
+    height: calc(100vh - 390px);
+    min-height: 560px;
+  }
+}
+
+/* Full-page ENI aggregation (ORCA-compatible layout) */
+#eniAccountManagePage {
+  min-height: calc(100vh - 120px);
+}
+
+#eniAccountManagePage .topbar b {
+  font-size: 18px;
+  font-weight: 900;
+}
+
+#eniAccountManagePage .eniAggCards {
+  display: grid !important;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  gap: 10px;
+  align-items: stretch;
+  width: 100%;
+  margin: 10px 0 12px !important;
+}
+
+#eniAccountManagePage .eniAggCards .card {
+  min-width: 0;
+  width: 100%;
+  height: 100%;
+  min-height: 106px;
+  box-sizing: border-box;
+  cursor: pointer;
+}
+
+#eniAccountManagePage .eniAggCards .card:hover {
+  border-color: rgba(163, 230, 53, 0.45);
+  box-shadow: 0 0 18px rgba(163, 230, 53, 0.16);
+}
+
+#eniAccountManagePage .eniAggCards .card:active {
+  transform: translateY(1px);
+}
+
+#eniAccountManagePage .eniAggCards .card .label,
+#eniAccountManagePage .eniAggCards .card .main {
+  min-width: 0;
+}
+
+#eniAccountManagePage .eniAggCards .card .main {
+  color: #ffffff !important;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  font-size: 20px;
+  font-weight: 900;
+  margin-top: 5px;
+  line-height: 1.2;
+  word-break: break-word;
+}
+
+#eniAccountManagePage .lineBox {
+  margin: 12px 0 16px;
+  padding: 14px 14px 12px;
+}
+
+#eniAccountManagePage .lineBox > b {
+  display: block;
+  margin-bottom: 8px;
+}
+
+#eniAccountManagePage .homeToggleRow {
+  margin: 0 0 10px;
+}
+
+@media (max-width: 900px) {
+  #eniAccountManagePage .eniAggCards {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  #eniAccountManagePage .eniAggCards .card .main {
+    font-size: 17px;
+  }
+}
+
+@media (max-width: 360px) {
+  #eniAccountManagePage .eniAggCards {
+    grid-template-columns: 1fr !important;
+  }
+}

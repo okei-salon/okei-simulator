@@ -9,6 +9,8 @@ var eniRootId = '';
 var eniRootAccountIds = [];
 var eniFocusId = '';
 var eniZoom = 1;
+var eniSimMode = false;
+var eniStakeOverride = null; // シミュレーション仮計算用（実データ非反映）
 var eniPinchBound = false;
 var eniPinchStartDist = 0;
 var eniPinchStartZoom = 1;
@@ -52,9 +54,11 @@ function eniMoney(n) {
 }
 
 function eniPackOrgChart() {
+  // シミュレーション中は仮データを永続化しない
+  var liveMembers = eniSimMode ? eniCurrentData : eniMembers;
   return {
-    members: eniMembers,
-    currentData: eniCurrentData,
+    members: liveMembers,
+    currentData: eniSimMode ? eniCurrentData : (eniCurrentData.length ? eniCurrentData : liveMembers),
     scenarios: eniScenarios,
     rootId: eniRootId,
     rootAccountIds: eniRootAccountIds,
@@ -74,6 +78,8 @@ function eniApplyOrgChart(data) {
   eniRootAccountIds = eniClone(Array.isArray(d.rootAccountIds) ? d.rootAccountIds : []);
   eniZoom = typeof d.zoom === 'number' ? d.zoom : 1;
   eniFocusId = eniRootId;
+  eniSimMode = false;
+  eniStakeOverride = null;
   eniNormalizeMembers();
 }
 
@@ -127,16 +133,25 @@ function eniFindMember(id) {
 
 /**
  * ステーキング額（運用額）
- * - 実績入力アカウント：現在運用額（investmentHistory）を優先
- * - 組織図のみの人物：ノードの investment
+ * - シミュレーション中：仮組織図ノードの investment のみ（実績・PFに影響させない）
+ * - 通常：実績入力アカウントは運用額履歴を優先、それ以外はノード investment
  */
 function eniGetStakingAmount(id) {
   if (!id) return 0;
+  if (eniStakeOverride && Object.prototype.hasOwnProperty.call(eniStakeOverride, id)) {
+    return eniRoundReward(Number(eniStakeOverride[id]) || 0);
+  }
   if (eniStakeCache[id] != null) return eniStakeCache[id];
   var m = eniFindMember(id);
   if (!m || !eniIsMemberActive(m)) {
     eniStakeCache[id] = 0;
     return 0;
+  }
+  // シミュレーション中はノード編集値をそのまま使う
+  if (eniSimMode) {
+    var simAmt = eniRoundReward(Number(m.investment) || 0);
+    eniStakeCache[id] = simAmt;
+    return simAmt;
   }
   var amount = Number(m.investment) || 0;
   var inputAcc = typeof aimFindInputAccount === 'function'
@@ -364,11 +379,44 @@ function eniCalcTeamRewardBreakdown(rootId) {
   };
 }
 
-function eniShowTeamRewardDetail() {
+function eniShowAllAccountsTeamRewardDetail() {
   if (typeof modalTitle === 'undefined' || typeof modalContent === 'undefined' || typeof modalBg === 'undefined') {
     return;
   }
-  var root = eniRootId ? eniFindMember(eniRootId) : null;
+  var s = eniAllOrgSummary();
+  var rows = (s.list || []).map(function (x) {
+    return '<div class="eniAggTeamAllRow">' +
+      '<div class="eniAggTeamAllName">' + eniEscape(x.name || x.id) + '</div>' +
+      '<div class="eniAggTeamAllVal">' + eniEscape(eniAggFormatMonth(x.team)) + '</div>' +
+      '</div>';
+  }).join('');
+  modalTitle.textContent = 'チーム報酬内訳';
+  modalContent.innerHTML =
+    '<div class="eniTeamBreakdown">' +
+    '<p class="eniHelpLead">アカウントごとのチーム報酬一覧です。組織を横断して1つの世代構造としては計算していません。</p>' +
+    '<div class="eniAggTeamAllList">' +
+    (rows || '<div class="eniGenEmpty">表示できるアカウントがありません</div>') +
+    '</div>' +
+    '<div class="eniTeamBreakdownTotal">' +
+    '<div class="eniTeamBreakdownTotalLabel">全アカウント合計</div>' +
+    '<div class="eniTeamBreakdownTotalValue">' +
+    eniEscape(eniAggFormatMonth(s.team)) + '</div>' +
+    '</div>' +
+    '</div>';
+  modalBg.style.display = 'flex';
+  if (modalContent.scrollTop != null) modalContent.scrollTop = 0;
+}
+
+function eniShowTeamRewardDetail(accountId) {
+  if (typeof modalTitle === 'undefined' || typeof modalContent === 'undefined' || typeof modalBg === 'undefined') {
+    return;
+  }
+  if (accountId === 'all' || accountId === '') {
+    eniShowAllAccountsTeamRewardDetail();
+    return;
+  }
+  var targetId = accountId || eniRootId;
+  var root = targetId ? eniFindMember(targetId) : null;
   if (!root || !eniIsMemberActive(root)) {
     if (typeof showToast === 'function') showToast('⚠️ 表示中のアカウントがありません');
     return;
@@ -545,7 +593,7 @@ function eniSubtreeIds(id) {
 function eniRender() {
   eniNormalizeMembers();
   eniClearAggCache();
-  eniCurrentData = eniClone(eniMembers);
+  if (!eniSimMode) eniCurrentData = eniClone(eniMembers);
   eniRenderStats();
   eniRenderRootAccounts();
   if (eniRootId && eniFindMember(eniRootId)) eniFocusId = eniRootId;
@@ -554,7 +602,21 @@ function eniRender() {
   var canvas = document.getElementById('eniCanvas');
   if (canvas) canvas.style.transform = 'scale(' + eniZoom + ')';
   if (typeof initOrgChartTitleIcons === 'function') initOrgChartTitleIcons();
-  if (typeof hubSaveToStorage === 'function') hubSaveToStorage();
+
+  var badge = document.getElementById('eniModeBadge');
+  var banner = document.getElementById('eniOrgSimBanner');
+  var page = document.getElementById('eniOrgPage');
+  if (badge) {
+    badge.className = eniSimMode ? 'compactBadge orgModeBadge--sim' : 'compactBadge orgModeBadge--live';
+    badge.textContent = eniSimMode ? '🟣 シミュレーション中' : '🟢 現在データ';
+  }
+  if (page) page.dataset.mode = eniSimMode ? 'simulation' : 'live';
+  if (banner) banner.classList.toggle('isVisible', !!eniSimMode);
+
+  if (typeof eniRenderAccountManage === 'function') eniRenderAccountManage();
+
+  // シミュレーション中は LocalStorage / Cloud へ書き込まない
+  if (!eniSimMode && typeof hubSaveToStorage === 'function') hubSaveToStorage();
 }
 
 function eniRenderStats() {
@@ -603,23 +665,70 @@ function eniHelpCard(title, bodyHtml) {
     '</div>';
 }
 
-function eniCardHelpTotalBody() {
-  return '<p class="eniHelpLead">ステーキング報酬とチーム報酬を合計した予測月間利益です。</p>' +
-    eniHelpCard('計算式', '合計利益 ＝ ステーキング報酬 ＋ チーム報酬');
+function eniNormalizeHelpContext(ctx) {
+  if (ctx === 'all' || (ctx && ctx.allAccounts)) {
+    return { mode: 'all' };
+  }
+  var accountId = null;
+  if (typeof ctx === 'string' && ctx) accountId = ctx;
+  else if (ctx && ctx.accountId) accountId = ctx.accountId;
+  else if (eniRootId) accountId = eniRootId;
+  if (accountId && eniFindMember(accountId)) {
+    return { mode: 'account', accountId: accountId };
+  }
+  return { mode: 'generic' };
 }
 
-function eniCardHelpStakingBody() {
-  return '<p class="eniHelpLead">ステーキング額に応じて毎日発生する報酬です。</p>' +
-    eniHelpCard('計算式', 'ステーキング額 × 0.9% × 30日') +
-    eniHelpCard('計算例',
+function eniCardHelpTotalBody(ctx) {
+  var c = eniNormalizeHelpContext(ctx);
+  var html = '<p class="eniHelpLead">ステーキング報酬とチーム報酬を合計した予測月間利益です。</p>' +
+    eniHelpCard('計算式', '合計利益 ＝ ステーキング報酬 ＋ チーム報酬');
+  if (c.mode === 'account') {
+    var s = eniGetDisplaySummary(c.accountId);
+    html += eniHelpCard('今回の数値',
+      'ステーキング報酬：' + eniEscape(eniAggFormatMonth(s.staking)) + '<br>' +
+      'チーム報酬：' + eniEscape(eniAggFormatMonth(s.team)) + '<br><br>' +
+      '<b>合計利益：' + eniEscape(eniAggFormatMonth(s.total)) + '</b>');
+  } else if (c.mode === 'all') {
+    var all = eniAggregateTotals();
+    html += eniHelpCard('全アカウント合計',
+      '各アカウントの合計利益を足し合わせた値です。<br><br>' +
+      'ステーキング報酬：' + eniEscape(eniAggFormatMonth(all.staking)) + '<br>' +
+      'チーム報酬：' + eniEscape(eniAggFormatMonth(all.team)) + '<br><br>' +
+      '<b>合計利益：' + eniEscape(eniAggFormatMonth(all.total)) + '</b>');
+  }
+  return html;
+}
+
+function eniCardHelpStakingBody(ctx) {
+  var c = eniNormalizeHelpContext(ctx);
+  var html = '<p class="eniHelpLead">ステーキング額に応じて毎日発生する報酬です。</p>' +
+    eniHelpCard('計算式', 'ステーキング額 × 0.9% × 30日');
+  if (c.mode === 'account') {
+    var stake = eniGetStakingAmount(c.accountId);
+    var monthly = eniGetDisplaySummary(c.accountId).staking;
+    html += eniHelpCard('計算例',
+      '<div class="eniHelpExampleLines">' +
+      eniEscape(eniFormatPlainAmount(stake)) + ' × 0.9% × 30日<br>' +
+      '＝ <b>' + eniEscape(eniAggFormatMonth(monthly)) + '</b>' +
+      '</div>');
+  } else if (c.mode === 'all') {
+    var allS = eniAggregateTotals();
+    html += eniHelpCard('全アカウント合計',
+      '各アカウントのステーキング報酬を合計した値です。<br><br>' +
+      '<b>' + eniEscape(eniAggFormatMonth(allS.staking)) + '</b>');
+  } else {
+    html += eniHelpCard('計算例',
       '<div class="eniHelpExampleLabel">300USDTの場合</div>' +
       '<div class="eniHelpExampleLines">' +
       '300 × 0.9% × 30日<br>' +
-      '＝ <b>81USDT／月</b>' +
+      '＝ <b>81 USDT／月</b>' +
       '</div>');
+  }
+  return html;
 }
 
-function eniCardHelpTeamBody() {
+function eniCardHelpTeamBody(ctx) {
   var rows = [
     ['直紹介1人', '第1世代', '5%'],
     ['直紹介2人', '第2世代', '6%'],
@@ -645,37 +754,51 @@ function eniCardHelpTeamBody() {
       '<div class="eniHelpExampleLines">' +
       '<div class="eniHelpExampleSub">ステーキング報酬</div>' +
       '300 × 0.9% × 30日<br>' +
-      '＝ 81USDT／月<br><br>' +
+      '＝ 81 USDT／月<br><br>' +
       '<div class="eniHelpExampleSub">チーム報酬</div>' +
       '81 × 5%<br>' +
-      '＝ <b>4.05USDT／月</b>' +
+      '＝ <b>4.05 USDT／月</b>' +
       '</div>');
 }
 
-function eniCardHelpVolumeBody() {
-  return '<p class="eniHelpLead">自分より下のメンバー全員のステーキング額合計です。</p>' +
-    '<p class="eniHelpLead">組織全体の規模や成長状況を確認するための指標として表示しています。</p>' +
-    eniHelpCard('計算例',
+function eniCardHelpVolumeBody(ctx) {
+  var c = eniNormalizeHelpContext(ctx);
+  var html = '<p class="eniHelpLead">自分より下のメンバー全員のステーキング額合計です。</p>' +
+    '<p class="eniHelpLead">組織全体の規模や成長状況を確認するための指標として表示しています。</p>';
+  if (c.mode === 'account') {
+    var vol = eniGetDisplaySummary(c.accountId).volume;
+    html += eniHelpCard('今回の数値',
+      '<b>チーム実績：' + eniEscape(eniAggFormatVolume(vol)) + '</b>');
+  } else if (c.mode === 'all') {
+    var allV = eniAggregateTotals();
+    html += eniHelpCard('全アカウント合計',
+      '各アカウントのチーム実績を合計した値です。<br><br>' +
+      '<b>' + eniEscape(eniAggFormatVolume(allV.volume)) + '</b>');
+  } else {
+    html += eniHelpCard('計算例',
       '<div class="eniHelpExampleLines">' +
       'Aさん：300USDT<br>' +
       'Bさん：600USDT<br>' +
       'Cさん：1,000USDT<br><br>' +
       'チーム実績<br>' +
-      '＝ <b>1,900USDT</b>' +
+      '＝ <b>1,900 USDT</b>' +
       '</div>');
+  }
+  return html;
 }
 
-function eniCardHelpMap() {
+function eniCardHelpMap(ctx) {
   return {
-    total: { title: '合計利益とは？', body: eniCardHelpTotalBody() },
-    staking: { title: 'ステーキング報酬とは？', body: eniCardHelpStakingBody() },
-    team: { title: 'チーム報酬とは？', body: eniCardHelpTeamBody() },
-    volume: { title: 'チーム実績とは？', body: eniCardHelpVolumeBody() }
+    total: { title: '合計利益とは？', body: eniCardHelpTotalBody(ctx) },
+    staking: { title: 'ステーキング報酬とは？', body: eniCardHelpStakingBody(ctx) },
+    team: { title: 'チーム報酬とは？', body: eniCardHelpTeamBody(ctx) },
+    volume: { title: 'チーム実績とは？', body: eniCardHelpVolumeBody(ctx) }
   };
 }
 
-function eniShowCardHelp(type) {
-  var map = eniCardHelpMap();
+function eniShowCardHelp(type, ctx) {
+  // チーム報酬カード本体タップは内訳画面へ（？説明は type=team のまま）
+  var map = eniCardHelpMap(ctx);
   var entry = map[type];
   if (!entry || typeof modalTitle === 'undefined' || typeof modalContent === 'undefined' || typeof modalBg === 'undefined') {
     return;
@@ -685,6 +808,16 @@ function eniShowCardHelp(type) {
   modalBg.style.display = 'flex';
   var body = document.getElementById('modalContent');
   if (body) body.scrollTop = 0;
+}
+
+/** 集計画面カードタップ（accountId 空文字 = 全アカウント合計） */
+function eniShowAggCardDetail(type, accountId) {
+  var isAll = accountId == null || accountId === '' || accountId === 'all';
+  if (type === 'team') {
+    eniShowTeamRewardDetail(isAll ? 'all' : accountId);
+    return;
+  }
+  eniShowCardHelp(type, isAll ? { allAccounts: true } : { accountId: accountId });
 }
 
 function eniRenderCards() {
@@ -1263,26 +1396,341 @@ function eniInitPinchZoom() {
   eniPinchBound = true;
 }
 
-function eniShowAccountManage() {
-  eniOpenAggregationPanel();
+/** 表示中アカウントの4指標（上部カードと同一ロジック） */
+function eniGetDisplaySummary(rootId) {
+  var id = rootId || eniRootId;
+  var rewards = eniCalcRewardsFor(id);
+  return {
+    total: rewards.totalMonthly,
+    staking: rewards.stakingMonthly,
+    team: rewards.teamMonthly,
+    volume: rewards.teamVolume,
+    directCount: rewards.directCount
+  };
 }
 
+function eniAggFormatMonth(n) {
+  return eniFormatUsdtAmount(n) + '／月';
+}
+
+function eniAggFormatVolume(n) {
+  return eniFormatUsdtAmount(n);
+}
+
+function eniAggCardOnclickAttr(type, accountId) {
+  var idLit = (accountId == null || accountId === '')
+    ? "''"
+    : "'" + String(accountId).replace(/\\/g, '\\\\').replace(/'/g, "\\'") + "'";
+  return ' onclick="eniShowAggCardDetail(\'' + type + '\',' + idLit + ')"';
+}
+
+function eniSummaryCardsHtml(summary, opts) {
+  opts = opts || {};
+  var s = summary || { total: 0, staking: 0, team: 0, volume: 0 };
+  var useUsdt = opts.useUsdt !== false;
+  var clickable = !!opts.clickable;
+  var clickableTeam = !!opts.teamClickable;
+  var accountId = opts.accountId;
+  var cardOpen = function (type, extraClass) {
+    var cls = 'card' + (extraClass ? ' ' + extraClass : '');
+    if (clickable || (type === 'team' && clickableTeam)) cls += ' eniCardClickable';
+    var attr = ' class="' + cls + '"';
+    if (clickable) attr += eniAggCardOnclickAttr(type, accountId);
+    else if (type === 'team' && clickableTeam) attr += ' onclick="eniShowTeamRewardDetail()"';
+    return '<div' + attr + '>';
+  };
+  var totalText = useUsdt ? eniAggFormatMonth(s.total) : (eniMoney(s.total) + '/月');
+  var stakingText = useUsdt ? eniAggFormatMonth(s.staking) : (eniMoney(s.staking) + '/月');
+  var teamText = useUsdt ? eniAggFormatMonth(s.team) : (eniMoney(s.team) + '/月');
+  var volumeText = useUsdt ? eniAggFormatVolume(s.volume) : eniMoney(s.volume);
+  return '<section class="cards eniIncomeCards eniAggCards">' +
+    cardOpen('total', 'total') + '<div class="label">合計利益</div>' +
+    '<div class="main">' + eniEscape(totalText) + '</div></div>' +
+    cardOpen('staking') + '<div class="label">ステーキング報酬</div>' +
+    '<div class="main">' + eniEscape(stakingText) + '</div></div>' +
+    cardOpen('team') + '<div class="label">チーム報酬</div>' +
+    '<div class="main">' + eniEscape(teamText) + '</div></div>' +
+    cardOpen('volume') + '<div class="label">チーム実績</div>' +
+    '<div class="main">' + eniEscape(volumeText) + '</div></div>' +
+    '</section>';
+}
+
+function eniGetRootIdsForSummary() {
+  eniEnsureRootAccounts();
+  var ids = (eniRootAccountIds || []).filter(function (id) {
+    return !!eniFindMember(id);
+  });
+  if (!ids.length && eniRootId && eniFindMember(eniRootId)) ids = [eniRootId];
+  return ids;
+}
+
+function eniSummaryFor(id) {
+  var m = eniFindMember(id);
+  if (!m) {
+    return { id: id, name: '-', total: 0, staking: 0, team: 0, volume: 0 };
+  }
+  var s = eniGetDisplaySummary(id);
+  return {
+    id: id,
+    name: eniDisplayName(m),
+    total: s.total,
+    staking: s.staking,
+    team: s.team,
+    volume: s.volume
+  };
+}
+
+function eniAllOrgSummary() {
+  var list = eniGetRootIdsForSummary().map(eniSummaryFor);
+  return {
+    list: list,
+    total: list.reduce(function (s, x) { return s + (Number(x.total) || 0); }, 0),
+    staking: list.reduce(function (s, x) { return s + (Number(x.staking) || 0); }, 0),
+    team: list.reduce(function (s, x) { return s + (Number(x.team) || 0); }, 0),
+    volume: list.reduce(function (s, x) { return s + (Number(x.volume) || 0); }, 0)
+  };
+}
+
+function eniAggregateTotals() {
+  var s = eniAllOrgSummary();
+  return {
+    total: s.total,
+    staking: s.staking,
+    team: s.team,
+    volume: s.volume
+  };
+}
+
+function eniAggregateCardsHtml(id) {
+  var t = id
+    ? eniGetDisplaySummary(id)
+    : eniAggregateTotals();
+  return eniSummaryCardsHtml(t, {
+    useUsdt: true,
+    clickable: true,
+    accountId: id || ''
+  });
+}
+
+function eniRenderAccountManage() {
+  var content = document.getElementById('eniAccountManageContent');
+  if (!content) return;
+  var s = eniAllOrgSummary();
+  var rows = s.list.map(function (x) {
+    var m = eniFindMember(x.id) || {};
+    var homeLabel = m.homeVisible === false ? 'ホーム表示ON' : 'ホーム非表示';
+    return '<div class="lineBox"><b>' + eniEscape(eniDisplayName(m)) + '</b>' +
+      '<div class="homeToggleRow">' +
+      '<button type="button" class="btn2 smallCtl" onclick="eniAccountManageMove(\'' + x.id + '\',-1)">↑</button>' +
+      '<button type="button" class="btn2 smallCtl" onclick="eniAccountManageMove(\'' + x.id + '\',1)">↓</button>' +
+      '<button type="button" class="btn2 smallCtl" onclick="eniToggleHomeVisible(\'' + x.id + '\')">' +
+      homeLabel + '</button>' +
+      '</div>' + eniAggregateCardsHtml(x.id) + '</div>';
+  }).join('');
+  content.innerHTML =
+    '<p class="panelTitle">全アカウント合計</p>' +
+    eniAggregateCardsHtml('') +
+    '<p class="panelTitle" style="margin-top:16px">アカウント別</p>' +
+    (rows || '<div class="help">登録アカウントがありません。</div>');
+}
+
+function eniToggleHomeVisible(id) {
+  var m = eniFindMember(id);
+  if (!m) return;
+  m.homeVisible = m.homeVisible === false ? true : false;
+  if (typeof markActivity === 'function') markActivity();
+  eniRender();
+  if (typeof showToast === 'function') {
+    showToast((m.homeVisible === false ? '✅ ホーム非表示：' : '✅ ホーム表示：') + eniDisplayName(m));
+  }
+}
+
+function eniReorderRootAccount(id, dir) {
+  eniEnsureRootAccounts();
+  var i = eniRootAccountIds.indexOf(id);
+  var j = i + dir;
+  if (i < 0 || j < 0 || j >= eniRootAccountIds.length) return;
+  var tmp = eniRootAccountIds[i];
+  eniRootAccountIds[i] = eniRootAccountIds[j];
+  eniRootAccountIds[j] = tmp;
+  if (typeof markActivity === 'function') markActivity();
+  eniRender();
+}
+
+function eniAccountManageMove(id, dir) {
+  eniReorderRootAccount(id, dir);
+}
+
+function eniShowAccountManage() {
+  if (typeof showPage === 'function') showPage('eniAccountManage');
+}
+
+/** @deprecated 互換用。全画面集計へ切り替え */
 function eniOpenAggregationPanel() {
-  if (typeof modalTitle === 'undefined' || typeof modalContent === 'undefined' || typeof modalBg === 'undefined') return;
-  modalTitle.textContent = 'ENI 集計';
-  modalContent.innerHTML =
-    '<div class="lineBox"><b>準備中</b>' +
-    '<p class="help">ENIの集計画面はまだ準備中です。組織図のカード・詳細からチーム実績・人数を確認できます。</p></div>';
-  modalBg.style.display = 'flex';
+  eniShowAccountManage();
+}
+
+/** 凍結中の現在データ（eniCurrentData）で一時計算して戻す */
+function eniWithBaselineOrg(fn) {
+  var prevMembers = eniMembers;
+  var prevSim = eniSimMode;
+  var prevOverride = eniStakeOverride;
+  eniMembers = eniCurrentData.length ? eniCurrentData : eniMembers;
+  eniSimMode = false;
+  eniStakeOverride = null;
+  eniClearAggCache();
+  try {
+    return fn();
+  } finally {
+    eniMembers = prevMembers;
+    eniSimMode = prevSim;
+    eniStakeOverride = prevOverride;
+    eniClearAggCache();
+  }
+}
+
+function eniEmptySummary() {
+  return { total: 0, staking: 0, team: 0, volume: 0 };
+}
+
+function eniDiffSummary(before, after) {
+  before = before || eniEmptySummary();
+  after = after || eniEmptySummary();
+  return {
+    total: eniRoundReward((Number(after.total) || 0) - (Number(before.total) || 0)),
+    staking: eniRoundReward((Number(after.staking) || 0) - (Number(before.staking) || 0)),
+    team: eniRoundReward((Number(after.team) || 0) - (Number(before.team) || 0)),
+    volume: eniRoundReward((Number(after.volume) || 0) - (Number(before.volume) || 0))
+  };
+}
+
+/** 開始時に表示中の実効ステーキング額を仮ノードへ焼き込む */
+function eniBakeLiveStakesIntoMembers(members) {
+  var stakeById = {};
+  eniMembers.forEach(function (m) {
+    if (!m || !m.id) return;
+    stakeById[m.id] = eniGetStakingAmount(m.id);
+  });
+  (members || []).forEach(function (m) {
+    if (!m || !m.id) return;
+    if (Object.prototype.hasOwnProperty.call(stakeById, m.id)) {
+      m.investment = stakeById[m.id];
+    }
+  });
 }
 
 function eniOpenSimulationPanel() {
   if (typeof modalTitle === 'undefined' || typeof modalContent === 'undefined' || typeof modalBg === 'undefined') return;
   modalTitle.textContent = 'シミュレーション';
   modalContent.innerHTML =
-    '<div class="lineBox"><b>準備中</b>' +
-    '<p class="help">ENI専用のシミュレーション機能はまだ準備中です。</p></div>';
+    '<div class="lineBox"><b>現在の組織図をベースに検証できます</b>' +
+    '<p class="help">シミュレーション開始を押すと、現在データをコピーした仮データで編集できます。</p>' +
+    '<div class="homeToggleRow">' +
+    '<button type="button" onclick="eniStartSimulation();closeModal();showToast(\'🟣 シミュレーションを開始しました\')">シミュレーション開始</button>' +
+    '<button type="button" class="btn2" onclick="eniRestoreCurrent();closeModal();showToast(\'🟢 現在データへ戻しました\')">現在データへ戻る</button>' +
+    '<button type="button" class="btn2" onclick="eniSaveScenario()">シミュレーション保存</button>' +
+    '<button type="button" class="btn2" onclick="eniOpenScenarioList()">保存一覧</button>' +
+    '</div></div>';
   modalBg.style.display = 'flex';
+}
+
+function eniStartSimulation() {
+  if (!eniSimMode) {
+    if (!eniCurrentData.length) eniCurrentData = eniClone(eniMembers);
+    // ライブ表示中の実効額を仮組織へ焼き込み（編集可能にする）
+    var working = eniClone(eniCurrentData);
+    eniBakeLiveStakesIntoMembers(working);
+    eniMembers = working;
+    eniSimMode = true;
+  }
+  eniStakeOverride = null;
+  if (typeof showPage === 'function') showPage('eniOrg');
+  eniRender();
+}
+
+function eniRestoreCurrent() {
+  eniMembers = eniClone(eniCurrentData);
+  eniSimMode = false;
+  eniStakeOverride = null;
+  eniFocusId = eniRootId;
+  if (typeof showPage === 'function') showPage('eniOrg');
+  eniRender();
+}
+
+function eniBuildScenarioRecord(name) {
+  var root = eniRootId ? eniFindMember(eniRootId) : null;
+  var after = eniRootId ? eniGetDisplaySummary(eniRootId) : eniEmptySummary();
+  var before = eniSimMode
+    ? eniWithBaselineOrg(function () {
+      return eniRootId ? eniGetDisplaySummary(eniRootId) : eniEmptySummary();
+    })
+    : after;
+  return {
+    project: 'eni',
+    name: name,
+    rootId: eniRootId || '',
+    rootName: root ? eniDisplayName(root) : '',
+    created: new Date().toLocaleString(),
+    data: eniClone(eniMembers),
+    summary: after,
+    baseline: before,
+    diff: eniDiffSummary(before, after)
+  };
+}
+
+function eniSaveScenario() {
+  var name = prompt('シミュレーション名', 'ENI配置シミュレーション');
+  if (!name) return;
+  eniScenarios.push(eniBuildScenarioRecord(name));
+  // pack は sim 中でも live members を書くため、シナリオ一覧だけ永続化できる
+  if (typeof hubSaveToStorage === 'function') hubSaveToStorage();
+  alert('保存しました');
+}
+
+function eniOpenScenarioList() {
+  if (typeof modalTitle === 'undefined' || typeof modalContent === 'undefined' || typeof modalBg === 'undefined') return;
+  modalTitle.textContent = '保存済みシミュレーション';
+  modalContent.innerHTML = eniScenarios.length
+    ? eniScenarios.map(function (s, i) {
+      var meta = eniEscape(s.created || '');
+      if (s.rootName) meta += ' ／ ' + eniEscape(s.rootName);
+      var sum = s.summary
+        ? '<div class="help">合計利益 ' + eniEscape(eniAggFormatMonth(s.summary.total)) + '</div>'
+        : '';
+      return '<div class="lineBox"><b>' + eniEscape(s.name || ('シミュレーション ' + (i + 1))) + '</b><br>' +
+        meta + sum +
+        '<div class="homeToggleRow" style="margin-top:8px">' +
+        '<button type="button" onclick="eniLoadScenario(' + i + ')">開く</button>' +
+        '<button type="button" class="btn2" onclick="eniDeleteScenario(' + i + ')">削除</button>' +
+        '</div></div>';
+    }).join('')
+    : '保存済みシミュレーションはありません。';
+  modalBg.style.display = 'flex';
+}
+
+function eniDeleteScenario(i) {
+  if (!eniScenarios[i]) return;
+  if (!confirm('このシミュレーションを削除しますか？')) return;
+  eniScenarios.splice(i, 1);
+  if (typeof hubSaveToStorage === 'function') hubSaveToStorage();
+  eniOpenScenarioList();
+}
+
+function eniLoadScenario(i) {
+  if (!eniScenarios[i] || !eniScenarios[i].data) return;
+  if (!eniSimMode) {
+    if (!eniCurrentData.length) eniCurrentData = eniClone(eniMembers);
+  }
+  eniMembers = eniClone(eniScenarios[i].data);
+  eniSimMode = true;
+  eniStakeOverride = null;
+  if (eniScenarios[i].rootId && eniFindMember(eniScenarios[i].rootId)) {
+    eniRootId = eniScenarios[i].rootId;
+  }
+  eniFocusId = eniRootId;
+  if (typeof closeModal === 'function') closeModal();
+  if (typeof showPage === 'function') showPage('eniOrg');
+  eniRender();
 }
 
 function eniExportCurrentOrg() {
@@ -1391,7 +1839,17 @@ if (typeof window !== 'undefined') {
   window.eniRender = eniRender;
   window.eniShowAccountManage = eniShowAccountManage;
   window.eniOpenAggregationPanel = eniOpenAggregationPanel;
+  window.eniRenderAccountManage = eniRenderAccountManage;
+  window.eniAccountManageMove = eniAccountManageMove;
+  window.eniToggleHomeVisible = eniToggleHomeVisible;
   window.eniOpenSimulationPanel = eniOpenSimulationPanel;
+  window.eniStartSimulation = eniStartSimulation;
+  window.eniRestoreCurrent = eniRestoreCurrent;
+  window.eniSaveScenario = eniSaveScenario;
+  window.eniOpenScenarioList = eniOpenScenarioList;
+  window.eniDeleteScenario = eniDeleteScenario;
+  window.eniLoadScenario = eniLoadScenario;
+  window.eniGetDisplaySummary = eniGetDisplaySummary;
   window.eniOpenAccountManager = eniOpenAccountManager;
   window.eniExportCurrentOrg = eniExportCurrentOrg;
   window.eniImportOrgAsRoot = eniImportOrgAsRoot;
@@ -1427,4 +1885,8 @@ if (typeof window !== 'undefined') {
   window.eniOpenMove = eniOpenMove;
   window.eniSaveMove = eniSaveMove;
   window.eniMakeSharePackage = eniMakeSharePackage;
+  window.eniShowCardHelp = eniShowCardHelp;
+  window.eniShowTeamRewardDetail = eniShowTeamRewardDetail;
+  window.eniShowAggCardDetail = eniShowAggCardDetail;
+  window.eniShowAllAccountsTeamRewardDetail = eniShowAllAccountsTeamRewardDetail;
 }

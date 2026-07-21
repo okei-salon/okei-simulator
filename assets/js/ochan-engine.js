@@ -496,21 +496,27 @@ function ochanHookShowPageForSession() {
     };
   }
 
-  // 他フックより外側を維持（内側の実装は ochanShowPageOrig に保持）
-  if (showPage !== window.__ochanShowPageWrapper) {
-    ochanShowPageOrig = showPage;
-    window.showPage = window.__ochanShowPageWrapper;
-  }
+  // 既に最外側なら何もしない
+  if (showPage === window.__ochanShowPageWrapper) return;
+
+  // 重要: wrapper を内側チェーンに残したまま再フックすると
+  // oi -> xi -> wrapper -> oi の循環参照になるため、外側付け直しは1回だけ行う。
+  if (window.__ochanShowPageOuterApplied) return;
+  window.__ochanShowPageOuterApplied = true;
+  ochanShowPageOrig = showPage;
+  window.showPage = window.__ochanShowPageWrapper;
 }
 
 if (typeof document !== 'undefined') {
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', ochanHookShowPageForSession);
-  } else {
-    ochanHookShowPageForSession();
+  // excel/orca import の showPage ラップより後で、一度だけ最外側へ付ける
+  function ochanScheduleShowPageHook() {
+    setTimeout(ochanHookShowPageForSession, 0);
+    setTimeout(ochanHookShowPageForSession, 100);
+    setTimeout(ochanHookShowPageForSession, 500);
   }
-  // excel/orca import の showPage ラップより後で外側に付け直す
-  setTimeout(ochanHookShowPageForSession, 0);
-  setTimeout(ochanHookShowPageForSession, 100);
-  setTimeout(ochanHookShowPageForSession, 500);
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', ochanScheduleShowPageHook);
+  } else {
+    ochanScheduleShowPageHook();
+  }
 }
