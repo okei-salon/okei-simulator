@@ -549,27 +549,24 @@ function pfGetEnabledProjectRows() {
     let eniCycleDaysLeft = null;
     let eniCycleTargetDateStr = null;
     let eniCycleAchieved = false;
-    if (p.key === 'ram') {
-      let ramAgg = pfGetRamAggregateTotals();
-      if (ramAgg) {
-        monthProfitUsd = Number(ramAgg.total) || 0;
-        monthYield = pfFormatYieldFromAmount(monthProfitUsd, operatingUsd);
+    // RAM / ORCA / ENI: 予測月利益 = 今月累計 + (最新日収 × 残り日数)
+    if ((p.key === 'ram' || p.key === 'orca' || p.key === 'eni') && !pfIsDemoMode()) {
+      if (p.key === 'eni') {
+        let eniPace = pfGetEniSharedPaceMetrics(operatingUsd, profitUsd);
+        monthProfitUsd = eniPace.predictedMonthProfitUsd;
+        monthYield = eniPace.predictedMonthYield;
+        eniAvgDailyProfitUsd = eniPace.avgDailyProfitUsd;
+        eniCanForecast = !!eniPace.canForecast;
+        eniCycleDaysLeft = eniPace.cycleDaysLeft;
+        eniCycleTargetDateStr = eniPace.cycleTargetDateStr;
+        eniCycleAchieved = !!eniPace.cycleAchieved;
+      } else {
+        let pace = pfGetProjectSharedPaceMetrics(p.key, operatingUsd, viewMonth.y, viewMonth.m);
+        if (pace.canForecast) {
+          monthProfitUsd = pace.predictedMonthProfitUsd;
+          monthYield = pace.predictedMonthYield;
+        }
       }
-    } else if (p.key === 'orca') {
-      let orcaAgg = pfGetOrcaAggregateTotals();
-      if (orcaAgg) {
-        monthProfitUsd = Number(orcaAgg.total) || 0;
-        monthYield = pfFormatYieldFromAmount(monthProfitUsd, operatingUsd);
-      }
-    } else if (p.key === 'eni' && !pfIsDemoMode()) {
-      let eniPace = pfGetEniSharedPaceMetrics(operatingUsd, profitUsd);
-      monthProfitUsd = eniPace.predictedMonthProfitUsd;
-      monthYield = eniPace.predictedMonthYield;
-      eniAvgDailyProfitUsd = eniPace.avgDailyProfitUsd;
-      eniCanForecast = !!eniPace.canForecast;
-      eniCycleDaysLeft = eniPace.cycleDaysLeft;
-      eniCycleTargetDateStr = eniPace.cycleTargetDateStr;
-      eniCycleAchieved = !!eniPace.cycleAchieved;
     }
     let recovery = operatingUsd > 0
       ? Math.round((profitUsd / operatingUsd) * 1000) / 10
@@ -816,61 +813,92 @@ function pfGetOrcaAggregateTotals() {
   return orcaAggregateTotals();
 }
 
+function pfScaleProfitSegmentsToTotal(segments, targetTotal) {
+  let list = (segments || []).map(function (s) {
+    return Object.assign({}, s, { amount: Math.max(0, Number(s.amount) || 0) });
+  });
+  let sum = list.reduce(function (acc, s) { return acc + s.amount; }, 0);
+  let target = Math.max(0, Number(targetTotal) || 0);
+  if (!(sum > 0) || !(target > 0)) return list;
+  let k = target / sum;
+  return list.map(function (s) {
+    return Object.assign({}, s, { amount: s.amount * k });
+  });
+}
+
 function pfGetProjectProfitBreakdown(projectKey, operatingUsd) {
   operatingUsd = Number(operatingUsd) || 0;
   let hasOperating = operatingUsd > 0;
+  let viewMonth = pfGetPortfolioViewMonth();
+  let pace = (projectKey === 'ram' || projectKey === 'orca' || projectKey === 'eni')
+    ? pfGetProjectSharedPaceMetrics(projectKey, operatingUsd, viewMonth.y, viewMonth.m)
+    : null;
+  let pacedPredicted = pace && pace.canForecast
+    ? Math.max(0, Number(pace.predictedMonthProfitUsd) || 0)
+    : null;
 
   if (projectKey === 'ram') {
     let agg = pfGetRamAggregateTotals();
-    if (!agg) return null;
-    let personal = Math.max(0, Number(agg.personal) || 0);
-    let direct = Math.max(0, Number(agg.direct) || 0);
-    let second = Math.max(0, Number(agg.second) || 0);
-    let title = Math.max(0, Number(agg.title) || 0);
+    if (!agg && pacedPredicted == null) return null;
+    let personal = Math.max(0, Number(agg && agg.personal) || 0);
+    let direct = Math.max(0, Number(agg && agg.direct) || 0);
+    let second = Math.max(0, Number(agg && agg.second) || 0);
+    let title = Math.max(0, Number(agg && agg.title) || 0);
     let referral = direct + second;
-    let predicted = Math.max(0, Number(agg.total) || 0);
-    let org = Math.max(0, predicted - personal);
-    let chartSegments = [
+    let orgTotal = personal + referral + title;
+    let predicted = pacedPredicted != null
+      ? pacedPredicted
+      : Math.max(0, Number(agg && agg.total) || orgTotal || 0);
+    let chartSegments = pfScaleProfitSegmentsToTotal([
       { key: 'personal', label: '個人運用利益', amount: personal, color: '#fdba74' },
       { key: 'referral', label: '紹介報酬', amount: referral, color: '#fb923c' },
       { key: 'title', label: 'タイトル報酬', amount: title, color: '#f97316' }
-    ];
+    ], predicted);
+    let scaledPersonal = chartSegments[0] ? chartSegments[0].amount : personal;
+    let scaledOrg = predicted - scaledPersonal;
     return {
       projectKey: 'ram',
       theme: 'ram',
       operatingUsd: operatingUsd,
       hasOperating: hasOperating,
-      personal: personal,
-      personalYield: pfCalcYieldPctValue(personal, operatingUsd),
-      org: org,
-      orgYield: pfCalcYieldPctValue(org, operatingUsd),
+      personal: scaledPersonal,
+      personalYield: pfCalcYieldPctValue(scaledPersonal, operatingUsd),
+      org: Math.max(0, scaledOrg),
+      orgYield: pfCalcYieldPctValue(scaledOrg, operatingUsd),
       predicted: predicted,
       predictedYield: pfCalcYieldPctValue(predicted, operatingUsd),
+      pace: pace,
       chartSegments: chartSegments
     };
   }
 
   if (projectKey === 'orca') {
     let agg = pfGetOrcaAggregateTotals();
-    if (!agg) return null;
-    let ai = Math.max(0, Number(agg.personal) || 0);
-    let affiliate = Math.max(0, Number(agg.ranking) || 0);
-    let predicted = Math.max(0, Number(agg.total) || 0);
+    if (!agg && pacedPredicted == null) return null;
+    let ai = Math.max(0, Number(agg && agg.personal) || 0);
+    let affiliate = Math.max(0, Number(agg && agg.ranking) || 0);
+    let predicted = pacedPredicted != null
+      ? pacedPredicted
+      : Math.max(0, Number(agg && agg.total) || 0);
+    let chartSegments = pfScaleProfitSegmentsToTotal([
+      { key: 'ai', label: 'AI利益', amount: ai, color: '#67e8f9' },
+      { key: 'affiliate', label: 'アフィリエイト利益', amount: affiliate, color: '#06b6d4' }
+    ], predicted);
+    let scaledAi = chartSegments[0] ? chartSegments[0].amount : ai;
+    let scaledAf = chartSegments[1] ? chartSegments[1].amount : affiliate;
     return {
       projectKey: 'orca',
       theme: 'orca',
       operatingUsd: operatingUsd,
       hasOperating: hasOperating,
-      ai: ai,
-      aiYield: pfCalcYieldPctValue(ai, operatingUsd),
-      affiliate: affiliate,
-      affiliateYield: pfCalcYieldPctValue(affiliate, operatingUsd),
+      ai: scaledAi,
+      aiYield: pfCalcYieldPctValue(scaledAi, operatingUsd),
+      affiliate: scaledAf,
+      affiliateYield: pfCalcYieldPctValue(scaledAf, operatingUsd),
       predicted: predicted,
       predictedYield: pfCalcYieldPctValue(predicted, operatingUsd),
-      chartSegments: [
-        { key: 'ai', label: 'AI利益', amount: ai, color: '#67e8f9' },
-        { key: 'affiliate', label: 'アフィリエイト利益', amount: affiliate, color: '#06b6d4' }
-      ]
+      pace: pace,
+      chartSegments: chartSegments
     };
   }
 
@@ -913,8 +941,21 @@ function pfRenderProfitPieChart(segments, theme, predicted, predictedYield, hasO
 }
 
 function pfRenderForecastSection(breakdown) {
+  let pace = breakdown && breakdown.pace;
+  let paceHtml = '';
+  if (pace && pace.canForecast) {
+    paceHtml =
+      '<div class="pfProfitDetailRow"><span class="pfProfitDetailLabel">今月累計利益</span>' +
+      '<b class="pfProfitDetailVal">' + pfMoneyUsd(pace.monthProfitToDateUsd) + '</b></div>' +
+      '<div class="pfProfitDetailRow"><span class="pfProfitDetailLabel">最新の日収</span>' +
+      '<b class="pfProfitDetailVal">' + pfMoneyUsd(pace.latestDailyProfitUsd) + '</b></div>' +
+      '<div class="pfProfitDetailRow"><span class="pfProfitDetailLabel">当月残り日数</span>' +
+      '<b class="pfProfitDetailVal">' + (Number(pace.remainingDaysInMonth) || 0) + '日</b></div>' +
+      '<p class="help" style="margin:6px 0 10px">予測月利益 ＝ 今月累計利益 ＋（最新の日収 × 当月残り日数）</p>';
+  }
   return '<section class="pfProfitDetailSection pfProfitDetailSection--forecast">' +
     '<div class="pfProfitDetailSectionTitle">予測</div>' +
+    paceHtml +
     '<div class="pfProfitDetailRow pfProfitDetailRow--emph"><span class="pfProfitDetailLabel">予測月利益</span>' +
     '<b class="pfProfitDetailVal pfProfitDetailVal--emph">' + pfFormatMonthlyUsd(breakdown.predicted) + '</b></div>' +
     '<div class="pfProfitDetailRow pfProfitDetailRow--emph"><span class="pfProfitDetailLabel">予測月利</span>' +
@@ -1053,50 +1094,119 @@ function pfFormatEniTargetDateStr(fromDate, daysLeft) {
 }
 
 /**
- * Single ENI pace source used by:
- * - 予測月利益 / 予測月利
- * - 3.5倍までの残り日数 / 到達予定日
+ * 予測月利益（RAM / ORCA / ENI 共通）
+ * 今月累計利益 + (最新の日収 × 当月残り日数)
  *
- * avgDaily = thisMonthProfit / thisMonthInputDays
- * cycleDays = ceil((operating × 3.5 − cumulative) / avgDaily)
- * (MUST use avgDaily directly — never predictedMonth / 30)
+ * 残り日数 = 月末日 − 本日（本日分は累計に含む前提）
+ * 最新の日収 = 本日利益があればそれ。なければ当月で直近の入力日の利益。
+ */
+function pfGetProjectSharedPaceMetrics(projectKey, operatingUsd, viewY, viewM) {
+  let op = Number(operatingUsd) || 0;
+  let now = typeof getHomeReferenceDate === 'function' ? getHomeReferenceDate() : new Date();
+  let y = viewY != null ? Number(viewY) : now.getFullYear();
+  let m = viewM != null ? Number(viewM) : now.getMonth();
+  let daysInMonth = new Date(y, m + 1, 0).getDate();
+  let isCurrentMonth = (y === now.getFullYear() && m === now.getMonth());
+  let todayD = isCurrentMonth ? now.getDate() : daysInMonth;
+  let remainingDaysInMonth = isCurrentMonth ? Math.max(0, daysInMonth - todayD) : 0;
+  let scanEnd = isCurrentMonth ? todayD : daysInMonth;
+
+  let monthProfit = 0;
+  let latestDaily = 0;
+  let latestDay = 0;
+  let positiveDays = 0;
+  let hasAnyDay = false;
+
+  function dayProfitFor(entry, dateKey) {
+    if (!entry) return 0;
+    if (projectKey === 'eni') return pfEniDayProfitUsd(entry);
+    if (typeof pdSumProjectDayRevenue === 'function') {
+      return Number(pdSumProjectDayRevenue(entry, projectKey, dateKey)) || 0;
+    }
+    return Number(entry[projectKey]) || 0;
+  }
+
+  function dayHasInput(entry, dateKey) {
+    if (!entry) return false;
+    if (projectKey === 'eni') return pfEniDayHasPaceInput(entry);
+    if (typeof pdProjectDayHasRevenue === 'function') {
+      return pdProjectDayHasRevenue(entry, projectKey, dateKey);
+    }
+    return dayProfitFor(entry, dateKey) !== 0 || entry[projectKey] != null;
+  }
+
+  for (let d = 1; d <= scanEnd; d++) {
+    let dateKey = pfEniDateKey(y, m, d);
+    let entry = typeof pdGetRevenueEntry === 'function'
+      ? pdGetRevenueEntry(dateKey)
+      : (typeof settings !== 'undefined' && settings && settings.revenueLog
+        ? settings.revenueLog[dateKey]
+        : null);
+    if (!dayHasInput(entry, dateKey)) continue;
+    let dayProfit = dayProfitFor(entry, dateKey);
+    if (typeof pdRoundEni === 'function' && projectKey === 'eni') dayProfit = pdRoundEni(dayProfit);
+    else if (typeof pdRound === 'function') dayProfit = pdRound(dayProfit);
+    hasAnyDay = true;
+    monthProfit += dayProfit;
+    latestDaily = dayProfit;
+    latestDay = d;
+    if (Math.abs(dayProfit) > 0) positiveDays += 1;
+  }
+
+  if (typeof pdRoundEni === 'function' && projectKey === 'eni') {
+    monthProfit = pdRoundEni(monthProfit);
+    latestDaily = pdRoundEni(latestDaily);
+  } else if (typeof pdRound === 'function') {
+    monthProfit = pdRound(monthProfit);
+    latestDaily = pdRound(latestDaily);
+  } else {
+    monthProfit = Math.round(monthProfit * 10000) / 10000;
+    latestDaily = Math.round(latestDaily * 10000) / 10000;
+  }
+
+  let predictedMonth = monthProfit + (latestDaily * remainingDaysInMonth);
+  if (typeof pdRoundEni === 'function' && projectKey === 'eni') {
+    predictedMonth = pdRoundEni(predictedMonth);
+  } else if (typeof pdRound === 'function') {
+    predictedMonth = pdRound(predictedMonth);
+  }
+
+  let avgDaily = positiveDays > 0 ? (monthProfit / positiveDays) : 0;
+
+  return {
+    projectKey: projectKey,
+    avgDailyProfitUsd: avgDaily,
+    latestDailyProfitUsd: latestDaily,
+    latestDailyDay: latestDay,
+    monthProfitToDateUsd: monthProfit,
+    monthInputDays: positiveDays,
+    remainingDaysInMonth: remainingDaysInMonth,
+    predictedMonthProfitUsd: hasAnyDay ? predictedMonth : 0,
+    predictedMonthYield: hasAnyDay ? pfFormatYieldFromAmount(predictedMonth, op) : '--',
+    canForecast: hasAnyDay,
+    year: y,
+    month: m
+  };
+}
+
+/**
+ * ENI pace source used by:
+ * - 予測月利益 / 予測月利（共通着地予想）
+ * - 3.5倍までの残り日数 / 到達予定日（avgDaily ベース）
  */
 function pfGetEniSharedPaceMetrics(operatingUsd, cumulativeProfitUsd) {
   let op = Number(operatingUsd) || 0;
   let cumulative = Number(cumulativeProfitUsd) || 0;
-  let now = new Date();
-  let y = now.getFullYear();
-  let m = now.getMonth();
-  let todayD = now.getDate();
-  let daysInMonth = new Date(y, m + 1, 0).getDate();
-  let remainingDaysInMonth = Math.max(0, daysInMonth - todayD);
-
-  let monthProfit = 0;
-  let inputDays = 0;
-  if (typeof settings !== 'undefined' && settings && settings.revenueLog) {
-    for (let d = 1; d <= daysInMonth; d++) {
-      let dateKey = pfEniDateKey(y, m, d);
-      let entry = typeof pdGetRevenueEntry === 'function'
-        ? pdGetRevenueEntry(dateKey)
-        : settings.revenueLog[dateKey];
-      if (!entry) continue;
-      // Pace input days = days with ENI profit metrics saved (exclude balance/operation-only rows)
-      if (!pfEniDayHasPaceInput(entry)) continue;
-      let dayProfit = pfEniDayProfitUsd(entry);
-      // Zero-profit placeholders must not dilute avgDaily (would inflate remaining days)
-      if (!(Math.abs(dayProfit) > 0)) continue;
-      inputDays += 1;
-      monthProfit += dayProfit;
-    }
-  }
-  if (typeof pdRoundEni === 'function') monthProfit = pdRoundEni(monthProfit);
-  else monthProfit = Math.round(monthProfit * 10000) / 10000;
+  let now = typeof getHomeReferenceDate === 'function' ? getHomeReferenceDate() : new Date();
+  let pace = pfGetProjectSharedPaceMetrics('eni', op, now.getFullYear(), now.getMonth());
+  let avgDaily = Number(pace.avgDailyProfitUsd) || 0;
 
   let empty = {
     avgDailyProfitUsd: 0,
-    monthProfitToDateUsd: monthProfit,
-    monthInputDays: inputDays,
-    remainingDaysInMonth: remainingDaysInMonth,
+    latestDailyProfitUsd: 0,
+    monthProfitToDateUsd: pace.monthProfitToDateUsd || 0,
+    monthInputDays: pace.monthInputDays || 0,
+    remainingDaysInMonth: pace.remainingDaysInMonth || 0,
     predictedMonthProfitUsd: 0,
     predictedMonthYield: '--',
     canForecast: false,
@@ -1105,30 +1215,26 @@ function pfGetEniSharedPaceMetrics(operatingUsd, cumulativeProfitUsd) {
     cycleAchieved: op > 0 && cumulative >= (op * PF_ENI_CYCLE_MULTIPLE)
   };
 
-  if (inputDays <= 0) return empty;
+  if (!pace.canForecast) return empty;
 
-  let avgDaily = monthProfit / inputDays;
-  if (!(avgDaily > 0)) return empty;
-
-  let predictedMonth = monthProfit + (avgDaily * remainingDaysInMonth);
   let targetProfit = op * PF_ENI_CYCLE_MULTIPLE;
   let cycleAchieved = op > 0 && cumulative >= targetProfit;
   let cycleDaysLeft = null;
   let cycleTargetDateStr = null;
-  if (!cycleAchieved && op > 0) {
+  if (!cycleAchieved && op > 0 && avgDaily > 0) {
     let remainingNeed = Math.max(0, targetProfit - cumulative);
-    // Same avgDaily as predicted month — do NOT use predictedMonth / 30
     cycleDaysLeft = Math.max(1, Math.ceil(remainingNeed / avgDaily));
     cycleTargetDateStr = pfFormatEniTargetDateStr(now, cycleDaysLeft);
   }
 
   return {
     avgDailyProfitUsd: avgDaily,
-    monthProfitToDateUsd: monthProfit,
-    monthInputDays: inputDays,
-    remainingDaysInMonth: remainingDaysInMonth,
-    predictedMonthProfitUsd: predictedMonth,
-    predictedMonthYield: pfFormatYieldFromAmount(predictedMonth, op),
+    latestDailyProfitUsd: pace.latestDailyProfitUsd,
+    monthProfitToDateUsd: pace.monthProfitToDateUsd,
+    monthInputDays: pace.monthInputDays,
+    remainingDaysInMonth: pace.remainingDaysInMonth,
+    predictedMonthProfitUsd: pace.predictedMonthProfitUsd,
+    predictedMonthYield: pace.predictedMonthYield,
     canForecast: true,
     cycleDaysLeft: cycleDaysLeft,
     cycleTargetDateStr: cycleTargetDateStr,

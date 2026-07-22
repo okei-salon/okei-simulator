@@ -986,6 +986,24 @@ function pdSumProjectDayRevenue(entry, projectKey, dateKey) {
     });
     if (hasAny) return pdRound(sum);
   }
+  if (projectKey === 'eni' && entry.eniAccounts) {
+    let sum = 0;
+    let hasAny = false;
+    Object.keys(entry.eniAccounts).forEach(function (id) {
+      let ae = entry.eniAccounts[id];
+      if (!ae || typeof ae !== 'object') return;
+      if (ae.dailyProfit == null && ae.todayRevenue == null &&
+          ae.referralProfit == null && ae.titleProfit == null) {
+        return;
+      }
+      hasAny = true;
+      sum += typeof pdEniAccountRevenueTotal === 'function'
+        ? pdEniAccountRevenueTotal(ae)
+        : ((Number(ae.dailyProfit) || Number(ae.todayRevenue) || 0) +
+          (Number(ae.referralProfit) || 0) + (Number(ae.titleProfit) || 0));
+    });
+    if (hasAny) return pdRound(sum);
+  }
   return pdRound(Number(entry[projectKey]) || 0);
 }
 
