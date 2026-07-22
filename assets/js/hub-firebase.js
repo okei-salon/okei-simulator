@@ -623,9 +623,13 @@ function hubApplyMergedHubData(merged, cloudHash) {
 function hubEnrichLocalFromCloud(cloudDoc) {
   if (typeof hubIsCloudReadEnabled === 'function' && !hubIsCloudReadEnabled()) return false;
   if (!cloudDoc || typeof hubMergeHubDocuments !== 'function') return false;
-  let local = typeof hubLoadFromStorage === 'function' ? hubLoadFromStorage() : { data: hubCreateEmptyData() };
+  // 追加直後の enrich ではメモリ上の最新を優先（localStorage 再読込だと競合で新規が落ちる）
+  let localData = typeof hubPackLocalData === 'function'
+    ? hubPackLocalData()
+    : ((typeof hubLoadFromStorage === 'function' ? hubLoadFromStorage() : null) || {}).data;
+  if (!localData && typeof hubCreateEmptyData === 'function') localData = hubCreateEmptyData();
   let cloudUnpacked = hubUnpackFirestorePayload(cloudDoc);
-  let merged = hubMergeHubDocuments(local.data, cloudUnpacked);
+  let merged = hubMergeHubDocuments(localData, cloudUnpacked);
   return hubApplyMergedHubData(merged, hubComputeContentHash(cloudUnpacked));
 }
 

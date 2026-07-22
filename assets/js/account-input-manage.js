@@ -411,9 +411,14 @@ function aimClearRemovedOrgAccountId(projectKey, accountId) {
 
 function aimPlaceInputAccountInOrg(projectKey, accountId, parentId) {
   let acc = aimFindInputAccount(projectKey, accountId);
-  if (!acc) return false;
+  if (!acc) {
+    return { ok: false, error: '追加先アカウントが見つかりません' };
+  }
   aimClearRemovedOrgAccountId(projectKey, accountId);
   parentId = parentId || null;
+  if (parentId && !aimFindOrgMember(projectKey, parentId)) {
+    return { ok: false, error: '親ノードが見つかりません' };
+  }
 
   if (projectKey === 'ram' && typeof members !== 'undefined') {
     let existing = members.find(function (m) { return m.id === accountId; });
@@ -431,7 +436,8 @@ function aimPlaceInputAccountInOrg(projectKey, accountId, parentId) {
       rootAccountIds.push(accountId);
     }
     if (!parentId && typeof rootId !== 'undefined') { rootId = accountId; focusId = accountId; }
-    return true;
+    else if (parentId && typeof focusId !== 'undefined') focusId = accountId;
+    return { ok: true, id: accountId };
   }
   if (projectKey === 'orca' && typeof orcaMembers !== 'undefined') {
     let existing = orcaMembers.find(function (m) { return m.id === accountId; });
@@ -449,7 +455,8 @@ function aimPlaceInputAccountInOrg(projectKey, accountId, parentId) {
       orcaRootAccountIds.push(accountId);
     }
     if (!parentId && typeof orcaRootId !== 'undefined') { orcaRootId = accountId; orcaFocusId = accountId; }
-    return true;
+    else if (parentId && typeof orcaFocusId !== 'undefined') orcaFocusId = accountId;
+    return { ok: true, id: accountId };
   }
   if (projectKey === 'eni' && typeof eniMembers !== 'undefined') {
     let existing = eniMembers.find(function (m) { return m.id === accountId; });
@@ -472,9 +479,10 @@ function aimPlaceInputAccountInOrg(projectKey, accountId, parentId) {
       eniRootAccountIds.push(accountId);
     }
     if (!parentId && typeof eniRootId !== 'undefined') { eniRootId = accountId; }
-    return true;
+    if (typeof eniFocusId !== 'undefined') eniFocusId = accountId;
+    return { ok: true, id: accountId };
   }
-  return false;
+  return { ok: false, error: '最新データの取得に失敗しました' };
 }
 
 function aimRecordRemovedOrgAccountIds(projectKey, ids) {
@@ -637,29 +645,168 @@ function aimEscapeHtml(text) {
     .replace(/"/g, '&quot;');
 }
 
-function aimPersistAndRerenderOrg(projectKey) {
-  if (typeof persistHubSettings === 'function') persistHubSettings();
-  else if (typeof hubSaveToStorage === 'function') hubSaveToStorage();
-  if (typeof markActivity === 'function') markActivity();
-  if (projectKey === 'ram' && typeof render === 'function') render();
-  if (projectKey === 'orca' && typeof orcaRender === 'function') orcaRender();
-  if (projectKey === 'eni' && typeof eniRender === 'function') eniRender();
+var aimOrgAddInFlight = false;
+
+function aimOrgAddDebugEnabled() {
+  try {
+    if (typeof location !== 'undefined' && /(?:^|[?&])aimDebug=1(?:&|$)/.test(location.search || '')) {
+      return true;
+    }
+    if (typeof localStorage !== 'undefined' && localStorage.getItem('oukei_aim_org_add_debug') === '1') {
+      return true;
+    }
+  } catch (e) { /* ignore */ }
+  return !!(typeof location !== 'undefined' &&
+    (location.hostname === 'localhost' || location.hostname === '127.0.0.1'));
+}
+
+function aimOrgAddLog(payload) {
+  if (!aimOrgAddDebugEnabled()) return;
+  try {
+    console.log('[aimOrgAdd]', payload);
+  } catch (e) { /* ignore */ }
+}
+
+function aimGetDisplayedAccountId(projectKey) {
+  if (projectKey === 'ram' && typeof rootId !== 'undefined') return rootId || '';
+  if (projectKey === 'orca' && typeof orcaRootId !== 'undefined') return orcaRootId || '';
+  if (projectKey === 'eni' && typeof eniRootId !== 'undefined') return eniRootId || '';
+  return '';
+}
+
+function aimFindOrgMember(projectKey, id) {
+  if (!id) return null;
+  return aimGetOrgMembersList(projectKey).find(function (m) { return m && m.id === id; }) || null;
+}
+
+function aimWouldCreateParentCycle(projectKey, parentId, newId) {
+  if (!parentId || !newId) return false;
+  if (parentId === newId) return true;
+  var guard = 0;
+  var cur = parentId;
+  while (cur && guard < 500) {
+    if (cur === newId) return true;
+    var m = aimFindOrgMember(projectKey, cur);
+    cur = m && m.parent ? m.parent : null;
+    guard += 1;
+  }
+  return false;
+}
+
+/**
+ * 追加直前の共通検証。ok=false のとき error にユーザー向け文言。
+ */
+function aimValidateOrgAddTarget(projectKey, parentId, newId) {
+  var list = aimGetOrgMembersList(projectKey);
+  if (!projectKey || (projectKey !== 'ram' && projectKey !== 'orca' && projectKey !== 'eni')) {
+    return { ok: false, error: '追加先プロジェクトが不正です' };
+  }
+  if (!list || typeof list.push !== 'function') {
+    return { ok: false, error: '最新データの取得に失敗しました' };
+  }
+  if (newId && list.some(function (m) { return m && m.id === newId; })) {
+    return { ok: false, error: '重複IDが検出されました' };
+  }
+  if (parentId) {
+    var parent = list.find(function (m) { return m && m.id === parentId; });
+    if (!parent) {
+      return { ok: false, error: '親ノードが見つかりません' };
+    }
+    if (aimWouldCreateParentCycle(projectKey, parentId, newId || parentId)) {
+      return { ok: false, error: '親子関係が不正です' };
+    }
+  }
+  return { ok: true, parentId: parentId || null, beforeCount: list.length };
+}
+
+function aimPersistAndRerenderOrg(projectKey, opts) {
+  opts = opts || {};
+  var ok = true;
+  try {
+    if (typeof markActivity === 'function') markActivity();
+    if (typeof persistHubSettings === 'function') persistHubSettings();
+    else if (typeof hubSaveToStorage === 'function') hubSaveToStorage();
+  } catch (e) {
+    ok = false;
+    aimOrgAddLog({
+      project: projectKey,
+      phase: 'persist',
+      success: false,
+      error: String(e && e.message || e)
+    });
+    if (typeof showToast === 'function') showToast('⚠️ 保存に失敗しました');
+    return false;
+  }
+  try {
+    if (projectKey === 'ram' && typeof render === 'function') render();
+    else if (projectKey === 'orca' && typeof orcaRender === 'function') orcaRender();
+    else if (projectKey === 'eni' && typeof eniRender === 'function') eniRender();
+    else ok = false;
+  } catch (e2) {
+    ok = false;
+    aimOrgAddLog({
+      project: projectKey,
+      phase: 'rerender',
+      success: false,
+      error: String(e2 && e2.message || e2)
+    });
+    if (typeof showToast === 'function') showToast('⚠️ 再描画に失敗しました');
+    return false;
+  }
+  if (opts.newId && !aimFindOrgMember(projectKey, opts.newId)) {
+    aimOrgAddLog({
+      project: projectKey,
+      phase: 'verify',
+      success: false,
+      newNodeId: opts.newId,
+      afterCount: aimGetOrgMembersList(projectKey).length
+    });
+    if (typeof showToast === 'function') showToast('⚠️ 追加が反映されませんでした');
+    return false;
+  }
+  aimOrgAddLog({
+    project: projectKey,
+    phase: 'persistRerender',
+    success: ok,
+    accountId: aimGetDisplayedAccountId(projectKey),
+    newNodeId: opts.newId || '',
+    parentNodeId: opts.parentId || null,
+    afterCount: aimGetOrgMembersList(projectKey).length,
+    saveTarget: 'localStorage(+cloud schedule)'
+  });
+  return ok;
 }
 
 /**
  * 組織図専用の新規メンバー作成（実績入力 *InputAccounts には書かない）
- * @returns {string|null} new member id
+ * @returns {{ok:boolean, id?:string, error?:string}}
  */
-function aimCreateOrgOnlyMember(projectKey, fields, parentId) {
+function aimCreateOrgOnlyMemberResult(projectKey, fields, parentId) {
   fields = fields || {};
   parentId = parentId || null;
   var name = String(fields.name || '').trim();
   var username = String(fields.username || '').trim().replace(/^@/, '');
   var investment = Number(fields.investment) || 0;
+  var displayed = aimGetDisplayedAccountId(projectKey);
+
+  // 親は「モーダルを開いた瞬間」ではなく、保存直前の最新リストで再確認
+  if (parentId && !aimFindOrgMember(projectKey, parentId)) {
+    aimOrgAddLog({
+      project: projectKey,
+      phase: 'create',
+      success: false,
+      accountId: displayed,
+      parentNodeId: parentId,
+      error: 'parent_missing'
+    });
+    return { ok: false, error: '親ノードが見つかりません' };
+  }
 
   if (projectKey === 'ram' && typeof members !== 'undefined') {
     if (typeof settings !== 'undefined') settings.ramOrgOnlyCreateUsed = true;
-    var ramId = 'm' + Date.now();
+    var ramId = 'm' + Date.now() + '_' + Math.floor(Math.random() * 1000);
+    var ramCheck = aimValidateOrgAddTarget('ram', parentId, ramId);
+    if (!ramCheck.ok) return { ok: false, error: ramCheck.error };
     var ramMember = {
       id: ramId,
       parent: parentId,
@@ -688,11 +835,23 @@ function aimCreateOrgOnlyMember(projectKey, fields, parentId) {
         adjustAncestorManualVolumes(parentId, investment);
       }
     }
-    return ramId;
+    aimOrgAddLog({
+      project: 'ram',
+      phase: 'create',
+      success: true,
+      accountId: aimGetDisplayedAccountId('ram'),
+      parentNodeId: parentId,
+      newNodeId: ramId,
+      beforeCount: ramCheck.beforeCount,
+      afterCount: members.length
+    });
+    return { ok: true, id: ramId };
   }
 
   if (projectKey === 'orca' && typeof orcaMembers !== 'undefined') {
-    var orcaId = 'o' + Date.now();
+    var orcaId = 'o' + Date.now() + '_' + Math.floor(Math.random() * 1000);
+    var orcaCheck = aimValidateOrgAddTarget('orca', parentId, orcaId);
+    if (!orcaCheck.ok) return { ok: false, error: orcaCheck.error };
     var orcaMember = {
       id: orcaId,
       parent: parentId,
@@ -733,13 +892,25 @@ function aimCreateOrgOnlyMember(projectKey, fields, parentId) {
         orcaRefreshGroupSalesUpstream(orcaId);
       }
     }
-    return orcaId;
+    aimOrgAddLog({
+      project: 'orca',
+      phase: 'create',
+      success: true,
+      accountId: aimGetDisplayedAccountId('orca'),
+      parentNodeId: parentId,
+      newNodeId: orcaId,
+      beforeCount: orcaCheck.beforeCount,
+      afterCount: orcaMembers.length
+    });
+    return { ok: true, id: orcaId };
   }
 
   if (projectKey === 'eni' && typeof eniMembers !== 'undefined') {
     var wallet = String(fields.walletAddress || fields.username || '').trim();
-    if (!wallet) return null;
-    var eniId = 'eni_' + Date.now();
+    if (!wallet) return { ok: false, error: 'ウォレットアドレスは必須です' };
+    var eniId = 'eni_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
+    var eniCheck = aimValidateOrgAddTarget('eni', parentId, eniId);
+    if (!eniCheck.ok) return { ok: false, error: eniCheck.error };
     var eniMember = {
       id: eniId,
       parent: parentId,
@@ -766,9 +937,61 @@ function aimCreateOrgOnlyMember(projectKey, fields, parentId) {
       if (eniParent) eniParent.open = true;
       if (typeof eniFocusId !== 'undefined') eniFocusId = eniId;
     }
-    return eniId;
+    aimOrgAddLog({
+      project: 'eni',
+      phase: 'create',
+      success: true,
+      accountId: aimGetDisplayedAccountId('eni'),
+      parentNodeId: parentId,
+      newNodeId: eniId,
+      beforeCount: eniCheck.beforeCount,
+      afterCount: eniMembers.length
+    });
+    return { ok: true, id: eniId };
   }
-  return null;
+  return { ok: false, error: '追加先アカウントが見つかりません' };
+}
+
+/** 成功時は id 文字列、失敗時は null（既存呼び出し互換） */
+function aimCreateOrgOnlyMember(projectKey, fields, parentId) {
+  var res = aimCreateOrgOnlyMemberResult(projectKey, fields, parentId);
+  return res && res.ok ? res.id : null;
+}
+
+function aimRollbackOrgOnlyMember(projectKey, memberId) {
+  if (!projectKey || !memberId) return;
+  if (projectKey === 'ram' && typeof members !== 'undefined') {
+    members = members.filter(function (m) { return !m || m.id !== memberId; });
+    if (typeof rootAccountIds !== 'undefined') {
+      rootAccountIds = rootAccountIds.filter(function (id) { return id !== memberId; });
+    }
+    if (typeof rootId !== 'undefined' && rootId === memberId) {
+      rootId = (rootAccountIds && rootAccountIds[0]) || '';
+      if (typeof focusId !== 'undefined') focusId = rootId;
+    }
+    return;
+  }
+  if (projectKey === 'orca' && typeof orcaMembers !== 'undefined') {
+    orcaMembers = orcaMembers.filter(function (m) { return !m || m.id !== memberId; });
+    if (typeof orcaRootAccountIds !== 'undefined') {
+      orcaRootAccountIds = orcaRootAccountIds.filter(function (id) { return id !== memberId; });
+    }
+    if (typeof orcaRootId !== 'undefined' && orcaRootId === memberId) {
+      orcaRootId = (orcaRootAccountIds && orcaRootAccountIds[0]) || '';
+      if (typeof orcaFocusId !== 'undefined') orcaFocusId = orcaRootId;
+    }
+    return;
+  }
+  if (projectKey === 'eni' && typeof eniMembers !== 'undefined') {
+    eniMembers = eniMembers.filter(function (m) { return !m || m.id !== memberId; });
+    if (typeof eniRootAccountIds !== 'undefined') {
+      eniRootAccountIds = eniRootAccountIds.filter(function (id) { return id !== memberId; });
+    }
+    if (typeof eniRootId !== 'undefined' && eniRootId === memberId) {
+      eniRootId = (eniRootAccountIds && eniRootAccountIds[0]) || '';
+      if (typeof eniFocusId !== 'undefined') eniFocusId = eniRootId;
+    }
+  }
 }
 
 /**
@@ -995,7 +1218,21 @@ function aimRenderOrgPlacementModal(projectKey, contextParentId, onPlaced) {
   var primaryBtn = document.getElementById('aimOrgAddPrimaryBtn');
   if (primaryBtn) {
     primaryBtn.onclick = function () {
+      if (aimOrgAddInFlight) return;
       var parentId = isChildMode ? contextParentId : null;
+      // 保存直前に親を最新メンバー一覧で再確認（切替直後の取り違え防止）
+      if (parentId && !aimFindOrgMember(projectKey, parentId)) {
+        if (typeof showToast === 'function') showToast('⚠️ 親ノードが見つかりません');
+        return;
+      }
+
+      var primaryLabel = primaryBtn.textContent;
+      function setBusy(busy) {
+        aimOrgAddInFlight = !!busy;
+        primaryBtn.disabled = !!busy;
+        primaryBtn.textContent = busy ? '保存中…' : primaryLabel;
+      }
+
       if (currentTab === 'new') {
         var fields = aimReadOrgOnlyNewFormFields(projectKey);
         if (projectKey === 'eni' && !String(fields.walletAddress || '').trim()) {
@@ -1006,17 +1243,31 @@ function aimRenderOrgPlacementModal(projectKey, contextParentId, onPlaced) {
           if (typeof showToast === 'function') showToast('⚠️ 名前またはユーザーネームを入力してください');
           return;
         }
-        var newId = aimCreateOrgOnlyMember(projectKey, fields, parentId);
-        if (!newId) {
-          if (typeof showToast === 'function') showToast('⚠️ 追加できませんでした');
+        setBusy(true);
+        var created = aimCreateOrgOnlyMemberResult(projectKey, fields, parentId);
+        if (!created || !created.ok || !created.id) {
+          setBusy(false);
+          if (typeof showToast === 'function') {
+            showToast('⚠️ ' + ((created && created.error) || '追加できませんでした'));
+          }
           return;
         }
-        if (typeof closeModal === 'function') closeModal();
-        aimPersistAndRerenderOrg(projectKey);
-        if (typeof onPlaced === 'function') onPlaced(newId);
+        var saved = aimPersistAndRerenderOrg(projectKey, {
+          newId: created.id,
+          parentId: parentId
+        });
+        if (!saved) {
+          // 保存／描画失敗時は tombstone なしでロールバック
+          aimRollbackOrgOnlyMember(projectKey, created.id);
+          setBusy(false);
+          return;
+        }
+        if (typeof onPlaced === 'function') onPlaced(created.id);
         if (typeof showToast === 'function') {
           showToast(isChildMode ? '✅ 組織図の配下へ追加しました' : '✅ 新しい親系列を追加しました');
         }
+        setBusy(false);
+        if (typeof closeModal === 'function') closeModal();
         return;
       }
 
@@ -1028,19 +1279,37 @@ function aimRenderOrgPlacementModal(projectKey, contextParentId, onPlaced) {
       }
       var sel = document.getElementById('aimPlaceAccountSelect');
       var id = sel ? sel.value : '';
-      if (!id) return;
-      aimPlaceInputAccountInOrg(projectKey, id, parentId);
+      if (!id) {
+        if (typeof showToast === 'function') showToast('⚠️ 追加先アカウントが見つかりません');
+        return;
+      }
+      setBusy(true);
+      var placed = aimPlaceInputAccountInOrg(projectKey, id, parentId);
+      if (!placed || !placed.ok) {
+        setBusy(false);
+        if (typeof showToast === 'function') {
+          showToast('⚠️ ' + ((placed && placed.error) || '追加できませんでした'));
+        }
+        return;
+      }
       if (isChildMode) {
-        var list = aimGetOrgMembersList(projectKey);
-        var p = list.find(function (m) { return m && m.id === parentId; });
+        var p = aimFindOrgMember(projectKey, parentId);
         if (p) p.open = true;
       }
-      if (typeof closeModal === 'function') closeModal();
-      aimPersistAndRerenderOrg(projectKey);
-      if (typeof onPlaced === 'function') onPlaced(id);
+      var placedOk = aimPersistAndRerenderOrg(projectKey, {
+        newId: placed.id,
+        parentId: parentId
+      });
+      if (!placedOk) {
+        setBusy(false);
+        return;
+      }
+      if (typeof onPlaced === 'function') onPlaced(placed.id);
       if (typeof showToast === 'function') {
         showToast(isChildMode ? '✅ 配下へ追加しました' : '✅ 親系列として追加しました');
       }
+      setBusy(false);
+      if (typeof closeModal === 'function') closeModal();
     };
   }
 
@@ -1172,6 +1441,8 @@ if (typeof window !== 'undefined') {
   window.aimOpenProjectRegisterFromOrg = aimOpenProjectRegisterFromOrg;
   window.aimRenderEniOrgRegisterAndPlaceForm = aimRenderEniOrgRegisterAndPlaceForm;
   window.aimCreateOrgOnlyMember = aimCreateOrgOnlyMember;
+  window.aimCreateOrgOnlyMemberResult = aimCreateOrgOnlyMemberResult;
+  window.aimPersistAndRerenderOrg = aimPersistAndRerenderOrg;
   window.aimEnsureOrgMemberRegisteredAsInput = aimEnsureOrgMemberRegisteredAsInput;
   window.aimSortOrgMemberSiblings = aimSortOrgMemberSiblings;
   window.aimGetSortedOrgChildren = aimGetSortedOrgChildren;

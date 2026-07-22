@@ -57,6 +57,69 @@ function hubGetRemovedRamOrgAccountIds(settings) {
     : [];
 }
 
+function hubGetRemovedEniOrgAccountIds(settings) {
+  return settings && Array.isArray(settings.removedEniOrgAccountIds)
+    ? settings.removedEniOrgAccountIds
+    : [];
+}
+
+/**
+ * 組織図メンバーを ID ユニオンでマージする。
+ * クラウド enrich 時に「ローカルだけにある新規ノード」を落とさないための共通処理。
+ */
+function hubUnionOrgCharts(cloudChart, localChart, preferLocal, emptyFactory) {
+  let empty = typeof emptyFactory === 'function' ? emptyFactory() : {
+    members: [], currentData: [], scenarios: [], rootId: '', rootAccountIds: [], zoom: 1
+  };
+  let cloud = cloudChart && typeof cloudChart === 'object' ? cloudChart : empty;
+  let local = localChart && typeof localChart === 'object' ? localChart : empty;
+  let members = hubMergeArrayEntriesById(
+    Array.isArray(cloud.members) ? cloud.members : [],
+    Array.isArray(local.members) ? local.members : [],
+    !!preferLocal
+  ).map(function (m) {
+    try { return JSON.parse(JSON.stringify(m)); } catch (e) { return m; }
+  });
+  let byId = {};
+  members.forEach(function (m) {
+    if (m && m.id) byId[m.id] = m;
+  });
+  let rootIds = [];
+  let seenRoot = {};
+  function pushRoot(id) {
+    if (!id || seenRoot[id] || !byId[id]) return;
+    seenRoot[id] = true;
+    rootIds.push(id);
+  }
+  let preferRoots = preferLocal
+    ? (Array.isArray(local.rootAccountIds) ? local.rootAccountIds : [])
+    : (Array.isArray(cloud.rootAccountIds) ? cloud.rootAccountIds : []);
+  let otherRoots = preferLocal
+    ? (Array.isArray(cloud.rootAccountIds) ? cloud.rootAccountIds : [])
+    : (Array.isArray(local.rootAccountIds) ? local.rootAccountIds : []);
+  preferRoots.forEach(pushRoot);
+  otherRoots.forEach(pushRoot);
+  members.forEach(function (m) {
+    if (m && !m.parent) pushRoot(m.id);
+  });
+  let rootId = preferLocal ? (local.rootId || '') : (cloud.rootId || '');
+  if (!rootId || !byId[rootId]) rootId = rootIds[0] || '';
+  let scenarios = preferLocal
+    ? (Array.isArray(local.scenarios) ? local.scenarios : cloud.scenarios)
+    : (Array.isArray(cloud.scenarios) ? cloud.scenarios : local.scenarios);
+  let zoom = preferLocal
+    ? (typeof local.zoom === 'number' ? local.zoom : cloud.zoom)
+    : (typeof cloud.zoom === 'number' ? cloud.zoom : local.zoom);
+  return {
+    members: members,
+    currentData: JSON.parse(JSON.stringify(members)),
+    scenarios: Array.isArray(scenarios) ? scenarios : [],
+    rootId: rootId || '',
+    rootAccountIds: rootIds,
+    zoom: typeof zoom === 'number' ? zoom : 1
+  };
+}
+
 function hubEnsureOrcaRemovedTimes(settings) {
   if (!settings) return {};
   if (!settings.removedOrcaOrgAccountIdTimes || typeof settings.removedOrcaOrgAccountIdTimes !== 'object') {
@@ -441,12 +504,14 @@ function hubMergeRamOrgCharts(incoming, preserved, settings, preferLocal) {
   let removedIds = hubGetRemovedRamOrgAccountIds(settings);
   let inc = hubFilterOrgChartByRemovedIds(hubPackRamOrgFromData(incoming || {}), removedIds);
   let pre = hubFilterOrgChartByRemovedIds(hubPackRamOrgFromData(preserved || {}), removedIds);
-  let sa = hubRamOrgChartScore(inc);
-  let sb = hubRamOrgChartScore(pre);
-  if (preferLocal && sb.members <= sa.members) return pre;
-  if (!preferLocal && sa.members <= sb.members) return inc;
-  let picked = hubPickRicherRamOrgChart(inc, pre);
-  return hubFilterOrgChartByRemovedIds(picked, removedIds);
+  let emptyRam = function () {
+    return hubPackRamOrgFromData(hubCreateEmptyData());
+  };
+  // 件数比較で片側を捨てると、追加直後のクラウド enrich で新規ノードが消える
+  return hubFilterOrgChartByRemovedIds(
+    hubUnionOrgCharts(inc, pre, preferLocal, emptyRam),
+    removedIds
+  );
 }
 
 function hubEniOrgChartScore(chart) {
@@ -459,13 +524,16 @@ function hubEniOrgChartScore(chart) {
 }
 
 function hubPickRicherEniOrgChart(a, b) {
+  // 互換: より「リッチ」な側を優先しつつ、欠けている ID はユニオンで残す
   let left = a && typeof a === 'object' ? a : hubCreateEmptyEniOrgChart();
   let right = b && typeof b === 'object' ? b : hubCreateEmptyEniOrgChart();
   let sa = hubEniOrgChartScore(left);
   let sb = hubEniOrgChartScore(right);
-  if (sb.withParent !== sa.withParent) return sb.withParent > sa.withParent ? right : left;
-  if (sb.members !== sa.members) return sb.members > sa.members ? right : left;
-  return hubEniOrgChartHasMembers(right) ? right : left;
+  let preferRight = false;
+  if (sb.withParent !== sa.withParent) preferRight = sb.withParent > sa.withParent;
+  else if (sb.members !== sa.members) preferRight = sb.members > sa.members;
+  else preferRight = hubEniOrgChartHasMembers(right);
+  return hubUnionOrgCharts(left, right, preferRight, hubCreateEmptyEniOrgChart);
 }
 
 function hubMergeArrayEntriesById(cloudEntries, localEntries, preferLocal) {
@@ -764,8 +832,18 @@ function hubMergeHubDocuments(localData, cloudData) {
     mergedSettings,
     preferLocal
   );
-  let mergedOrca = hubMergeOrcaOrgCharts(cloud.orcaOrgChart, local.orcaOrgChart, mergedSettings);
-  let mergedEni = hubPickRicherEniOrgChart(cloud.eniOrgChart, local.eniOrgChart);
+  let mergedOrca = hubMergeOrcaOrgCharts(
+    cloud.orcaOrgChart,
+    local.orcaOrgChart,
+    mergedSettings,
+    preferLocal
+  );
+  let mergedEni = hubMergeEniOrgCharts(
+    cloud.eniOrgChart,
+    local.eniOrgChart,
+    preferLocal,
+    mergedSettings
+  );
   return {
     members: mergedRam.members,
     currentData: mergedRam.currentData,
@@ -889,8 +967,17 @@ function hubEniOrgChartHasMembers(chart) {
   return !!(chart && Array.isArray(chart.members) && chart.members.length);
 }
 
-function hubMergeEniOrgCharts(incoming, preserved) {
-  return hubPickRicherEniOrgChart(incoming, preserved);
+function hubMergeEniOrgCharts(incoming, preserved, preferLocal, settings) {
+  let removedIds = hubGetRemovedEniOrgAccountIds(settings);
+  let inc = hubFilterOrgChartByRemovedIds(incoming, removedIds);
+  let pre = hubFilterOrgChartByRemovedIds(preserved, removedIds);
+  if (arguments.length >= 3 && typeof preferLocal === 'boolean') {
+    return hubFilterOrgChartByRemovedIds(
+      hubUnionOrgCharts(inc, pre, preferLocal, hubCreateEmptyEniOrgChart),
+      removedIds
+    );
+  }
+  return hubFilterOrgChartByRemovedIds(hubPickRicherEniOrgChart(inc, pre), removedIds);
 }
 
 function hubResolveEniOrgChart(rawChart, preservedChart) {
@@ -923,16 +1010,9 @@ function hubMergeOrcaOrgCharts(incoming, preserved, settings, preferLocal) {
   let removedIds = hubGetRemovedOrcaOrgAccountIds(settings);
   let inc = hubFilterOrgChartByRemovedIds(incoming, removedIds);
   let pre = hubFilterOrgChartByRemovedIds(preserved, removedIds);
-  let sa = hubOrcaOrgChartScore(inc);
-  let sb = hubOrcaOrgChartScore(pre);
-  if (preferLocal && sb.members <= sa.members) {
-    return hubEnsureOrcaRootsOnChart(pre, settings);
-  }
-  if (!preferLocal && sa.members <= sb.members) {
-    return hubEnsureOrcaRootsOnChart(inc, settings);
-  }
-  let picked = hubPickRicherOrcaOrgChart(inc, pre);
-  return hubEnsureOrcaRootsOnChart(picked, settings);
+  // 件数の少ない側を丸ごと採用すると、追加直後のクラウド enrich で新規ノードが消える
+  let united = hubUnionOrgCharts(inc, pre, !!preferLocal, hubCreateEmptyOrcaOrgChart);
+  return hubEnsureOrcaRootsOnChart(united, settings);
 }
 
 function hubRebuildOrcaOrgFromSettings(settings) {
