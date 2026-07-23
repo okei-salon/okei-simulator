@@ -1015,6 +1015,20 @@ function smMonthTotalFromChartSeries(vals) {
   return hasAny ? Math.round(sum * 100) / 100 : 0;
 }
 
+function smMonthTotalFromChartSeriesThroughDay(vals, throughDay) {
+  if (!throughDay) return 0;
+  let sum = 0;
+  let hasAny = false;
+  for (let i = 0; i < throughDay; i++) {
+    let v = vals[i];
+    if (v !== null && v !== undefined) {
+      hasAny = true;
+      sum += v;
+    }
+  }
+  return hasAny ? Math.round(sum * 100) / 100 : 0;
+}
+
 function smPctChange(current, prev) {
   if (!prev) return current > 0 ? 100 : 0;
   return Math.round(((current - prev) / prev) * 1000) / 10;
@@ -1032,14 +1046,27 @@ function smRenderChartSummary() {
     let prevVals = smCollectChartSeries(prev.y, prev.m);
     let curTotal = smMonthTotalFromChartSeries(curVals);
     let prevTotal = smMonthTotalFromChartSeries(prevVals);
-    let pct = smPctChange(curTotal, prevTotal);
-    let pctCls = pct >= 0 ? 'isUp' : 'isDown';
-    let arrow = pct >= 0 ? '↗' : '↘';
+    let throughDay = typeof pdGetMomThroughDay === 'function'
+      ? pdGetMomThroughDay(y, m)
+      : (typeof smChartLastDataDay === 'function' ? smChartLastDataDay(y, m) : null);
+    let prevThrough = typeof pdGetMomPrevThroughDay === 'function'
+      ? pdGetMomPrevThroughDay(throughDay, prev.y, prev.m)
+      : (throughDay == null ? null : Math.min(throughDay, new Date(prev.y, prev.m + 1, 0).getDate()));
+    let curCompare = throughDay == null
+      ? curTotal
+      : smMonthTotalFromChartSeriesThroughDay(curVals, throughDay);
+    let prevCompare = prevThrough == null
+      ? prevTotal
+      : smMonthTotalFromChartSeriesThroughDay(prevVals, prevThrough);
+    let pct = smPctChange(curCompare, prevCompare);
+    let deltaHtml = typeof pdRenderTrendDeltaHtml === 'function'
+      ? pdRenderTrendDeltaHtml(pct)
+      : ((pct >= 0 ? '+' : '') + pct + '%');
 
     el.innerHTML =
       '<div class="rmChartSummaryItem"><span class="rmChartSummaryLabel">今月合計</span><span class="rmChartSummaryVal">' + smMoney(curTotal) + '</span></div>' +
       '<div class="rmChartSummaryItem"><span class="rmChartSummaryLabel">前月合計</span><span class="rmChartSummaryVal isPrev">' + smMoney(prevTotal) + '</span></div>' +
-      '<div class="rmChartSummaryItem"><span class="rmChartSummaryLabel">前月比</span><span class="rmChartSummaryVal ' + pctCls + '">' + (pct >= 0 ? '+' : '') + pct + '% ' + arrow + '</span></div>';
+      '<div class="rmChartSummaryItem"><span class="rmChartSummaryLabel">前月比</span><span class="rmChartSummaryVal">' + deltaHtml + '</span></div>';
   } catch (e) {}
 }
 

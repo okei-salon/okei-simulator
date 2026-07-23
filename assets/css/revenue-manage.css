@@ -715,6 +715,18 @@ td.pfEditableCell {
   color: #fca5a5;
 }
 
+.rmChartSummaryVal .hubTrendDelta.isUp {
+  color: #86efac;
+}
+
+.rmChartSummaryVal .hubTrendDelta.isDown {
+  color: #fca5a5;
+}
+
+.rmChartSummaryVal .hubTrendDelta.isFlat {
+  color: #94a3b8;
+}
+
 .rmProjectStats {
   display: flex;
   flex-direction: column;

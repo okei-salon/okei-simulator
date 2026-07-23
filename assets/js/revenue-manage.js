@@ -1569,22 +1569,29 @@ function rmRenderChartSummary() {
   let prev = rmCalcPrevMonth(y, m);
   let curVals = rmCollectChartSeries(y, m);
   let prevVals = rmCollectChartSeries(prev.y, prev.m);
-  let compareDay = rmChartLastDataDay(y, m);
-  let prevDaysInMonth = new Date(prev.y, prev.m + 1, 0).getDate();
-  let prevCompareDay = Math.min(compareDay, prevDaysInMonth);
+  let throughDay = typeof pdGetMomThroughDay === 'function'
+    ? pdGetMomThroughDay(y, m)
+    : rmChartLastDataDay(y, m);
+  let prevThrough = typeof pdGetMomPrevThroughDay === 'function'
+    ? pdGetMomPrevThroughDay(throughDay, prev.y, prev.m)
+    : (throughDay == null ? null : Math.min(throughDay, new Date(prev.y, prev.m + 1, 0).getDate()));
   let curTotal = rmMonthTotalFromChartSeries(curVals);
   let prevTotal = rmMonthTotalFromChartSeries(prevVals);
-  let pct = rmPctChange(
-    rmMonthTotalFromChartSeriesThroughDay(curVals, compareDay),
-    rmMonthTotalFromChartSeriesThroughDay(prevVals, prevCompareDay)
-  );
-  let pctCls = pct >= 0 ? 'isUp' : 'isDown';
-  let arrow = pct >= 0 ? '↗' : '↘';
+  let curCompare = throughDay == null
+    ? curTotal
+    : rmMonthTotalFromChartSeriesThroughDay(curVals, throughDay);
+  let prevCompare = prevThrough == null
+    ? prevTotal
+    : rmMonthTotalFromChartSeriesThroughDay(prevVals, prevThrough);
+  let pct = rmPctChange(curCompare, prevCompare);
+  let deltaHtml = typeof pdRenderTrendDeltaHtml === 'function'
+    ? pdRenderTrendDeltaHtml(pct)
+    : ((pct >= 0 ? '+' : '') + pct + '%');
 
   el.innerHTML =
     '<div class="rmChartSummaryItem"><span class="rmChartSummaryLabel">今月合計</span><span class="rmChartSummaryVal">' + rmMoney(curTotal) + '</span></div>' +
     '<div class="rmChartSummaryItem"><span class="rmChartSummaryLabel">前月合計</span><span class="rmChartSummaryVal isPrev">' + rmMoney(prevTotal) + '</span></div>' +
-    '<div class="rmChartSummaryItem"><span class="rmChartSummaryLabel">前月比</span><span class="rmChartSummaryVal ' + pctCls + '">' + (pct >= 0 ? '+' : '') + pct + '% ' + arrow + '</span></div>';
+    '<div class="rmChartSummaryItem"><span class="rmChartSummaryLabel">前月比</span><span class="rmChartSummaryVal">' + deltaHtml + '</span></div>';
   } catch (e) {}
 }
 

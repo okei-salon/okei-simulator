@@ -266,8 +266,12 @@
   line-height: 1.35;
 }
 
-.pfSummaryTrend b {
-  color: #4ade80;
+.pfSummaryTrendLabel {
+  color: #7f97b3;
+}
+
+.pfSummaryTrend--neutral b {
+  color: #dbeafe;
   font-size: 12px;
 }
 
@@ -288,11 +292,6 @@
 .pfSummaryYield b {
   color: #38bdf8;
   font-size: 13px;
-  font-weight: 900;
-}
-
-.pfTrendArrow {
-  color: #4ade80;
   font-weight: 900;
 }
 
@@ -841,6 +840,10 @@
   min-height: 320px;
 }
 
+.pfWidget--stackChart {
+  overflow: visible;
+}
+
 .pfWidgetTitle {
   margin: 0 0 4px;
   font-size: 17px;
@@ -1009,6 +1012,26 @@
   flex-direction: column;
   align-items: center;
   min-width: 0;
+  cursor: pointer;
+  border-radius: 8px;
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.pfStackCol:focus,
+.pfStackCol:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+.pfStackCol.isSelected .pfStackLabel {
+  color: #e2eefc;
+  font-weight: 900;
+}
+
+.pfStackCol.isSelected .pfStackTrack,
+.pfStackCol:focus-visible .pfStackTrack {
+  box-shadow: none;
 }
 
 .pfStackTotal {
@@ -1028,7 +1051,8 @@
   justify-content: flex-start;
   background: rgba(4, 10, 20, .55);
   border-radius: 0;
-  overflow: hidden;
+  overflow: visible;
+  position: relative;
 }
 
 .pfStackSeg {
@@ -1037,6 +1061,71 @@
   border-radius: 0;
   border: 0;
   box-shadow: none;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  outline: none;
+}
+
+.pfStackSegPct {
+  position: relative;
+  z-index: 1;
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  color: #ffffff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, .55);
+  pointer-events: none;
+  user-select: none;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: clip;
+  white-space: nowrap;
+  padding: 0 1px;
+}
+
+.pfStackSegTip {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 6px);
+  transform: translateX(-50%);
+  min-width: 92px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: rgba(6, 14, 26, .96);
+  border: 1px solid rgba(96, 140, 190, .45);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, .35);
+  color: #e8f1fb;
+  text-align: center;
+  white-space: nowrap;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  z-index: 20;
+  transition: opacity .12s ease;
+}
+
+.pfStackSegTipName {
+  font-size: 11px;
+  font-weight: 900;
+  margin-bottom: 2px;
+}
+
+.pfStackSegTipAmt,
+.pfStackSegTipPct {
+  font-size: 11px;
+  font-weight: 800;
+  color: #c9d9ec;
+}
+
+.pfStackSeg:hover .pfStackSegTip,
+.pfStackSeg:focus-visible .pfStackSegTip,
+.pfStackSeg.isTipOpen .pfStackSegTip {
+  opacity: 1;
+  visibility: visible;
 }
 
 .pfStackLabel {
@@ -1047,28 +1136,124 @@
 }
 
 .pfStackLegend {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px 16px;
-  margin-top: 14px;
-  padding-top: 12px;
+  display: none;
+}
+
+.pfStackMonthSection {
+  margin-top: 16px;
+  padding-top: 14px;
   border-top: 1px solid rgba(42, 66, 100, .35);
 }
 
-.pfStackLegendItem {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
+.pfStackMonthHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 6px;
+  margin: 2px 0 12px;
   font-size: 12px;
   font-weight: 800;
-  color: #c9d9ec;
+  color: #8fa8c5;
+  line-height: 1.45;
 }
 
-.pfStackLegendItem i {
-  width: 10px;
-  height: 10px;
-  border-radius: 2px;
-  display: inline-block;
+.pfStackMonthHeadMonth {
+  font-size: 13px;
+  font-weight: 900;
+  color: #cfe0f5;
+  letter-spacing: 0.01em;
+}
+
+.pfStackMonthHeadRest {
+  font-weight: 800;
+  color: #8fa8c5;
+}
+
+.pfStackMonthGrid {
+  display: grid;
+  grid-template-columns: repeat(var(--pf-month-proj-cols, 3), minmax(0, 1fr));
+  gap: 8px;
+  align-items: stretch;
+}
+
+.pfStackMonthEmpty {
+  padding: 8px 0;
+}
+
+.pfMonthProjCard {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  padding: 9px 10px 8px;
+  background: rgba(7, 16, 30, .88);
+  border: 1px solid rgba(36, 58, 90, .8);
+  border-radius: 11px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .03);
+}
+
+.pfMonthProjCard--ram { border-color: rgba(249, 115, 22, .34); }
+.pfMonthProjCard--orca { border-color: rgba(59, 130, 246, .34); }
+.pfMonthProjCard--eni { border-color: rgba(163, 230, 53, .34); }
+.pfMonthProjCard--cary,
+.pfMonthProjCard--genesis { border-color: rgba(168, 85, 247, .28); }
+.pfMonthProjCard--custom { border-color: rgba(148, 163, 184, .28); }
+
+.pfMonthProjCardTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.pfMonthProjCardName {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11px;
+  font-weight: 800;
+  color: #b8cce4;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pfMonthProjDot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--pj-icon-size-md, 18px);
+  height: var(--pj-icon-size-md, 18px);
+  flex-shrink: 0;
+}
+
+.pfMonthProjCardAmt {
+  font-size: 14px;
+  font-weight: 900;
+  color: #f8fafc;
+  line-height: 1.2;
+}
+
+.pfMonthProjCardShare {
+  font-size: 10px;
+  font-weight: 800;
+  color: #7f97b3;
+}
+
+.pfMonthProjCardBar {
+  width: 100%;
+  height: 3px;
+  margin-top: 2px;
+  background: rgba(42, 66, 100, .55);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.pfMonthProjCardBarFill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width .25s ease;
 }
 
 .pfSummaryCard.isClickable {
@@ -1308,6 +1493,37 @@
 }
 
 @media (max-width: 520px) {
+  .pfStackSegPct {
+    font-size: 10px;
+  }
+
+  .pfStackCols {
+    gap: 6px;
+  }
+
+  .pfStackTrack {
+    max-width: 44px;
+  }
+
+  .pfStackSegTip {
+    min-width: 88px;
+    padding: 6px 8px;
+  }
+
+  .pfStackSegTipName,
+  .pfStackSegTipAmt,
+  .pfStackSegTipPct {
+    font-size: 11px;
+  }
+
+  .pfStackMonthGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .pfMonthProjCardAmt {
+    font-size: 13px;
+  }
+
   .pfMainTabs {
     max-width: none;
   }

@@ -44,15 +44,15 @@ var PF_MOCK_ALLOC = [
 ];
 
 var PF_MOCK_STACKED = [
-  { label: '1月', total: 9200, ram: 4160, orca: 2080, cary: 1730, genesis: 880, other: 350 },
-  { label: '2月', total: 9800, ram: 4430, orca: 2210, cary: 1840, genesis: 940, other: 380 },
-  { label: '3月', total: 10500, ram: 4750, orca: 2370, cary: 1970, genesis: 1000, other: 410 },
-  { label: '4月', total: 11200, ram: 5060, orca: 2530, cary: 2100, genesis: 1070, other: 440 },
-  { label: '5月', total: 11900, ram: 5380, orca: 2690, cary: 2230, genesis: 1140, other: 460 },
-  { label: '6月', total: 12840, ram: 5800, orca: 2900, cary: 2410, genesis: 1220, other: 510 }
+  { label: '1月', total: 9200, ram: 4160, orca: 2080, cary: 1730, genesis: 880, eni: 0, other: 350 },
+  { label: '2月', total: 9800, ram: 4430, orca: 2210, cary: 1840, genesis: 940, eni: 0, other: 380 },
+  { label: '3月', total: 10500, ram: 4750, orca: 2370, cary: 1970, genesis: 1000, eni: 0, other: 410 },
+  { label: '4月', total: 11200, ram: 5060, orca: 2530, cary: 2100, genesis: 1070, eni: 0, other: 440 },
+  { label: '5月', total: 11900, ram: 5380, orca: 2690, cary: 2230, genesis: 1140, eni: 0, other: 460 },
+  { label: '6月', total: 12840, ram: 5800, orca: 2900, cary: 2410, genesis: 1220, eni: 0, other: 510 }
 ];
 
-var PF_STACK_ORDER = ['ram', 'orca', 'cary', 'genesis', 'other'];
+var PF_STACK_ORDER = ['ram', 'orca', 'cary', 'genesis', 'eni', 'other'];
 
 var pfGoalEditSnapshot = '';
 var pfOperatingEditId = null;
@@ -711,9 +711,11 @@ function pfRenderSummaryCards() {
     ? { y: perf.viewYear, m: perf.viewMonth }
     : pfGetPortfolioViewMonth();
 
-  let monthly = { value: pfEmptyMark(), sub: '', trend: '', yieldPct: '--' };
+  let monthly = { value: pfEmptyMark(), sub: '', trend: '', trendPct: null, yieldPct: '--' };
   if (pfIsDemoMode() && !hasRevenueLog) {
     monthly = Object.assign({}, PF_MOCK_SUMMARY_DATA.monthly, {
+      trendPct: 8.2,
+      trend: typeof pdFormatTrendPct === 'function' ? pdFormatTrendPct(8.2) : '+8.2%',
       yieldPct: pfFormatPredictedMonthlyYield(
         12840,
         operatingTotal > 0 ? operatingTotal : 115000,
@@ -727,6 +729,7 @@ function pfRenderSummaryCards() {
       value: pfDisplayUsd(perf.monthlyRevenue, perf.monthlyRevenue > 0 || hasRevenueLog),
       sub: perf.monthlyRevenue > 0 ? pfYenRef(perf.monthlyRevenue) : pfEmptyMark(),
       trend: perf.monthlyRevenueTrend,
+      trendPct: typeof perf.monthlyRevenueTrendPct === 'number' ? perf.monthlyRevenueTrendPct : null,
       yieldPct: pfFormatPredictedMonthlyYield(
         perf.monthlyRevenue,
         operatingTotal,
@@ -743,11 +746,16 @@ function pfRenderSummaryCards() {
     if (opts.yieldPct) {
       foot += '<div class="pfSummaryYield"><span>予測月利</span><b>' + opts.yieldPct + '</b></div>';
     }
-    if (opts.trend) {
-      foot += '<div class="pfSummaryTrend pfSummaryTrend--up">' +
-        opts.trendLabel + ' <b>' + opts.trend + '</b>' +
-        (opts.trendArrow !== false ? ' <span class="pfTrendArrow" aria-hidden="true">↗</span>' : '') +
+    if (opts.trend != null && opts.trend !== '' && opts.trendArrow !== false) {
+      let deltaHtml = typeof pdRenderTrendDeltaHtml === 'function'
+        ? pdRenderTrendDeltaHtml(opts.trendPct != null ? opts.trendPct : opts.trend)
+        : ('<b>' + opts.trend + '</b>');
+      foot += '<div class="pfSummaryTrend">' +
+        '<span class="pfSummaryTrendLabel">' + opts.trendLabel + '</span> ' + deltaHtml +
         '</div>';
+    } else if (opts.trend && opts.trendArrow === false) {
+      foot += '<div class="pfSummaryTrend pfSummaryTrend--neutral">' +
+        opts.trendLabel + ' <b>' + opts.trend + '</b></div>';
     }
     return '<article ' + attrs + '>' +
       '<div class="pfSummaryCardGlow"></div>' +
@@ -776,7 +784,7 @@ function pfRenderSummaryCards() {
       accent: 'monthly', icon: 'calendar', label: '月間収益',
       value: monthly.value, sub: monthly.sub,
       yieldPct: monthly.yieldPct,
-      trend: monthly.trend, trendLabel: '前月比'
+      trend: monthly.trend, trendPct: monthly.trendPct, trendLabel: '前月比'
     }) +
     '<article class="pfSummaryCard pfSummaryCard--goal isClickable" role="button" tabindex="0" onclick="pfOpenGoalSettings()" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){pfOpenGoalSettings();event.preventDefault()}">' +
     '<div class="pfSummaryCardGlow"></div>' +
@@ -2196,6 +2204,96 @@ function pfRenderAllocation() {
   pfFitDonutCenterText(el);
 }
 
+var pfStackSelectedIdx = null;
+
+function pfGetStackProjects() {
+  let list = typeof getEnabledHomeProjects === 'function'
+    ? getEnabledHomeProjects()
+    : (typeof pmGetEnabledProjects === 'function'
+      ? pmGetEnabledProjects()
+      : pfGetAllPortfolioProjects());
+  return (list || []).map(function (p) {
+    return {
+      key: p.key,
+      name: p.name,
+      cls: typeof homeProjectCls === 'function' ? homeProjectCls(p.key) : (p.key || 'custom')
+    };
+  });
+}
+
+function pfAllocateIntegerPercents(amounts) {
+  let values = (amounts || []).map(function (v) { return Math.max(0, Number(v) || 0); });
+  let total = values.reduce(function (s, v) { return s + v; }, 0);
+  if (!(total > 0) || !values.length) {
+    return values.map(function () { return 0; });
+  }
+  let raw = values.map(function (v) { return (v / total) * 100; });
+  let floors = raw.map(function (r) { return Math.floor(r); });
+  let remain = 100 - floors.reduce(function (s, n) { return s + n; }, 0);
+  let order = raw.map(function (r, i) {
+    return { i: i, frac: r - floors[i] };
+  }).sort(function (a, b) {
+    return b.frac - a.frac;
+  });
+  for (let k = 0; k < remain; k++) {
+    floors[order[k].i] += 1;
+  }
+  return floors;
+}
+
+function pfMonthProjectAmount(month, key) {
+  return Math.max(0, Number(month && month[key]) || 0);
+}
+
+function pfNormalizeStackedMonthTotals(stacked, projects) {
+  return (stacked || []).map(function (month) {
+    let sum = (projects || []).reduce(function (s, p) {
+      return s + pfMonthProjectAmount(month, p.key);
+    }, 0);
+    if (!(sum > 0)) {
+      sum = PF_STACK_ORDER.reduce(function (s, k) {
+        return s + pfMonthProjectAmount(month, k);
+      }, 0);
+    }
+    return Object.assign({}, month, { total: Math.round(sum * 100) / 100 });
+  });
+}
+
+function pfRenderStackMonthCards(month, projects) {
+  let amounts = projects.map(function (p) { return pfMonthProjectAmount(month, p.key); });
+  let pcts = pfAllocateIntegerPercents(amounts);
+  let cols = typeof homeResponsiveGridCols === 'function'
+    ? homeResponsiveGridCols(projects.length)
+    : Math.min(Math.max(projects.length, 1), 5);
+  if (!projects.length) {
+    return '<div class="pfStackMonthEmpty"><p class="pfEmptyHint">' + pfEmptyMark() + ' プロジェクトなし</p></div>';
+  }
+  let cards = projects.map(function (p, i) {
+    let amt = amounts[i] || 0;
+    let pct = pcts[i] || 0;
+    let icon = typeof renderHomeProjIcon === 'function'
+      ? renderHomeProjIcon(p.key, 'homeMonthlyProjIcon')
+      : (typeof pjRenderProjectIcon === 'function'
+        ? pjRenderProjectIcon(p.key, 'homeMonthlyProjIcon')
+        : '');
+    let color = pfGetProjectColor(p.key);
+    return '<div class="pfMonthProjCard pfMonthProjCard--' + pfEscape(p.cls || 'custom') + '" data-pj-icon-key="' + pfEscape(p.key) + '">' +
+      '<div class="pfMonthProjCardTop">' +
+      '<span class="pfMonthProjCardName"><span class="pfMonthProjDot">' + icon + '</span>' + pfEscape(p.name) + '</span>' +
+      '</div>' +
+      '<div class="pfMonthProjCardAmt">' + pfMoneyUsd(amt) + '</div>' +
+      '<div class="pfMonthProjCardShare">構成割合 ' + pct + '%</div>' +
+      '<div class="pfMonthProjCardBar"><div class="pfMonthProjCardBarFill" style="width:' + pct + '%;background:' + color + '"></div></div>' +
+      '</div>';
+  }).join('');
+  return '<div class="pfStackMonthHead">' +
+    '<span class="pfStackMonthHeadMonth">' + pfEscape(month.label || '') + '</span>' +
+    '<span class="pfStackMonthHeadRest">のプロジェクト別収益</span>' +
+    '</div>' +
+    '<div class="pfStackMonthGrid" style="--pf-month-proj-cols:' + cols + '" data-count="' + projects.length + '">' +
+    cards + '</div>';
+}
+
 function pfRenderStackedBars() {
   let el = document.getElementById('pfMonthlyChart');
   if (!el) return;
@@ -2210,6 +2308,7 @@ function pfRenderStackedBars() {
   let hasLog = stacked.some(function (m) { return m.hasLog; });
   let hasPortfolioProfit = pfHasPortfolioProfitEntries();
   if (!hasLog && !pfIsDemoMode() && !hasPortfolioProfit) {
+    pfStackSelectedIdx = null;
     el.innerHTML = '<div class="pfStackEmpty"><p class="pfEmptyHint">' + pfEmptyMark() + ' 実績データなし</p></div>';
     return;
   }
@@ -2223,22 +2322,52 @@ function pfRenderStackedBars() {
     });
   }
 
+  let projects = pfGetStackProjects();
+  // Keep chart segments working for any enabled project key present on month rows
+  stacked = pfNormalizeStackedMonthTotals(stacked, projects);
+
+  if (pfStackSelectedIdx == null || pfStackSelectedIdx < 0 || pfStackSelectedIdx >= stacked.length) {
+    pfStackSelectedIdx = Math.max(0, stacked.length - 1);
+  }
+
   let maxTotal = Math.max.apply(null, stacked.map(function (m) { return m.total; }).concat([1]));
   let axisMax = typeof niceChartAxisMax === 'function' ? niceChartAxisMax(maxTotal) : maxTotal * 1.1;
   let chartH = 168;
 
-  let cols = stacked.map(function (month) {
-    let segments = [];
-    pfGetActiveProjects().map(function (p) { return p.key; }).forEach(function (key) {
-      let val = month[key] || 0;
+  let cols = stacked.map(function (month, monthIdx) {
+    let monthTotal = Number(month.total) || 0;
+    let segMeta = [];
+    projects.forEach(function (p) {
+      let val = pfMonthProjectAmount(month, p.key);
       if (val <= 0) return;
-      let h = axisMax > 0 ? (val / axisMax) * chartH : 0;
-      segments.push('<div class="pfStackSeg pfStackSeg--' + key + '" style="height:' + h.toFixed(1) + 'px;background:' + pfGetProjectColor(key) + '"></div>');
+      segMeta.push({ project: p, key: p.key, val: val });
     });
-    let totalLabel = typeof formatAxisDollar === 'function' ? formatAxisDollar(month.total) : ('$' + month.total);
-    return '<div class="pfStackCol">' +
+    let pcts = pfAllocateIntegerPercents(segMeta.map(function (s) { return s.val; }));
+    let segments = segMeta.map(function (s, idx) {
+      let h = axisMax > 0 ? (s.val / axisMax) * chartH : 0;
+      let pct = pcts[idx] || 0;
+      let showPct = pct >= 15;
+      let tip =
+        '<div class="pfStackSegTip" role="tooltip">' +
+        '<div class="pfStackSegTipName">' + pfEscape(s.project.name) + '</div>' +
+        '<div class="pfStackSegTipAmt">' + pfMoneyUsd(s.val) + '</div>' +
+        '<div class="pfStackSegTipPct">' + pct + '%</div>' +
+        '</div>';
+      let pctHtml = showPct
+        ? '<span class="pfStackSegPct">' + pct + '%</span>'
+        : '';
+      return '<div class="pfStackSeg pfStackSeg--' + s.key + '"' +
+        ' style="height:' + h.toFixed(1) + 'px;background:' + pfGetProjectColor(s.key) + '"' +
+        ' tabindex="-1"' +
+        ' aria-label="' + pfEscape(s.project.name) + ' ' + pfMoneyUsd(s.val) + ' ' + pct + '%">' +
+        pctHtml + tip +
+        '</div>';
+    }).join('');
+    let totalLabel = typeof formatAxisDollar === 'function' ? formatAxisDollar(monthTotal) : ('$' + monthTotal);
+    let selectedCls = monthIdx === pfStackSelectedIdx ? ' isSelected' : '';
+    return '<div class="pfStackCol' + selectedCls + '" data-month-idx="' + monthIdx + '" role="button" tabindex="0" aria-pressed="' + (monthIdx === pfStackSelectedIdx ? 'true' : 'false') + '">' +
       '<div class="pfStackTotal">' + totalLabel + '</div>' +
-      '<div class="pfStackTrack" style="height:' + chartH + 'px">' + segments.join('') + '</div>' +
+      '<div class="pfStackTrack" style="height:' + chartH + 'px">' + segments + '</div>' +
       '<div class="pfStackLabel">' + month.label + '</div></div>';
   }).join('');
 
@@ -2248,15 +2377,71 @@ function pfRenderStackedBars() {
     return '<span style="bottom:' + (r * 100) + '%">' + label + '</span>';
   }).join('');
 
-  let legend = pfGetActiveProjects().map(function (p) {
-    return '<span class="pfStackLegendItem"><i style="background:' + pfGetProjectColor(p.key) + '"></i>' + pfEscape(p.name) + '</span>';
-  }).join('');
+  let selectedMonth = stacked[pfStackSelectedIdx] || stacked[stacked.length - 1] || { label: '', total: 0 };
+  let cardsHtml = pfRenderStackMonthCards(selectedMonth, projects);
 
-  el.innerHTML =
+  let html =
     '<div class="pfStackChart">' +
     '<div class="pfStackYAxis">' + yTicks + '</div>' +
     '<div class="pfStackCols">' + cols + '</div></div>' +
-    '<div class="pfStackLegend">' + legend + '</div>';
+    '<div class="pfStackMonthSection">' + cardsHtml + '</div>';
+
+  if (typeof pjSetHtmlKeepIcons === 'function') pjSetHtmlKeepIcons(el, html);
+  else el.innerHTML = html;
+
+  pfBindStackedChartInteractions(el);
+}
+
+function pfBindStackedChartInteractions(root) {
+  if (!root || root._pfStackInteractBound) return;
+  root._pfStackInteractBound = true;
+
+  function clearTips() {
+    root.querySelectorAll('.pfStackSeg.isTipOpen').forEach(function (seg) {
+      seg.classList.remove('isTipOpen');
+    });
+  }
+
+  root.addEventListener('click', function (e) {
+    let seg = e.target.closest ? e.target.closest('.pfStackSeg') : null;
+    let col = e.target.closest ? e.target.closest('.pfStackCol') : null;
+    if (col && root.contains(col)) {
+      let idx = Number(col.getAttribute('data-month-idx'));
+      if (!isNaN(idx) && idx !== pfStackSelectedIdx) {
+        pfStackSelectedIdx = idx;
+        pfRenderStackedBars();
+        return;
+      }
+    }
+    if (seg && root.contains(seg)) {
+      e.stopPropagation();
+      let wasOpen = seg.classList.contains('isTipOpen');
+      clearTips();
+      if (!wasOpen) seg.classList.add('isTipOpen');
+      return;
+    }
+    clearTips();
+  });
+
+  root.addEventListener('keydown', function (e) {
+    let col = e.target.closest ? e.target.closest('.pfStackCol') : null;
+    if (!col || !root.contains(col)) return;
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    e.preventDefault();
+    let idx = Number(col.getAttribute('data-month-idx'));
+    if (isNaN(idx) || idx === pfStackSelectedIdx) return;
+    pfStackSelectedIdx = idx;
+    pfRenderStackedBars();
+  });
+
+  if (!pfBindStackedChartInteractions._docBound) {
+    pfBindStackedChartInteractions._docBound = true;
+    document.addEventListener('click', function () {
+      document.querySelectorAll('#pfMonthlyChart .pfStackSeg.isTipOpen').forEach(function (seg) {
+        seg.classList.remove('isTipOpen');
+      });
+    });
+  }
 }
 
 function pfSyncMainTabs(active) {

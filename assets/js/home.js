@@ -1032,11 +1032,12 @@ function sumEntryRegisteredTotal(entry, dateKey) {
   return total;
 }
 
-function sumMonthRevenueLog(y, m) {
+function sumMonthRevenueLog(y, m, throughDay) {
   ensureRevenueLog();
   let daysInMonth = new Date(y, m + 1, 0).getDate();
+  let end = throughDay == null ? daysInMonth : Math.max(0, Math.min(Number(throughDay) || 0, daysInMonth));
   let out = { total: 0, hasLog: false };
-  for (let d = 1; d <= daysInMonth; d++) {
+  for (let d = 1; d <= end; d++) {
     let dateKey = revenueDateKey(y, m, d);
     let entry = getRevenueEntry(dateKey);
     if (!entry) continue;
@@ -1219,8 +1220,33 @@ function updateHomeMonthlySummary(sAll) {
   if (!ctx) return;
   let monthlyEl = document.getElementById('homeMonthly');
   let yenEl = document.getElementById('homeMonthlyYen');
+  let trendEl = document.getElementById('homeMonthlyTrend');
   if (monthlyEl) monthlyEl.textContent = formatPerformanceAmount(ctx.total);
   if (yenEl) yenEl.textContent = ctx.total != null ? yen(ctx.total) : formatPerformanceAmount(null);
+
+  if (trendEl) {
+    let y = homeCalView.y;
+    let m = homeCalView.m;
+    let throughDay = typeof pdGetMomThroughDay === 'function'
+      ? pdGetMomThroughDay(y, m)
+      : null;
+    let prev = homeCalcPrevMonth(y, m);
+    let prevThrough = typeof pdGetMomPrevThroughDay === 'function'
+      ? pdGetMomPrevThroughDay(throughDay, prev.y, prev.m)
+      : (throughDay == null ? null : Math.min(throughDay, new Date(prev.y, prev.m + 1, 0).getDate()));
+    let curLog = sumMonthRevenueLog(y, m, throughDay);
+    let prevLog = sumMonthRevenueLog(prev.y, prev.m, prevThrough);
+    let curTotal = Number(curLog.total) || 0;
+    let prevTotal = Number(prevLog.total) || 0;
+    let pct = typeof pdPctChange === 'function'
+      ? pdPctChange(curTotal, prevTotal)
+      : (prevTotal > 0 ? ((curTotal - prevTotal) / prevTotal) * 100 : (curTotal > 0 ? 100 : 0));
+    let deltaHtml = typeof pdRenderTrendDeltaHtml === 'function'
+      ? pdRenderTrendDeltaHtml(pct)
+      : (String(Math.round(pct * 100) / 100) + '%');
+    trendEl.innerHTML = '<span class="homeMonthlyTrendLabel">前月比</span> ' + deltaHtml;
+    trendEl.classList.toggle('isEmpty', !curLog.hasLog && !prevLog.hasLog);
+  }
 }
 
 function bindMonthlyChartTooltip(container, points, monthNum) {

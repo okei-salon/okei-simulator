@@ -1963,11 +1963,17 @@ function pdListSalesDateKeys() {
 }
 
 function pdSumMonthRevenue(y, m) {
+  return pdSumMonthRevenueThroughDay(y, m, null);
+}
+
+/** Sum month revenue for days 1..throughDay. throughDay null = full month. */
+function pdSumMonthRevenueThroughDay(y, m, throughDay) {
   ensurePerformanceLogs();
   let daysInMonth = new Date(y, m + 1, 0).getDate();
+  let end = throughDay == null ? daysInMonth : Math.max(0, Math.min(Number(throughDay) || 0, daysInMonth));
   let out = { total: 0, hasLog: false };
   PD_PROJECT_KEYS.forEach(function (k) { out[k] = 0; });
-  for (let d = 1; d <= daysInMonth; d++) {
+  for (let d = 1; d <= end; d++) {
     let key = typeof revenueDateKey === 'function'
       ? revenueDateKey(y, m, d)
       : y + '-' + String(m + 1).padStart(2, '0') + '-' + String(d).padStart(2, '0');
@@ -1985,11 +1991,17 @@ function pdSumMonthRevenue(y, m) {
 }
 
 function pdSumMonthSales(y, m) {
+  return pdSumMonthSalesThroughDay(y, m, null);
+}
+
+/** Sum month sales for days 1..throughDay. throughDay null = full month. */
+function pdSumMonthSalesThroughDay(y, m, throughDay) {
   ensurePerformanceLogs();
   let daysInMonth = new Date(y, m + 1, 0).getDate();
+  let end = throughDay == null ? daysInMonth : Math.max(0, Math.min(Number(throughDay) || 0, daysInMonth));
   let out = { total: 0, hasLog: false };
   PD_PROJECT_KEYS.forEach(function (k) { out[k] = 0; });
-  for (let d = 1; d <= daysInMonth; d++) {
+  for (let d = 1; d <= end; d++) {
     let key = typeof revenueDateKey === 'function'
       ? revenueDateKey(y, m, d)
       : y + '-' + String(m + 1).padStart(2, '0') + '-' + String(d).padStart(2, '0');
@@ -2004,6 +2016,68 @@ function pdSumMonthSales(y, m) {
   out.total = pdRound(out.total);
   PD_PROJECT_KEYS.forEach(function (k) { out[k] = pdRound(out[k]); });
   return out;
+}
+
+/**
+ * MoM compare day for a viewed month.
+ * null  → completed past month: compare full month totals
+ * number → current month (incl. last day): cumulative through that day
+ *
+ * When the same calendar day does not exist in the previous month
+ * (e.g. 3/31 → 2/28), callers must clamp via pdGetMomPrevThroughDay.
+ */
+function pdGetMomThroughDay(viewY, viewM, refDate) {
+  let ref = refDate || (typeof getHomeReferenceDate === 'function' ? getHomeReferenceDate() : new Date());
+  let refY = ref.getFullYear();
+  let refM = ref.getMonth();
+  let refD = ref.getDate();
+  let daysInView = new Date(viewY, viewM + 1, 0).getDate();
+  if (viewY < refY || (viewY === refY && viewM < refM)) return null;
+  if (viewY > refY || (viewY === refY && viewM > refM)) return 0;
+  // Include month-end day (e.g. 3/31): MTD equals month total; prev clamps to last day.
+  return Math.min(refD, daysInView);
+}
+
+/**
+ * Previous-month through-day for MoM.
+ * If same day does not exist in previous month (e.g. throughDay=31, Feb → 28),
+ * use the previous month's last day.
+ * throughDay null → null (full previous month).
+ */
+function pdGetMomPrevThroughDay(throughDay, prevY, prevM) {
+  if (throughDay == null) return null;
+  let prevDays = new Date(prevY, prevM + 1, 0).getDate();
+  return Math.min(Number(throughDay) || 0, prevDays);
+}
+
+/**
+ * Unified month-over-month % for revenue or sales.
+ * Mid-month / current month: same calendar day cumulative
+ *   (missing same day → previous month last day, e.g. 3/31 vs 2/28).
+ * Past completed month: full totals.
+ */
+function pdGetMonthOverMonthTrend(viewY, viewM, metric, refDate) {
+  metric = metric || 'revenue';
+  let throughDay = pdGetMomThroughDay(viewY, viewM, refDate);
+  let pm = viewM > 0
+    ? { y: viewY, m: viewM - 1 }
+    : { y: viewY - 1, m: 11 };
+  let prevThrough = pdGetMomPrevThroughDay(throughDay, pm.y, pm.m);
+  let sumFn = metric === 'sales' ? pdSumMonthSalesThroughDay : pdSumMonthRevenueThroughDay;
+  let cur = sumFn(viewY, viewM, throughDay);
+  let prev = sumFn(pm.y, pm.m, prevThrough);
+  let pct = pdPctChange(cur.total, prev.total);
+  let daysInView = new Date(viewY, viewM + 1, 0).getDate();
+  return {
+    pct: pct,
+    curTotal: cur.total,
+    prevTotal: prev.total,
+    throughDay: throughDay,
+    prevThroughDay: prevThrough,
+    isMonthEnd: throughDay == null || throughDay >= daysInView,
+    prevYear: pm.y,
+    prevMonth: pm.m
+  };
 }
 
 function pdSumAllTimeRevenue() {
@@ -2053,9 +2127,61 @@ function pdPctChange(cur, prev) {
   return pdRound(((cur - prev) / prev) * 100);
 }
 
+/** Format trend number for display (trim trailing zeros, keep up to 2 decimals). */
+function pdFormatTrendNumber(n) {
+  let r = Math.round((Number(n) || 0) * 100) / 100;
+  if (!isFinite(r)) return '0';
+  if (Math.abs(r - Math.round(r)) < 1e-9) return String(Math.round(r));
+  return String(r);
+}
+
+/**
+ * Shared MoM / YoY / DoD delta display rules:
+ *  + → green + ↗
+ *  - → red + ↘
+ *  0 → gray/white, no arrow
+ */
+function pdResolveTrendDelta(pct) {
+  let n;
+  if (typeof pct === 'number') {
+    n = pct;
+  } else if (pct == null || pct === '') {
+    n = NaN;
+  } else {
+    n = parseFloat(String(pct).replace(/[+%,\s]/g, ''));
+  }
+  if (!isFinite(n)) {
+    return { dir: 'flat', cls: 'hubTrendDelta isFlat', text: '—', arrow: '' };
+  }
+  if (Math.abs(n) < 0.005) {
+    return { dir: 'flat', cls: 'hubTrendDelta isFlat', text: '0%', arrow: '' };
+  }
+  if (n > 0) {
+    return {
+      dir: 'up',
+      cls: 'hubTrendDelta isUp',
+      text: '+' + pdFormatTrendNumber(n) + '%',
+      arrow: '↗'
+    };
+  }
+  return {
+    dir: 'down',
+    cls: 'hubTrendDelta isDown',
+    text: pdFormatTrendNumber(n) + '%',
+    arrow: '↘'
+  };
+}
+
 function pdFormatTrendPct(pct) {
-  let sign = pct > 0 ? '+' : '';
-  return sign + pct + '%';
+  return pdResolveTrendDelta(pct).text;
+}
+
+function pdRenderTrendDeltaHtml(pct) {
+  let t = pdResolveTrendDelta(pct);
+  let arrow = t.arrow
+    ? (' <span class="hubTrendArrow" aria-hidden="true">' + t.arrow + '</span>')
+    : '';
+  return '<span class="' + t.cls + '">' + t.text + arrow + '</span>';
 }
 
 function pdGetPortfolioSummary(viewY, viewM) {
@@ -2067,10 +2193,7 @@ function pdGetPortfolioSummary(viewY, viewM) {
   let refM = ref.getMonth();
   let refD = ref.getDate();
   let monthRev = pdSumMonthRevenue(y, m);
-  let pm = m > 0 ? { y: y, m: m - 1 } : { y: y - 1, m: 11 };
-  let prevMonthRev = pdSumMonthRevenue(pm.y, pm.m);
   let monthSales = pdSumMonthSales(y, m);
-  let prevMonthSales = pdSumMonthSales(pm.y, pm.m);
 
   let viewingCurrentMonth = (y === refY && m === refM);
   let todayKeyVal = viewingCurrentMonth && typeof todayKey === 'function'
@@ -2091,17 +2214,28 @@ function pdGetPortfolioSummary(viewY, viewM) {
   let cumulativeRev = pdSumAllTimeRevenue();
   let cumulativeSales = pdSumAllTimeSales();
 
+  let momRev = pdGetMonthOverMonthTrend(y, m, 'revenue', ref);
+  let momSales = pdGetMonthOverMonthTrend(y, m, 'sales', ref);
+  let monthRevTrendPct = momRev.pct;
+  let monthSalesTrendPct = momSales.pct;
+  let dailyRevTrendPct = pdPctChange(todayRev || 0, yesterdayRev || 0);
+  let dailySalesTrendPct = pdPctChange(todaySales || 0, yesterdaySales || 0);
+
   return {
     hasRevenueLog: monthRev.hasLog || cumulativeRev.total > 0,
     hasSalesLog: monthSales.hasLog || cumulativeSales.total > 0,
     monthlyRevenue: monthRev.total,
     monthlySales: monthSales.total,
-    monthlyRevenueTrend: pdFormatTrendPct(pdPctChange(monthRev.total, prevMonthRev.total)),
-    monthlySalesTrend: pdFormatTrendPct(pdPctChange(monthSales.total, prevMonthSales.total)),
+    monthlyRevenueTrendPct: monthRevTrendPct,
+    monthlySalesTrendPct: monthSalesTrendPct,
+    monthlyRevenueTrend: pdFormatTrendPct(monthRevTrendPct),
+    monthlySalesTrend: pdFormatTrendPct(monthSalesTrendPct),
     dailyRevenue: todayRev,
     dailySales: todaySales,
-    dailyRevenueTrend: pdFormatTrendPct(pdPctChange(todayRev || 0, yesterdayRev || 0)),
-    dailySalesTrend: pdFormatTrendPct(pdPctChange(todaySales || 0, yesterdaySales || 0)),
+    dailyRevenueTrendPct: dailyRevTrendPct,
+    dailySalesTrendPct: dailySalesTrendPct,
+    dailyRevenueTrend: pdFormatTrendPct(dailyRevTrendPct),
+    dailySalesTrend: pdFormatTrendPct(dailySalesTrendPct),
     viewingCurrentMonth: viewingCurrentMonth,
     viewYear: y,
     viewMonth: m,
@@ -2121,16 +2255,16 @@ function pdGetStackedMonthlyRevenue(endYear, endMonth, count) {
   let m = endMonth;
   for (let i = 0; i < count; i++) {
     let monthData = pdSumMonthRevenue(y, m);
-    rows.unshift({
+    let row = {
       label: (m + 1) + '月',
       total: monthData.total,
-      ram: monthData.ram || 0,
-      orca: monthData.orca || 0,
-      cary: monthData.cary || 0,
-      genesis: monthData.genesis || 0,
-      other: monthData.other || 0,
       hasLog: monthData.hasLog
+    };
+    Object.keys(monthData).forEach(function (k) {
+      if (k === 'total' || k === 'hasLog') return;
+      row[k] = monthData[k];
     });
+    rows.unshift(row);
     m -= 1;
     if (m < 0) { m = 11; y -= 1; }
   }
@@ -2536,6 +2670,15 @@ if (typeof window !== 'undefined') {
   window.pdGetStackedMonthlyRevenue = pdGetStackedMonthlyRevenue;
   window.pdSumMonthRevenue = pdSumMonthRevenue;
   window.pdSumMonthSales = pdSumMonthSales;
+  window.pdSumMonthRevenueThroughDay = pdSumMonthRevenueThroughDay;
+  window.pdSumMonthSalesThroughDay = pdSumMonthSalesThroughDay;
+  window.pdGetMomThroughDay = pdGetMomThroughDay;
+  window.pdGetMomPrevThroughDay = pdGetMomPrevThroughDay;
+  window.pdGetMonthOverMonthTrend = pdGetMonthOverMonthTrend;
+  window.pdPctChange = pdPctChange;
+  window.pdFormatTrendPct = pdFormatTrendPct;
+  window.pdResolveTrendDelta = pdResolveTrendDelta;
+  window.pdRenderTrendDeltaHtml = pdRenderTrendDeltaHtml;
   window.pdSumAllTimeRevenue = pdSumAllTimeRevenue;
   window.pdSumAllTimeSales = pdSumAllTimeSales;
   window.pdGetRevenueEntryRaw = pdGetRevenueEntryRaw;
