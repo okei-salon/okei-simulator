@@ -96,6 +96,20 @@ function eniNormalizeMembers() {
   if (typeof hubOrgRepairMassCollapsedOpens === 'function') {
     hubOrgRepairMassCollapsedOpens(eniMembers, 'eni-normalize');
   }
+  if (typeof hubRepairOrphanOrgParents === 'function') {
+    var repaired = hubRepairOrphanOrgParents({
+      members: eniMembers,
+      currentData: eniCurrentData,
+      rootId: eniRootId,
+      rootAccountIds: eniRootAccountIds,
+      scenarios: eniScenarios,
+      zoom: eniZoom
+    });
+    eniMembers = repaired.members || eniMembers;
+    eniCurrentData = repaired.currentData || eniCurrentData;
+    eniRootId = repaired.rootId || eniRootId;
+    eniRootAccountIds = repaired.rootAccountIds || eniRootAccountIds;
+  }
 }
 
 function eniClearAggCache() {

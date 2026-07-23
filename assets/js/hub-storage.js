@@ -206,7 +206,7 @@ function hubFilterOrgChartByRemovedIds(chart, removedIds) {
   let base = chart && typeof chart === 'object' ? chart : {};
   let removed = {};
   (removedIds || []).forEach(function (id) { removed[id] = true; });
-  if (!Object.keys(removed).length) return base;
+  if (!Object.keys(removed).length) return hubRepairOrphanOrgParents(base);
   let members = Array.isArray(base.members) ? base.members.filter(function (m) {
     return m && m.id && !removed[m.id];
   }) : [];
@@ -214,12 +214,69 @@ function hubFilterOrgChartByRemovedIds(chart, removedIds) {
     ? base.rootAccountIds.filter(function (id) { return id && !removed[id]; })
     : [];
   let rootId = base.rootId && !removed[base.rootId] ? base.rootId : (rootAccountIds[0] || '');
-  return Object.assign({}, base, {
+  return hubRepairOrphanOrgParents(Object.assign({}, base, {
     members: members,
     currentData: JSON.parse(JSON.stringify(members)),
     rootAccountIds: rootAccountIds,
     rootId: rootId
+  }));
+}
+
+/**
+ * If a node points at a missing parent (e.g. tombstoned self-only delete),
+ * reattach it to seriesRootId / chart.rootId. Grandchild links are untouched.
+ * Never creates stub parents.
+ */
+function hubRepairOrphanOrgParents(chart) {
+  if (!chart || typeof chart !== 'object') return chart;
+  let members = Array.isArray(chart.members) ? chart.members : [];
+  if (!members.length) return chart;
+  let byId = {};
+  members.forEach(function (m) {
+    if (m && m.id) byId[m.id] = m;
   });
+  let rootId = chart.rootId && byId[chart.rootId] ? chart.rootId : '';
+  if (!rootId) {
+    let roots = Array.isArray(chart.rootAccountIds) ? chart.rootAccountIds : [];
+    for (let i = 0; i < roots.length; i++) {
+      if (roots[i] && byId[roots[i]]) { rootId = roots[i]; break; }
+    }
+  }
+  if (!rootId) {
+    for (let i = 0; i < members.length; i++) {
+      if (members[i] && members[i].id && !members[i].parent) {
+        rootId = members[i].id;
+        break;
+      }
+    }
+  }
+  let changed = false;
+  let repaired = [];
+  members.forEach(function (m) {
+    if (!m || !m.id || !m.parent) return;
+    if (byId[m.parent]) return;
+    let fallback = null;
+    if (m.seriesRootId && byId[m.seriesRootId] && m.seriesRootId !== m.id) {
+      fallback = m.seriesRootId;
+    } else if (rootId && rootId !== m.id) {
+      fallback = rootId;
+    }
+    let oldParent = m.parent;
+    m.parent = fallback;
+    if (fallback == null) {
+      if (!Array.isArray(chart.rootAccountIds)) chart.rootAccountIds = [];
+      if (chart.rootAccountIds.indexOf(m.id) < 0) chart.rootAccountIds.push(m.id);
+    }
+    changed = true;
+    repaired.push({ id: m.id, name: m.name || m.username || m.id, from: oldParent, to: fallback });
+  });
+  if (changed) {
+    chart.currentData = JSON.parse(JSON.stringify(members));
+    if (typeof console !== 'undefined' && console.info) {
+      console.info('[OUKEI][ORG] repaired orphan parents', repaired);
+    }
+  }
+  return chart;
 }
 
 function hubMergeOrcaInputAccounts(cloudAccounts, localAccounts, removedIds, preferLocal) {
@@ -1404,6 +1461,8 @@ if (typeof window !== 'undefined') {
   window.hubMergeHubDocuments = hubMergeHubDocuments;
   window.hubStripRemovedAccountsFromSettings = hubStripRemovedAccountsFromSettings;
   window.hubMergeOrcaInputAccounts = hubMergeOrcaInputAccounts;
+  window.hubFilterOrgChartByRemovedIds = hubFilterOrgChartByRemovedIds;
+  window.hubRepairOrphanOrgParents = hubRepairOrphanOrgParents;
   window.hubPackRamOrgChart = hubPackRamOrgChart;
   window.hubRamOrgChartScore = hubRamOrgChartScore;
   window.hubRebuildOrcaOrgFromSettings = hubRebuildOrcaOrgFromSettings;
