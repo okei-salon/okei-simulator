@@ -1,6 +1,10 @@
 /* OUKEI HUB — 組織図表示状態の同期時保持
  * 同期後の hubApplyData / render で rootId・ズーム・スクロールが初期化されないようにする。
  * RAM / ORCA / ENI 共通。
+ *
+ * IMPORTANT (Ver2.0.32 緊急修正):
+ * open 未設定を !!m.open すると false になり、同期 restore で全ノードが折りたたまれる。
+ * 欠落 open は「開いている」扱い（open !== false）とする。
  */
 
 function hubOrgPageIsVisible(pageEl) {
@@ -33,16 +37,73 @@ function hubOrgWriteViewportScroll(viewportId, scroll) {
   } catch (e) {}
 }
 
+/** Missing open ⇒ opened. Only explicit false is closed. */
+function hubOrgIsOpenFlag(openVal) {
+  return openVal !== false;
+}
+
+/**
+ * Snapshot open flags for sync restore.
+ * MUST use open !== false (not !!open). Missing/undefined open means expanded.
+ */
 function hubOrgSnapshotOpenFlags(memberList) {
   let map = {};
   (memberList || []).forEach(function (m) {
-    if (m && m.id != null) map[String(m.id)] = !!m.open;
+    if (m && m.id != null) map[String(m.id)] = hubOrgIsOpenFlag(m.open);
   });
   return map;
 }
 
-function hubOrgRestoreOpenFlags(memberList, openMap) {
+/** True when every snapshotted node is closed (corrupt !!undefined capture). */
+function hubOrgOpenMapIsMassCollapsed(openMap, memberList) {
+  if (!openMap || !memberList || memberList.length <= 1) return false;
+  let keys = Object.keys(openMap);
+  if (keys.length < 2) return false;
+  for (let i = 0; i < keys.length; i++) {
+    if (openMap[keys[i]]) return false;
+  }
+  return true;
+}
+
+/**
+ * Repair already-persisted mass collapse (all open===false).
+ * Does NOT wipe members/parents — only flips open flags.
+ * Returns true if repair ran.
+ */
+function hubOrgRepairMassCollapsedOpens(memberList, label) {
+  if (!memberList || memberList.length <= 1) return false;
+  let closed = 0;
+  let total = 0;
+  memberList.forEach(function (m) {
+    if (!m || m.id == null) return;
+    total++;
+    if (m.open === false) closed++;
+  });
+  if (total < 2 || closed !== total) return false;
+  memberList.forEach(function (m) {
+    if (m && m.id != null) m.open = true;
+  });
+  if (typeof console !== 'undefined' && console.warn) {
+    console.warn('[OUKEI][ORG-DIAG] repaired mass-collapsed opens', {
+      project: label || '',
+      members: total
+    });
+  }
+  return true;
+}
+
+function hubOrgRestoreOpenFlags(memberList, openMap, label) {
   if (!openMap || !memberList) return;
+  if (hubOrgOpenMapIsMassCollapsed(openMap, memberList)) {
+    if (typeof console !== 'undefined' && console.warn) {
+      console.warn('[OUKEI][ORG-DIAG] skip mass-collapsed openMap restore', {
+        project: label || '',
+        members: memberList.length,
+        mapKeys: Object.keys(openMap).length
+      });
+    }
+    return;
+  }
   memberList.forEach(function (m) {
     if (!m || m.id == null) return;
     let key = String(m.id);
@@ -55,6 +116,133 @@ function hubOrgRestoreOpenFlags(memberList, openMap) {
 function hubOrgMemberExists(memberList, id) {
   if (!id) return false;
   return (memberList || []).some(function (m) { return m && m.id === id; });
+}
+
+/**
+ * Count nodes visible from root given open flags (same rule as render).
+ * edges = parent links among active members.
+ */
+function hubOrgCountVisibleFromRoot(memberList, rootId) {
+  let list = memberList || [];
+  let byParent = {};
+  list.forEach(function (m) {
+    if (!m || m.id == null) return;
+    let p = m.parent || '';
+    if (!byParent[p]) byParent[p] = [];
+    byParent[p].push(m);
+  });
+  let visible = 0;
+  let edges = 0;
+  list.forEach(function (m) {
+    if (m && m.parent) edges++;
+  });
+  function walk(id) {
+    let m = list.find(function (x) { return x && x.id === id; });
+    if (!m) return;
+    visible++;
+    if (!hubOrgIsOpenFlag(m.open)) return;
+    let kids = byParent[id] || [];
+    kids.forEach(function (k) { walk(k.id); });
+  }
+  if (rootId) walk(rootId);
+  return { members: list.length, edges: edges, visible: visible, rootId: rootId || '' };
+}
+
+/** READ-ONLY diagnosis for RAM / ORCA / ENI (no writes). */
+function hubOrgDiagnoseCharts() {
+  function pack(label, list, rootId, treeSel) {
+    let counts = hubOrgCountVisibleFromRoot(list, rootId);
+    let openTrue = 0;
+    let openFalse = 0;
+    let openMissing = 0;
+    (list || []).forEach(function (m) {
+      if (!m) return;
+      if (m.open === true) openTrue++;
+      else if (m.open === false) openFalse++;
+      else openMissing++;
+    });
+    let domNodes = 0;
+    if (typeof document !== 'undefined' && treeSel) {
+      let tree = document.querySelector(treeSel);
+      if (tree) domNodes = tree.querySelectorAll('.node, .eniNode, .orcaNode').length;
+      if (tree && !domNodes) domNodes = tree.querySelectorAll('li').length;
+    }
+    return {
+      project: label,
+      savedMembers: counts.members,
+      savedEdges: counts.edges,
+      rootId: counts.rootId,
+      visibleByOpenFlags: counts.visible,
+      domNodes: domNodes,
+      openTrue: openTrue,
+      openFalse: openFalse,
+      openMissing: openMissing,
+      massCollapsed: counts.members > 1 && openFalse === counts.members
+    };
+  }
+  let report = {
+    at: new Date().toISOString(),
+    ram: pack(
+      'ram',
+      typeof members !== 'undefined' ? members : [],
+      typeof rootId !== 'undefined' ? rootId : '',
+      '#tree'
+    ),
+    orca: pack(
+      'orca',
+      typeof orcaMembers !== 'undefined' ? orcaMembers : [],
+      typeof orcaRootId !== 'undefined' ? orcaRootId : '',
+      '#orcaTree'
+    ),
+    eni: pack(
+      'eni',
+      typeof eniMembers !== 'undefined' ? eniMembers : [],
+      typeof eniRootId !== 'undefined' ? eniRootId : '',
+      '#eniTree'
+    )
+  };
+  if (typeof console !== 'undefined' && console.info) {
+    console.info('[OUKEI][ORG-DIAG]', report);
+  }
+  return report;
+}
+
+/**
+ * READ-ONLY backup download of current org charts (members/parents/open).
+ * Does not mutate in-memory or storage data.
+ */
+function hubOrgBackupOrgChartsDownload() {
+  let payload = {
+    exportedAt: new Date().toISOString(),
+    app: 'OUKEI HUB',
+    type: 'org-chart-backup-readonly',
+    diagnose: hubOrgDiagnoseCharts(),
+    ram: {
+      rootId: typeof rootId !== 'undefined' ? rootId : '',
+      rootAccountIds: typeof rootAccountIds !== 'undefined' ? rootAccountIds : [],
+      members: typeof members !== 'undefined' ? members : []
+    },
+    orca: {
+      rootId: typeof orcaRootId !== 'undefined' ? orcaRootId : '',
+      rootAccountIds: typeof orcaRootAccountIds !== 'undefined' ? orcaRootAccountIds : [],
+      members: typeof orcaMembers !== 'undefined' ? orcaMembers : []
+    },
+    eni: {
+      rootId: typeof eniRootId !== 'undefined' ? eniRootId : '',
+      rootAccountIds: typeof eniRootAccountIds !== 'undefined' ? eniRootAccountIds : [],
+      members: typeof eniMembers !== 'undefined' ? eniMembers : []
+    }
+  };
+  let json = JSON.stringify(payload, null, 2);
+  if (typeof document !== 'undefined') {
+    let a = document.createElement('a');
+    a.href = 'data:application/json;charset=utf-8,' + encodeURIComponent(json);
+    a.download = 'OUKEI_ORG_BACKUP_' + new Date().toISOString().replace(/[:.]/g, '-') + '.json';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }
+  return payload;
 }
 
 /** 同期直前に、表示中組織図のビュー状態を保存 */
@@ -125,9 +313,13 @@ function hubRestoreOrgChartViewState(state) {
 
   if (state.ram && typeof rootId !== 'undefined') {
     let list = typeof members !== 'undefined' ? members : [];
-    hubOrgRestoreOpenFlags(list, state.ram.openMap);
+    hubOrgRestoreOpenFlags(list, state.ram.openMap, 'ram');
     if (typeof currentData !== 'undefined' && Array.isArray(currentData)) {
-      hubOrgRestoreOpenFlags(currentData, state.ram.openMap);
+      hubOrgRestoreOpenFlags(currentData, state.ram.openMap, 'ram-current');
+    }
+    hubOrgRepairMassCollapsedOpens(list, 'ram');
+    if (typeof currentData !== 'undefined' && Array.isArray(currentData)) {
+      hubOrgRepairMassCollapsedOpens(currentData, 'ram-current');
     }
     if (hubOrgMemberExists(list, state.ram.rootId)) {
       rootId = state.ram.rootId;
@@ -146,9 +338,13 @@ function hubRestoreOrgChartViewState(state) {
 
   if (state.orca && typeof orcaRootId !== 'undefined') {
     let list = typeof orcaMembers !== 'undefined' ? orcaMembers : [];
-    hubOrgRestoreOpenFlags(list, state.orca.openMap);
+    hubOrgRestoreOpenFlags(list, state.orca.openMap, 'orca');
     if (typeof orcaCurrentData !== 'undefined' && Array.isArray(orcaCurrentData)) {
-      hubOrgRestoreOpenFlags(orcaCurrentData, state.orca.openMap);
+      hubOrgRestoreOpenFlags(orcaCurrentData, state.orca.openMap, 'orca-current');
+    }
+    hubOrgRepairMassCollapsedOpens(list, 'orca');
+    if (typeof orcaCurrentData !== 'undefined' && Array.isArray(orcaCurrentData)) {
+      hubOrgRepairMassCollapsedOpens(orcaCurrentData, 'orca-current');
     }
     if (hubOrgMemberExists(list, state.orca.rootId)) {
       orcaRootId = state.orca.rootId;
@@ -167,9 +363,13 @@ function hubRestoreOrgChartViewState(state) {
 
   if (state.eni && typeof eniRootId !== 'undefined') {
     let list = typeof eniMembers !== 'undefined' ? eniMembers : [];
-    hubOrgRestoreOpenFlags(list, state.eni.openMap);
+    hubOrgRestoreOpenFlags(list, state.eni.openMap, 'eni');
     if (typeof eniCurrentData !== 'undefined' && Array.isArray(eniCurrentData)) {
-      hubOrgRestoreOpenFlags(eniCurrentData, state.eni.openMap);
+      hubOrgRestoreOpenFlags(eniCurrentData, state.eni.openMap, 'eni-current');
+    }
+    hubOrgRepairMassCollapsedOpens(list, 'eni');
+    if (typeof eniCurrentData !== 'undefined' && Array.isArray(eniCurrentData)) {
+      hubOrgRepairMassCollapsedOpens(eniCurrentData, 'eni-current');
     }
     if (hubOrgMemberExists(list, state.eni.rootId)) {
       eniRootId = state.eni.rootId;
@@ -283,4 +483,12 @@ if (typeof window !== 'undefined') {
   window.hubRestoreOrgChartViewState = hubRestoreOrgChartViewState;
   window.hubRestoreOrgChartScrollState = hubRestoreOrgChartScrollState;
   window.hubPatchOrgEnsureRootGuards = hubPatchOrgEnsureRootGuards;
+  window.hubOrgSnapshotOpenFlags = hubOrgSnapshotOpenFlags;
+  window.hubOrgRestoreOpenFlags = hubOrgRestoreOpenFlags;
+  window.hubOrgOpenMapIsMassCollapsed = hubOrgOpenMapIsMassCollapsed;
+  window.hubOrgRepairMassCollapsedOpens = hubOrgRepairMassCollapsedOpens;
+  window.hubOrgDiagnoseCharts = hubOrgDiagnoseCharts;
+  window.hubOrgBackupOrgChartsDownload = hubOrgBackupOrgChartsDownload;
+  window.hubOrgCountVisibleFromRoot = hubOrgCountVisibleFromRoot;
+  window.hubOrgIsOpenFlag = hubOrgIsOpenFlag;
 }

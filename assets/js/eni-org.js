@@ -93,6 +93,9 @@ function eniNormalizeMembers() {
     if (m.teamReward == null) m.teamReward = 0;
     if (m.name == null) m.name = '';
   });
+  if (typeof hubOrgRepairMassCollapsedOpens === 'function') {
+    hubOrgRepairMassCollapsedOpens(eniMembers, 'eni-normalize');
+  }
 }
 
 function eniClearAggCache() {
@@ -939,6 +942,15 @@ function eniRenderTree() {
     return;
   }
   tree.innerHTML = '<ul>' + eniRenderNode(eniRootId) + '</ul>';
+  if (typeof hubOrgDiagnoseCharts === 'function') {
+    try {
+      var diag = hubOrgDiagnoseCharts();
+      if (diag && diag.eni && diag.eni.savedMembers > 1 &&
+          diag.eni.visibleByOpenFlags < diag.eni.savedMembers) {
+        console.warn('[OUKEI][ORG-DIAG] ENI visible < saved after render', diag.eni);
+      }
+    } catch (e) {}
+  }
 }
 
 function eniToggleOpen(id) {

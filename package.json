@@ -19,7 +19,9 @@
     "verify:eni-performance": "node scripts/verify-eni-performance-input.mjs",
     "verify:hub-sync": "node scripts/verify-hub-sync-merge.mjs",
     "verify:orca-account-delete": "node scripts/verify-orca-account-full-delete.mjs",
-    "verify:local-dev-mode": "node scripts/verify-local-dev-mode.mjs"
+    "verify:local-dev-mode": "node scripts/verify-local-dev-mode.mjs",
+    "verify:org-visibility": "node scripts/verify-org-chart-visibility.mjs",
+    "verify:org-localhost": "node scripts/verify-org-chart-localhost.mjs"
   },
   "devDependencies": {
     "firebase-tools": "^13.29.1"

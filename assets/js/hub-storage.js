@@ -1225,6 +1225,22 @@ function hubApplyData(data, opts) {
   focusId = rootId || focusId || '';
   simMode = false;
   hubLocalUpdatedAt = normalized.updatedAt || 0;
+  if (Array.isArray(members)) {
+    members.forEach(function (m) {
+      if (m && m.open == null) m.open = true;
+    });
+    if (typeof hubOrgRepairMassCollapsedOpens === 'function') {
+      hubOrgRepairMassCollapsedOpens(members, 'ram-apply');
+    }
+  }
+  if (Array.isArray(currentData)) {
+    currentData.forEach(function (m) {
+      if (m && m.open == null) m.open = true;
+    });
+    if (typeof hubOrgRepairMassCollapsedOpens === 'function') {
+      hubOrgRepairMassCollapsedOpens(currentData, 'ram-current-apply');
+    }
+  }
   if (typeof orcaApplyOrgChart === 'function') orcaApplyOrgChart(normalized.orcaOrgChart);
   if (typeof eniApplyOrgChart === 'function') eniApplyOrgChart(normalized.eniOrgChart);
   if (typeof orcaSyncAllPersonalSales === 'function') orcaSyncAllPersonalSales();

@@ -64,6 +64,12 @@ function orcaApplyOrgChart(data) {
   orcaZoom = typeof d.zoom === 'number' ? d.zoom : 1;
   orcaFocusId = orcaRootId || orcaFocusId || '';
   orcaSimMode = false;
+  orcaMembers.forEach(function (m) {
+    if (m && m.open == null) m.open = true;
+  });
+  if (typeof hubOrgRepairMassCollapsedOpens === 'function') {
+    hubOrgRepairMassCollapsedOpens(orcaMembers, 'orca-apply');
+  }
 }
 
 function orcaChildrenOf(id) {
