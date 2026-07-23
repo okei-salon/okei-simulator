@@ -1,0 +1,156 @@
+{
+  "report": {
+    "reparented": [
+      {
+        "id": "eni_1784188565683",
+        "name": "浅田",
+        "fromParent": "eni_1784123085986",
+        "toParent": "eni_1783870238553",
+        "sortOrder": 4
+      },
+      {
+        "id": "eni_1784645764795",
+        "name": "亜子",
+        "fromParent": "eni_1784123085986",
+        "toParent": "eni_1783870238553",
+        "sortOrder": 5
+      },
+      {
+        "id": "eni_1784646223095",
+        "name": "下中",
+        "fromParent": "eni_1784122607417",
+        "toParent": "eni_1783870238553",
+        "sortOrder": 6
+      }
+    ],
+    "unchangedChildLinks": [
+      {
+        "child": "荒川",
+        "childId": "eni_1784645783878",
+        "parent": "亜子",
+        "parentId": "eni_1784645764795"
+      }
+    ],
+    "skipped": [],
+    "newParent": "eni_1783870238553",
+    "newParentName": "kai1"
+  },
+  "before": {
+    "memberCount": 8,
+    "reachableCount": 4,
+    "reachableNames": [
+      "kai1",
+      "kai2",
+      "kai3",
+      "kai4"
+    ],
+    "orphanNames": [
+      "下中",
+      "亜子",
+      "浅田",
+      "荒川"
+    ],
+    "missingParentRefCount": 3,
+    "treeEdges": [
+      {
+        "id": "eni_1783870238553",
+        "name": "kai1",
+        "parent": null
+      },
+      {
+        "id": "eni_1784029182808",
+        "name": "kai2",
+        "parent": "eni_1783870238553"
+      },
+      {
+        "id": "eni_1784126651384",
+        "name": "kai3",
+        "parent": "eni_1783870238553"
+      },
+      {
+        "id": "eni_1784126686618",
+        "name": "kai4",
+        "parent": "eni_1783870238553"
+      },
+      {
+        "id": "eni_1784646223095",
+        "name": "下中",
+        "parent": "eni_1784122607417"
+      },
+      {
+        "id": "eni_1784645764795",
+        "name": "亜子",
+        "parent": "eni_1784123085986"
+      },
+      {
+        "id": "eni_1784188565683",
+        "name": "浅田",
+        "parent": "eni_1784123085986"
+      },
+      {
+        "id": "eni_1784645783878",
+        "name": "荒川",
+        "parent": "eni_1784645764795"
+      }
+    ]
+  },
+  "afterLocal": {
+    "memberCount": 8,
+    "reachableCount": 8,
+    "reachableNames": [
+      "kai1",
+      "kai2",
+      "kai3",
+      "kai4",
+      "下中",
+      "亜子",
+      "浅田",
+      "荒川"
+    ],
+    "orphanNames": [],
+    "missingParentRefCount": 0,
+    "treeEdges": [
+      {
+        "id": "eni_1783870238553",
+        "name": "kai1",
+        "parent": null
+      },
+      {
+        "id": "eni_1784029182808",
+        "name": "kai2",
+        "parent": "eni_1783870238553"
+      },
+      {
+        "id": "eni_1784126651384",
+        "name": "kai3",
+        "parent": "eni_1783870238553"
+      },
+      {
+        "id": "eni_1784126686618",
+        "name": "kai4",
+        "parent": "eni_1783870238553"
+      },
+      {
+        "id": "eni_1784646223095",
+        "name": "下中",
+        "parent": "eni_1783870238553"
+      },
+      {
+        "id": "eni_1784645764795",
+        "name": "亜子",
+        "parent": "eni_1783870238553"
+      },
+      {
+        "id": "eni_1784188565683",
+        "name": "浅田",
+        "parent": "eni_1783870238553"
+      },
+      {
+        "id": "eni_1784645783878",
+        "name": "荒川",
+        "parent": "eni_1784645764795"
+      }
+    ]
+  },
+  "updatedAt": 1784811933254
+}

@@ -571,34 +571,252 @@ function aimRemoveInputAccountRecord(projectKey, accountId) {
   }
 }
 
-function aimDeleteInputAccountFully(projectKey, accountId) {
-  if (!projectKey || !accountId) return 0;
+/** Shared org member list for RAM / ORCA / ENI. */
+function aimGetOrgMembersRef(projectKey) {
+  if (projectKey === 'ram' && typeof members !== 'undefined') return members;
+  if (projectKey === 'orca' && typeof orcaMembers !== 'undefined') return orcaMembers;
+  if (projectKey === 'eni' && typeof eniMembers !== 'undefined') return eniMembers;
+  return null;
+}
+
+function aimFindOrgMemberById(projectKey, accountId) {
+  let list = aimGetOrgMembersRef(projectKey);
+  if (!list || !accountId) return null;
+  return list.find(function (m) { return m && m.id === accountId; }) || null;
+}
+
+function aimGetDirectChildMembers(projectKey, accountId) {
+  let list = aimGetOrgMembersRef(projectKey) || [];
+  return list.filter(function (m) { return m && m.parent === accountId; });
+}
+
+/** Full subtree ids including self (RAM / ORCA / ENI). */
+function aimCollectSubtreeIds(projectKey, accountId) {
+  if (!accountId) return [];
+  if (projectKey === 'orca' && typeof orcaSubtreeIds === 'function') {
+    return orcaSubtreeIds(accountId) || [accountId];
+  }
+  if (projectKey === 'eni' && typeof eniSubtreeIds === 'function') {
+    return eniSubtreeIds(accountId) || [accountId];
+  }
+  if (projectKey === 'ram' && typeof subtreeIds === 'function') {
+    return subtreeIds(accountId) || [accountId];
+  }
+  let list = aimGetOrgMembersRef(projectKey) || [];
   let subtree = [accountId];
-  if (projectKey === 'ram' && typeof members !== 'undefined') {
-    let changed = true;
-    while (changed) {
-      changed = false;
-      members.forEach(function (m) {
-        if (m.parent && subtree.indexOf(m.parent) >= 0 && subtree.indexOf(m.id) < 0) {
-          subtree.push(m.id);
-          changed = true;
-        }
+  let changed = true;
+  while (changed) {
+    changed = false;
+    list.forEach(function (m) {
+      if (m && m.parent && subtree.indexOf(m.parent) >= 0 && subtree.indexOf(m.id) < 0) {
+        subtree.push(m.id);
+        changed = true;
+      }
+    });
+  }
+  return subtree;
+}
+
+function aimCountOrphanOrgMembers(projectKey) {
+  let list = aimGetOrgMembersRef(projectKey) || [];
+  let byId = {};
+  list.forEach(function (m) {
+    if (m && m.id != null) byId[m.id] = m;
+  });
+  let orphans = [];
+  list.forEach(function (m) {
+    if (!m || !m.parent) return;
+    if (!byId[m.parent]) orphans.push(m);
+  });
+  return orphans;
+}
+
+function aimDescribeDeletePreview(projectKey, accountId) {
+  let target = aimFindOrgMemberById(projectKey, accountId);
+  let subtree = aimCollectSubtreeIds(projectKey, accountId);
+  let children = aimGetDirectChildMembers(projectKey, accountId);
+  let parent = target && target.parent ? aimFindOrgMemberById(projectKey, target.parent) : null;
+  let parentLabel = parent
+    ? (parent.name || parent.username || parent.id)
+    : (target && !target.parent ? '（ルート）' : '（親なし）');
+  let childNames = children.map(function (c) {
+    return c.name || c.username || c.id;
+  });
+  return {
+    target: target,
+    subtreeIds: subtree,
+    subtreeCount: subtree.length,
+    childCount: children.length,
+    children: children,
+    parentId: target ? (target.parent || null) : null,
+    parentLabel: parentLabel,
+    childNames: childNames,
+    hasChildren: children.length > 0
+  };
+}
+
+function aimAutoBackupBeforeDelete(reason) {
+  try {
+    // In-memory undo slot (keeps last few delete snapshots)
+    try {
+      if (typeof autoBackups !== 'undefined' && Array.isArray(autoBackups)) {
+        let packed = typeof hubPackLocalData === 'function'
+          ? hubPackLocalData()
+          : {
+            members: typeof members !== 'undefined' ? members : [],
+            settings: typeof settings !== 'undefined' ? settings : {},
+            rootId: typeof rootId !== 'undefined' ? rootId : '',
+            rootAccountIds: typeof rootAccountIds !== 'undefined' ? rootAccountIds : [],
+            orcaOrgChart: typeof orcaPackOrgChart === 'function' ? orcaPackOrgChart() : null,
+            eniOrgChart: typeof eniPackOrgChart === 'function' ? eniPackOrgChart() : null
+          };
+        autoBackups.unshift({
+          label: '削除前自動バックアップ' + (reason ? (' / ' + reason) : ''),
+          created: new Date().toLocaleString(),
+          reason: reason || '',
+          packed: typeof clone === 'function' ? clone(packed) : JSON.parse(JSON.stringify(packed))
+        });
+        autoBackups = autoBackups.slice(0, 5);
+      }
+    } catch (eSnap) { /* ignore snapshot errors */ }
+
+    if (typeof hubSaveNow === 'function') hubSaveNow();
+    else if (typeof hubSaveToStorage === 'function') hubSaveToStorage();
+
+    if (typeof downloadBackup === 'function') {
+      downloadBackup();
+    }
+    if (typeof console !== 'undefined' && console.info) {
+      console.info('[OUKEI][DELETE] auto backup created', reason || '');
+    }
+    return true;
+  } catch (e) {
+    if (typeof console !== 'undefined' && console.warn) {
+      console.warn('[OUKEI][DELETE] auto backup failed', e);
+    }
+  }
+  return false;
+}
+
+/** Refuse wiping the last org-chart root via subtree delete. Promote remains allowed. */
+function aimIsLastOrgRoot(projectKey, accountId) {
+  if (!accountId) return false;
+  let rootIds = null;
+  if (projectKey === 'ram' && typeof rootAccountIds !== 'undefined') rootIds = rootAccountIds;
+  if (projectKey === 'orca' && typeof orcaRootAccountIds !== 'undefined') rootIds = orcaRootAccountIds;
+  if (projectKey === 'eni' && typeof eniRootAccountIds !== 'undefined') rootIds = eniRootAccountIds;
+  if (!rootIds || rootIds.length !== 1) return false;
+  if (rootIds[0] !== accountId) return false;
+  let target = aimFindOrgMemberById(projectKey, accountId);
+  return !!(target && !target.parent);
+}
+
+function aimAssertNoOrphansAfterDelete(projectKey) {
+  let orphans = aimCountOrphanOrgMembers(projectKey);
+  if (orphans.length) {
+    if (typeof console !== 'undefined' && console.error) {
+      console.error('[OUKEI][DELETE] orphan nodes remain after delete', {
+        projectKey: projectKey,
+        count: orphans.length,
+        ids: orphans.map(function (m) { return m.id; })
       });
     }
-    aimRemoveOrgMembersOnly(projectKey, subtree);
-  } else if (projectKey === 'orca' && typeof orcaSubtreeIds === 'function') {
-    subtree = orcaSubtreeIds(accountId);
-    aimRemoveOrgMembersOnly(projectKey, subtree);
-  } else if (projectKey === 'eni' && typeof eniMembers !== 'undefined') {
-    aimRemoveOrgMembersOnly(projectKey, [accountId]);
+    if (typeof showToast === 'function') {
+      showToast('⚠️ 削除後に孤立ノードが ' + orphans.length + ' 件残っています');
+    }
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Promote direct children to target's parent, then remove target from org only.
+ *
+ * Spec (tree fully preserved under promoted children):
+ *   A
+ *   └ B
+ *     └ C
+ *       └ D
+ * Delete B with promote =>
+ *   A
+ *   └ C
+ *     └ D
+ * Only B's direct children are reparented (C → A). Links like C→D are never changed.
+ */
+function aimPromoteChildrenThenRemoveSelf(projectKey, accountId) {
+  let list = aimGetOrgMembersRef(projectKey);
+  let target = aimFindOrgMemberById(projectKey, accountId);
+  if (!list || !target) return false;
+  let newParent = target.parent || null;
+  let children = aimGetDirectChildMembers(projectKey, accountId);
+  children.forEach(function (child) {
+    child.parent = newParent;
+    if (typeof aimApplyOrgMemberSeriesMeta === 'function') {
+      aimApplyOrgMemberSeriesMeta(projectKey, child, newParent);
+    }
+  });
+  if (!newParent) {
+    // promoted children become roots
+    let rootIdsName = null;
+    if (projectKey === 'ram' && typeof rootAccountIds !== 'undefined') rootIdsName = 'ram';
+    if (projectKey === 'orca' && typeof orcaRootAccountIds !== 'undefined') rootIdsName = 'orca';
+    if (projectKey === 'eni' && typeof eniRootAccountIds !== 'undefined') rootIdsName = 'eni';
+    if (rootIdsName === 'ram') {
+      children.forEach(function (c) {
+        if (rootAccountIds.indexOf(c.id) < 0) rootAccountIds.push(c.id);
+      });
+    } else if (rootIdsName === 'orca') {
+      children.forEach(function (c) {
+        if (orcaRootAccountIds.indexOf(c.id) < 0) orcaRootAccountIds.push(c.id);
+      });
+    } else if (rootIdsName === 'eni') {
+      children.forEach(function (c) {
+        if (eniRootAccountIds.indexOf(c.id) < 0) eniRootAccountIds.push(c.id);
+      });
+    }
+  }
+  aimRemoveOrgMembersOnly(projectKey, [accountId]);
+  return true;
+}
+
+/**
+ * Full account delete (org + input + performance).
+ * opts.mode: 'subtree' | 'promote' (required when target has children)
+ */
+function aimDeleteInputAccountFully(projectKey, accountId, opts) {
+  opts = opts || {};
+  if (!projectKey || !accountId) return 0;
+  let preview = aimDescribeDeletePreview(projectKey, accountId);
+  let mode = opts.mode || null;
+  if (preview.hasChildren && mode !== 'subtree' && mode !== 'promote') {
+    if (typeof console !== 'undefined' && console.error) {
+      console.error('[OUKEI][DELETE] refused: children exist but mode not set', projectKey, accountId);
+    }
+    return 0;
+  }
+  if (!preview.hasChildren) mode = 'subtree';
+  if (mode === 'subtree' && aimIsLastOrgRoot(projectKey, accountId)) {
+    if (typeof showToast === 'function') showToast('⚠️ 最後の組織図ルートは配下ごと削除できません（繰り上げ削除は可）');
+    return 0;
+  }
+
+  aimAutoBackupBeforeDelete(projectKey + ':' + accountId + ':' + mode);
+
+  let deleteIds = [];
+  if (mode === 'promote') {
+    aimPromoteChildrenThenRemoveSelf(projectKey, accountId);
+    deleteIds = [accountId];
   } else {
-    aimRecordRemovedOrgAccountIds(projectKey, [accountId]);
+    deleteIds = preview.subtreeIds.slice();
+    aimRemoveOrgMembersOnly(projectKey, deleteIds);
   }
+
   if (projectKey === 'orca' && typeof hubMarkExplicitOrcaDelete === 'function') {
-    hubMarkExplicitOrcaDelete(subtree);
+    hubMarkExplicitOrcaDelete(deleteIds);
   }
+
   let removed = 0;
-  subtree.forEach(function (id) {
+  deleteIds.forEach(function (id) {
     if (typeof pdDeleteAccountPerformanceData === 'function') {
       removed += pdDeleteAccountPerformanceData(projectKey, id, {
         skipPersist: true,
@@ -609,15 +827,218 @@ function aimDeleteInputAccountFully(projectKey, accountId) {
     }
     aimRemoveInputAccountRecord(projectKey, id);
   });
-  // Keep removed*OrgAccountIds tombstones so cloud merge cannot resurrect accounts.
+
   if (typeof markActivity === 'function') markActivity();
   if (typeof markSettingsDirty === 'function') markSettingsDirty();
   if (typeof persistHubSettings === 'function') persistHubSettings();
   else if (typeof pdPersist === 'function') pdPersist();
   if (typeof pdNotifyPerformanceChanged === 'function') {
-    pdNotifyPerformanceChanged({ type: 'delete', projectKey: projectKey, accountId: accountId });
+    pdNotifyPerformanceChanged({ type: 'delete', projectKey: projectKey, accountId: accountId, mode: mode });
   }
+  aimAssertNoOrphansAfterDelete(projectKey);
   return removed;
+}
+
+/**
+ * Org-chart-only delete (keeps revenue/sales history).
+ * opts.mode: 'subtree' | 'promote'
+ */
+function aimDeleteOrgMemberOnly(projectKey, accountId, opts) {
+  opts = opts || {};
+  if (!projectKey || !accountId) return false;
+  let preview = aimDescribeDeletePreview(projectKey, accountId);
+  let mode = opts.mode || null;
+  if (preview.hasChildren && mode !== 'subtree' && mode !== 'promote') {
+    return false;
+  }
+  if (!preview.hasChildren) mode = 'subtree';
+  if (mode === 'subtree' && aimIsLastOrgRoot(projectKey, accountId)) {
+    if (typeof showToast === 'function') showToast('⚠️ 最後の組織図ルートは配下ごと削除できません（繰り上げ削除は可）');
+    return false;
+  }
+
+  aimAutoBackupBeforeDelete(projectKey + ':org:' + accountId + ':' + mode);
+
+  let parentId = preview.parentId;
+  let affectedIds = mode === 'promote' ? [accountId] : preview.subtreeIds.slice();
+  if (mode === 'promote') {
+    aimPromoteChildrenThenRemoveSelf(projectKey, accountId);
+  } else {
+    aimRemoveOrgMembersOnly(projectKey, preview.subtreeIds);
+  }
+
+  if (projectKey === 'ram') {
+    if (typeof rootId !== 'undefined' && affectedIds.indexOf(rootId) >= 0) {
+      rootId = (typeof rootAccountIds !== 'undefined' && rootAccountIds[0]) || '';
+      if (typeof focusId !== 'undefined') focusId = rootId;
+    } else if (typeof focusId !== 'undefined' && affectedIds.indexOf(focusId) >= 0) {
+      focusId = rootId;
+    }
+    if (mode === 'subtree' && parentId && typeof adjustAncestorManualVolumes === 'function' &&
+        typeof lineAmountOf === 'function') {
+      try { adjustAncestorManualVolumes(parentId, -lineAmountOf(accountId)); } catch (e) {}
+    }
+  }
+  if (projectKey === 'orca') {
+    if (typeof orcaRootId !== 'undefined' && affectedIds.indexOf(orcaRootId) >= 0) {
+      orcaRootId = (typeof orcaRootAccountIds !== 'undefined' && orcaRootAccountIds[0]) || '';
+      if (typeof orcaFocusId !== 'undefined') orcaFocusId = orcaRootId;
+    } else if (typeof orcaFocusId !== 'undefined' && affectedIds.indexOf(orcaFocusId) >= 0) {
+      orcaFocusId = orcaRootId;
+    }
+    if (mode === 'subtree' && parentId) {
+      if (typeof orcaAdjustAncestorManualVolumes === 'function' && typeof orcaLineAmountOf === 'function') {
+        try { orcaAdjustAncestorManualVolumes(parentId, -orcaLineAmountOf(accountId)); } catch (e) {}
+      }
+      if (typeof orcaSyncPersonalSalesFor === 'function') orcaSyncPersonalSalesFor(parentId);
+      if (typeof orcaRefreshGroupSalesUpstream === 'function') orcaRefreshGroupSalesUpstream(parentId);
+    }
+  }
+  if (projectKey === 'eni') {
+    if (typeof eniRootId !== 'undefined' && affectedIds.indexOf(eniRootId) >= 0) {
+      eniRootId = (typeof eniRootAccountIds !== 'undefined' && eniRootAccountIds[0]) || '';
+      if (typeof eniFocusId !== 'undefined') eniFocusId = eniRootId;
+    } else if (typeof eniFocusId !== 'undefined' && affectedIds.indexOf(eniFocusId) >= 0) {
+      eniFocusId = eniRootId;
+    }
+  }
+
+  if (typeof markActivity === 'function') markActivity();
+  if (typeof persistHubSettings === 'function') persistHubSettings();
+  else if (typeof hubSaveToStorage === 'function') hubSaveToStorage();
+  aimAssertNoOrphansAfterDelete(projectKey);
+  return true;
+}
+
+function aimRerenderAfterDelete(projectKey) {
+  if (projectKey === 'ram' && typeof render === 'function') render();
+  if (projectKey === 'orca' && typeof orcaRender === 'function') orcaRender();
+  if (projectKey === 'eni' && typeof eniRender === 'function') eniRender();
+  if (typeof renderPortfolio === 'function') renderPortfolio();
+}
+
+/**
+ * Shared delete confirmation:
+ * - no children: simple confirm
+ * - has children: 配下ごと削除 / 繰り上げて本人だけ削除 / キャンセル
+ */
+function aimShowDeleteAccountDialog(projectKey, accountId, accountName, opts) {
+  opts = opts || {};
+  let scope = opts.scope === 'org' ? 'org' : 'full';
+  let preview = aimDescribeDeletePreview(projectKey, accountId);
+  let displayName = accountName || (preview.target && (preview.target.name || preview.target.username)) || accountId;
+
+  function run(mode) {
+    if (scope === 'org') {
+      if (!aimDeleteOrgMemberOnly(projectKey, accountId, { mode: mode })) return;
+    } else {
+      aimDeleteInputAccountFully(projectKey, accountId, { mode: mode });
+    }
+    if (typeof closeModal === 'function') closeModal();
+    else if (typeof pfCloseEntryModal === 'function') pfCloseEntryModal();
+    if (typeof showToast === 'function') {
+      showToast(mode === 'promote' ? '✅ 配下を繰り上げて削除しました' : '✅ アカウントを削除しました');
+    }
+    aimRerenderAfterDelete(projectKey);
+    if (typeof opts.onDone === 'function') opts.onDone(mode);
+  }
+
+  // Leaf: single confirm
+  if (!preview.hasChildren) {
+    let leafMsg = scope === 'org'
+      ? ('「' + displayName + '」を組織図から削除しますか？\n実績入力・収益履歴・売上履歴は保持されます。')
+      : AIM_DELETE_CONFIRM_MESSAGE;
+    if (!window.confirm(leafMsg)) return;
+    run('subtree');
+    return;
+  }
+
+  let childPreview = preview.childNames.slice(0, 8).map(function (n) {
+    return aimEscapeHtml(n);
+  }).join('、');
+  if (preview.childNames.length > 8) childPreview += ' 他';
+
+  let promoteNote = preview.parentId
+    ? ('直属の子 ' + preview.childCount + ' 人を親「' + aimEscapeHtml(preview.parentLabel) + '」へ付け替えます。')
+    : ('直属の子 ' + preview.childCount + ' 人をルートへ繰り上げます。');
+
+  if (typeof modalTitle === 'undefined' || typeof modalContent === 'undefined' || typeof modalBg === 'undefined') {
+    // Fallback without modal UI
+    let choice = window.prompt(
+      '配下があります。\n1 = 配下ごと削除（' + preview.subtreeCount + 'アカウント）\n2 = 配下を繰り上げて本人だけ削除\n3 = キャンセル',
+      '3'
+    );
+    if (choice === '1') run('subtree');
+    else if (choice === '2') run('promote');
+    return;
+  }
+
+  let isLastRoot = aimIsLastOrgRoot(projectKey, accountId);
+  modalTitle.textContent = 'アカウント削除';
+  modalContent.innerHTML =
+    '<div class="pfConfirmBody aimDeleteConfirm">' +
+    '<p class="pfConfirmMessage">「' + aimEscapeHtml(displayName) + '」には配下があります。</p>' +
+    '<p class="pfConfirmAccountName">削除方法を選択してください</p>' +
+    '<div class="aimDeleteOptions">' +
+    '<div class="aimDeleteOptionBox' + (isLastRoot ? ' is-disabled' : '') + '">' +
+    '<span class="aimDeleteOptionTitle">1. 配下ごと削除</span>' +
+    '<span class="aimDeleteOptionDesc">対象アカウントと、その配下の全ノードを一括削除します。<br>' +
+    'この操作で <b>' + preview.subtreeCount + ' アカウント</b>が削除されます。' +
+    (isLastRoot ? '<br><b>※最後の組織図ルートのため選択できません</b>' : '') +
+    '</span>' +
+    '<button type="button" class="btnDanger" id="aimDeleteSubtreeBtn"' +
+    (isLastRoot ? ' disabled' : '') + '>配下ごと削除（' + preview.subtreeCount +
+    'アカウント）</button>' +
+    '</div>' +
+    '<div class="aimDeleteOptionBox">' +
+    '<span class="aimDeleteOptionTitle">2. 配下を繰り上げて本人だけ削除</span>' +
+    '<span class="aimDeleteOptionDesc">対象アカウント本人のみ削除します。<br>' +
+    promoteNote + '<br>孫以下の親子関係は維持します。<br>変更後：直属の子（' +
+    childPreview + '）→ 親「' + aimEscapeHtml(preview.parentLabel) + '」</span>' +
+    '<button type="button" class="btn2" id="aimDeletePromoteBtn">繰り上げて本人だけ削除</button>' +
+    '</div>' +
+    '</div>' +
+    '<p class="pfEntryHelp">3. キャンセル — 何も変更しません。<br>親だけ削除して子を孤立させる操作はできません。削除前に自動バックアップを作成します。</p>' +
+    '</div>';
+
+  let footer = document.querySelector('#modalBg .modalFooter');
+  if (footer) {
+    footer.style.display = 'flex';
+    footer.innerHTML =
+      '<button type="button" class="btn2" id="aimDeleteCancelBtn">3. キャンセル</button>';
+  }
+  modalBg.style.display = 'flex';
+
+  setTimeout(function () {
+    let subBtn = document.getElementById('aimDeleteSubtreeBtn');
+    let proBtn = document.getElementById('aimDeletePromoteBtn');
+    let canBtn = document.getElementById('aimDeleteCancelBtn');
+    if (subBtn) {
+      subBtn.onclick = function () {
+        if (isLastRoot) {
+          if (typeof showToast === 'function') showToast('⚠️ 最後の組織図ルートは配下ごと削除できません');
+          return;
+        }
+        if (!window.confirm('この操作で ' + preview.subtreeCount + ' アカウントが削除されます。よろしいですか？')) return;
+        run('subtree');
+      };
+    }
+    if (proBtn) {
+      proBtn.onclick = function () {
+        if (!window.confirm(
+          '本人のみ削除し、直属の子 ' + preview.childCount +
+          ' 人を親「' + preview.parentLabel + '」へ付け替えます。よろしいですか？'
+        )) return;
+        run('promote');
+      };
+    }
+    if (canBtn) {
+      canBtn.onclick = function () {
+        if (typeof closeModal === 'function') closeModal();
+        else if (typeof pfCloseEntryModal === 'function') pfCloseEntryModal();
+      };
+    }
+  }, 0);
 }
 
 var aimCloseModalHooked = false;
@@ -1356,10 +1777,10 @@ function aimInvokeReopen(reopenFn) {
 }
 
 function aimConfirmDeleteInputAccount(projectKey, accountId, accountName, reopenFn) {
-  if (!confirm(AIM_DELETE_CONFIRM_MESSAGE)) return;
-  aimDeleteInputAccountFully(projectKey, accountId);
-  if (typeof showToast === 'function') showToast('✅ アカウントを削除しました');
-  aimInvokeReopen(reopenFn);
+  aimShowDeleteAccountDialog(projectKey, accountId, accountName, {
+    scope: 'full',
+    onDone: function () { aimInvokeReopen(reopenFn); }
+  });
 }
 
 function aimPersistInputAccountMetaFromForm(projectKey) {
@@ -1437,6 +1858,12 @@ if (typeof window !== 'undefined') {
   window.aimPlaceInputAccountInOrg = aimPlaceInputAccountInOrg;
   window.aimRemoveOrgMembersOnly = aimRemoveOrgMembersOnly;
   window.aimDeleteInputAccountFully = aimDeleteInputAccountFully;
+  window.aimDeleteOrgMemberOnly = aimDeleteOrgMemberOnly;
+  window.aimShowDeleteAccountDialog = aimShowDeleteAccountDialog;
+  window.aimCollectSubtreeIds = aimCollectSubtreeIds;
+  window.aimDescribeDeletePreview = aimDescribeDeletePreview;
+  window.aimCountOrphanOrgMembers = aimCountOrphanOrgMembers;
+  window.aimPromoteChildrenThenRemoveSelf = aimPromoteChildrenThenRemoveSelf;
   window.aimRenderOrgPlacementModal = aimRenderOrgPlacementModal;
   window.aimOpenProjectRegisterFromOrg = aimOpenProjectRegisterFromOrg;
   window.aimRenderEniOrgRegisterAndPlaceForm = aimRenderEniOrgRegisterAndPlaceForm;

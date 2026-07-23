@@ -771,6 +771,15 @@ function orcaRecordRemovedAccounts(ids) {
 function orcaDeleteMember(id) {
   var target = orcaMembers.find(function (x) { return x.id === id; });
   if (!target) return;
+  if (typeof aimShowDeleteAccountDialog === 'function') {
+    aimShowDeleteAccountDialog('orca', id, orcaDisplayName(target), {
+      scope: 'org',
+      onDone: function () {
+        if (typeof closeModal === 'function') closeModal();
+      }
+    });
+    return;
+  }
   if (!confirm('組織図から削除しますか？配下も組織図から削除されます。実績入力・収益履歴・売上履歴は保持されます。')) return;
   var parent = target.parent;
   var line = orcaLineAmountOf(id);
@@ -935,9 +944,22 @@ function orcaRenameRootAccount() {
 }
 
 function orcaDeleteRootAccount() {
-  if (orcaRootAccountIds.length <= 1) return alert('最後の組織図は削除できません');
   var target = orcaMembers.find(function (x) { return x.id === orcaRootId; });
   if (!target) return;
+  var kids = orcaMembers.filter(function (x) { return x && x.parent === orcaRootId; });
+  if (orcaRootAccountIds.length <= 1 && !kids.length) {
+    return alert('最後の組織図は削除できません');
+  }
+  if (typeof aimShowDeleteAccountDialog === 'function') {
+    aimShowDeleteAccountDialog('orca', orcaRootId, orcaDisplayName(target), {
+      scope: 'org',
+      onDone: function () {
+        if (typeof closeModal === 'function') closeModal();
+      }
+    });
+    return;
+  }
+  if (orcaRootAccountIds.length <= 1) return alert('最後の組織図は削除できません');
   if (!confirm('表示中の親アカウント「' + orcaDisplayName(target) + '」と配下を組織図から削除しますか？実績入力・収益履歴・売上履歴は保持されます。')) return;
   var rm = orcaSubtreeIds(orcaRootId);
   aimRemoveOrgMembersOnly('orca', rm);

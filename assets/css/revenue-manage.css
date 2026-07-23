@@ -525,6 +525,73 @@ td.pfEditableCell {
   color: #f8fafc;
 }
 
+.aimDeleteConfirm .aimDeletePreview {
+  margin: 8px 0 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  background: rgba(15, 23, 42, 0.55);
+  color: #cbd5e1;
+  font-size: 13px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.aimDeleteOptions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 12px 0 4px;
+}
+
+.aimDeleteOptionBox {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  background: rgba(30, 41, 59, 0.9);
+  color: #e2e8f0;
+  cursor: pointer;
+}
+
+.aimDeleteOptionBox:hover {
+  border-color: rgba(96, 165, 250, 0.7);
+  background: rgba(37, 99, 235, 0.18);
+}
+
+.aimDeleteOptionBox.is-selected {
+  border-color: rgba(59, 130, 246, 0.95);
+  background: rgba(37, 99, 235, 0.28);
+  box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.35);
+}
+
+.aimDeleteOptionBox.is-disabled {
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.aimDeleteOptionBox .btnDanger,
+.aimDeleteOptionBox .btn2 {
+  margin-top: 8px;
+}
+
+.aimDeleteOptionTitle {
+  display: block;
+  font-size: 14px;
+  font-weight: 800;
+  color: #f8fafc;
+  margin-bottom: 4px;
+}
+
+.aimDeleteOptionDesc {
+  display: block;
+  font-size: 12px;
+  color: #94a3b8;
+  line-height: 1.45;
+}
+
 .smDetailLabelWrap {
   display: flex;
   align-items: center;

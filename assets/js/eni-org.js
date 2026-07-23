@@ -1093,11 +1093,20 @@ function eniOpenEditById(id) {
 function eniDeleteMember(id) {
   var m = eniFindMember(id);
   if (!m) return;
-  if (m.id === eniRootId && eniRootAccountIds.length <= 1 && !m.parent) {
+  var kids = eniChildrenOf(id);
+  if (m.id === eniRootId && eniRootAccountIds.length <= 1 && !m.parent && !kids.length) {
     if (typeof showToast === 'function') showToast('⚠️ 最後のルートアカウントは削除できません');
     return;
   }
-  var kids = eniChildrenOf(id);
+  if (typeof aimShowDeleteAccountDialog === 'function') {
+    aimShowDeleteAccountDialog('eni', id, eniDisplayName(m), {
+      scope: 'org',
+      onDone: function () {
+        if (typeof closeModal === 'function') closeModal();
+      }
+    });
+    return;
+  }
   var msg = kids.length
     ? '「' + eniDisplayName(m) + '」と配下 ' + eniCalcTeamCount(id) + ' 人を組織図から削除しますか？'
     : '「' + eniDisplayName(m) + '」を組織図から削除しますか？';
@@ -1800,9 +1809,22 @@ function eniRenameRootAccount() {
 }
 
 function eniDeleteRootAccount() {
-  if (eniRootAccountIds.length <= 1) return alert('最後の組織図は削除できません');
   var target = eniFindMember(eniRootId);
   if (!target) return;
+  var kids = typeof eniChildrenOf === 'function' ? eniChildrenOf(eniRootId) : [];
+  if (eniRootAccountIds.length <= 1 && !kids.length) {
+    return alert('最後の組織図は削除できません');
+  }
+  if (typeof aimShowDeleteAccountDialog === 'function') {
+    aimShowDeleteAccountDialog('eni', eniRootId, eniDisplayName(target), {
+      scope: 'org',
+      onDone: function () {
+        if (typeof closeModal === 'function') closeModal();
+      }
+    });
+    return;
+  }
+  if (eniRootAccountIds.length <= 1) return alert('最後の組織図は削除できません');
   if (!confirm('表示中の親アカウント「' + eniDisplayName(target) +
       '」と配下を組織図から削除しますか？実績入力・収益履歴・売上履歴は保持されます。')) return;
   var rm = eniSubtreeIds(eniRootId);

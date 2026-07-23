@@ -1,0 +1,277 @@
+{
+  "updatedAt": 1784811812056,
+  "schemaVersion": 2,
+  "eniOrgChart": {
+    "scenarios": [],
+    "rootId": "eni_1783870238553",
+    "currentData": [
+      {
+        "username": "kai1",
+        "open": true,
+        "sortOrder": 0,
+        "parent": null,
+        "name": "kai1",
+        "seriesRootId": "eni_1783870238553",
+        "investment": 300,
+        "seriesIndex": 0,
+        "stakingReward": 0,
+        "walletAddress": "kai1",
+        "teamReward": 0,
+        "id": "eni_1783870238553"
+      },
+      {
+        "seriesRootId": "eni_1783870238553",
+        "name": "kai2",
+        "parent": "eni_1783870238553",
+        "sortOrder": 1,
+        "open": true,
+        "username": "8159",
+        "id": "eni_1784029182808",
+        "teamReward": 0,
+        "seriesIndex": 0,
+        "walletAddress": "8159",
+        "stakingReward": 0,
+        "investment": 300
+      },
+      {
+        "username": "5B31",
+        "seriesRootId": "eni_1783870238553",
+        "name": "kai3",
+        "parent": "eni_1783870238553",
+        "sortOrder": 2,
+        "open": true,
+        "teamReward": 0,
+        "id": "eni_1784126651384",
+        "stakingReward": 0,
+        "walletAddress": "5B31",
+        "seriesIndex": 0,
+        "investment": 300
+      },
+      {
+        "seriesRootId": "eni_1783870238553",
+        "name": "kai4",
+        "open": true,
+        "sortOrder": 3,
+        "parent": "eni_1783870238553",
+        "username": "c2c7",
+        "id": "eni_1784126686618",
+        "teamReward": 0,
+        "investment": 300,
+        "walletAddress": "c2c7",
+        "stakingReward": 0,
+        "seriesIndex": 0
+      },
+      {
+        "investment": 0,
+        "seriesIndex": 0,
+        "walletAddress": "479d",
+        "stakingReward": 0,
+        "id": "eni_1784188565683",
+        "teamReward": 0,
+        "username": "479d",
+        "sortOrder": 0,
+        "open": true,
+        "parent": "eni_1784123085986",
+        "seriesRootId": "eni_1783870238553",
+        "name": "浅田"
+      },
+      {
+        "investment": 300,
+        "seriesIndex": 0,
+        "walletAddress": "4f40",
+        "stakingReward": 0,
+        "teamReward": 0,
+        "id": "eni_1784645764795",
+        "sortOrder": 1,
+        "open": true,
+        "parent": "eni_1784123085986",
+        "name": "亜子",
+        "seriesRootId": "eni_1783870238553",
+        "username": "4f40"
+      },
+      {
+        "id": "eni_1784645783878",
+        "teamReward": 0,
+        "investment": 300,
+        "seriesIndex": 0,
+        "stakingReward": 0,
+        "walletAddress": "ea73",
+        "username": "ea73",
+        "name": "荒川",
+        "seriesRootId": "eni_1783870238553",
+        "sortOrder": 0,
+        "open": true,
+        "parent": "eni_1784645764795"
+      },
+      {
+        "id": "eni_1784646223095",
+        "teamReward": 0,
+        "investment": 315,
+        "walletAddress": "不明",
+        "stakingReward": 0,
+        "seriesIndex": 0,
+        "username": "不明",
+        "name": "下中",
+        "seriesRootId": "eni_1783870238553",
+        "open": true,
+        "sortOrder": 2,
+        "parent": "eni_1784122607417"
+      }
+    ],
+    "rootAccountIds": [
+      "eni_1783870238553"
+    ],
+    "members": [
+      {
+        "stakingReward": 0,
+        "seriesIndex": 0,
+        "walletAddress": "kai1",
+        "investment": 300,
+        "teamReward": 0,
+        "id": "eni_1783870238553",
+        "parent": null,
+        "sortOrder": 0,
+        "open": true,
+        "seriesRootId": "eni_1783870238553",
+        "name": "kai1",
+        "username": "kai1"
+      },
+      {
+        "investment": 300,
+        "seriesIndex": 0,
+        "walletAddress": "8159",
+        "stakingReward": 0,
+        "id": "eni_1784029182808",
+        "teamReward": 0,
+        "open": true,
+        "sortOrder": 1,
+        "parent": "eni_1783870238553",
+        "seriesRootId": "eni_1783870238553",
+        "name": "kai2",
+        "username": "8159"
+      },
+      {
+        "teamReward": 0,
+        "id": "eni_1784126651384",
+        "walletAddress": "5B31",
+        "seriesIndex": 0,
+        "stakingReward": 0,
+        "investment": 300,
+        "username": "5B31",
+        "seriesRootId": "eni_1783870238553",
+        "name": "kai3",
+        "parent": "eni_1783870238553",
+        "sortOrder": 2,
+        "open": true
+      },
+      {
+        "id": "eni_1784126686618",
+        "teamReward": 0,
+        "seriesIndex": 0,
+        "stakingReward": 0,
+        "walletAddress": "c2c7",
+        "investment": 300,
+        "name": "kai4",
+        "seriesRootId": "eni_1783870238553",
+        "parent": "eni_1783870238553",
+        "open": true,
+        "sortOrder": 3,
+        "username": "c2c7"
+      },
+      {
+        "id": "eni_1784188565683",
+        "teamReward": 0,
+        "investment": 0,
+        "walletAddress": "479d",
+        "stakingReward": 0,
+        "seriesIndex": 0,
+        "seriesRootId": "eni_1783870238553",
+        "name": "浅田",
+        "sortOrder": 0,
+        "open": true,
+        "parent": "eni_1784123085986",
+        "username": "479d"
+      },
+      {
+        "seriesRootId": "eni_1783870238553",
+        "name": "亜子",
+        "sortOrder": 1,
+        "open": true,
+        "parent": "eni_1784123085986",
+        "username": "4f40",
+        "teamReward": 0,
+        "id": "eni_1784645764795",
+        "investment": 300,
+        "seriesIndex": 0,
+        "stakingReward": 0,
+        "walletAddress": "4f40"
+      },
+      {
+        "investment": 300,
+        "walletAddress": "ea73",
+        "seriesIndex": 0,
+        "stakingReward": 0,
+        "id": "eni_1784645783878",
+        "teamReward": 0,
+        "open": true,
+        "sortOrder": 0,
+        "parent": "eni_1784645764795",
+        "seriesRootId": "eni_1783870238553",
+        "name": "荒川",
+        "username": "ea73"
+      },
+      {
+        "name": "下中",
+        "seriesRootId": "eni_1783870238553",
+        "open": true,
+        "sortOrder": 2,
+        "parent": "eni_1784122607417",
+        "username": "不明",
+        "id": "eni_1784646223095",
+        "teamReward": 0,
+        "investment": 315,
+        "walletAddress": "不明",
+        "seriesIndex": 0,
+        "stakingReward": 0
+      }
+    ],
+    "zoom": 0.76
+  },
+  "settings_removedEniOrgAccountIds": [
+    "eni_1783768321384",
+    "eni_1784122607417",
+    "eni_1784122748255",
+    "eni_1784122828271",
+    "eni_1784122700622",
+    "eni_1784123085986",
+    "eni_1784674627174",
+    "eni_1784674744265"
+  ],
+  "eniInputAccounts": [
+    {
+      "investment": 300,
+      "id": "eni_1783870238553",
+      "username": "kai1",
+      "name": "kai1"
+    },
+    {
+      "name": "kai2",
+      "username": "kai2",
+      "id": "eni_1784029182808",
+      "investment": 300
+    },
+    {
+      "name": "kai3",
+      "username": "kai3",
+      "id": "eni_1784126651384",
+      "investment": 300
+    },
+    {
+      "investment": 300,
+      "name": "kai4",
+      "username": "kai4",
+      "id": "eni_1784126686618"
+    }
+  ],
+  "eniInvestmentHistory": {}
+}

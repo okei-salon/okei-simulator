@@ -712,6 +712,16 @@ function pfBindManageAccountContextMenu(table, onChanged) {
 }
 
 function pfConfirmManageDeleteData(projectKey, accountId, accountName, onDeleted) {
+  if (typeof aimShowDeleteAccountDialog === 'function') {
+    pfCaptureModalFooterDefault();
+    aimShowDeleteAccountDialog(projectKey, accountId, accountName, {
+      scope: 'full',
+      onDone: function () {
+        if (typeof onDeleted === 'function') onDeleted();
+      }
+    });
+    return;
+  }
   pfCaptureModalFooterDefault();
   if (typeof modalTitle !== 'undefined') modalTitle.textContent = 'アカウント削除';
   if (typeof modalContent !== 'undefined') {
@@ -732,7 +742,7 @@ function pfConfirmManageDeleteData(projectKey, accountId, accountName, onDeleted
     if (confirmBtn) {
       confirmBtn.onclick = function () {
         if (typeof aimDeleteInputAccountFully === 'function') {
-          aimDeleteInputAccountFully(projectKey, accountId);
+          aimDeleteInputAccountFully(projectKey, accountId, { mode: 'subtree' });
         } else if (typeof pdDeleteAccountPerformanceData === 'function') {
           pdDeleteAccountPerformanceData(projectKey, accountId);
         }
