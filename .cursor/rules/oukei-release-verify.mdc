@@ -19,7 +19,9 @@ npm run verify:release
 - `Failed: 0`
 - `DEPLOY READY ✅`
 
-1件でも Failed、または `DEPLOY BLOCKED ❌` のときは **Firebase Deploy を実行しない**。
+1件でも Failed、または `DEPLOY BLOCKED ❌` のときは **Firebase Deploy を絶対に実行しない**。
+
+Deploy 承認後も、ゲート不合格なら中止する（raw / スキップ Deploy は使わない）。
 
 ## npm デプロイコマンド
 

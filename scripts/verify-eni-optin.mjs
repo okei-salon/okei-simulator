@@ -117,30 +117,50 @@ try {
   }));
   assert('ENI persists after reload', persisted.eniRegistered && persisted.homeHasEni);
 
-  const orgDev = await page.evaluate(() => {
+  const orgLive = await page.evaluate(() => {
     if (typeof showPage === 'function') showPage('eniOrg');
+    if (typeof eniRender === 'function') eniRender();
+    const pageEl = document.getElementById('eniOrgPage');
     return {
-      hasComingSoon: !!document.querySelector('.eniComingSoonGlass'),
-      text: document.querySelector('.eniComingSoonText')?.textContent || ''
+      pageVisible: !!(pageEl && !pageEl.classList.contains('hidden')),
+      hasTree: !!document.getElementById('eniTree'),
+      hasComingSoon: !!document.querySelector('.eniComingSoonGlass')
     };
   });
-  assert('ENI org shows development screen', orgDev.hasComingSoon && orgDev.text.indexOf('開発中') >= 0, orgDev.text);
+  assert(
+    'ENI org shows live org chart',
+    orgLive.pageVisible && orgLive.hasTree && !orgLive.hasComingSoon,
+    JSON.stringify(orgLive)
+  );
 
   await page.evaluate(() => {
     if (typeof openEniAddAccountForm === 'function') openEniAddAccountForm();
   });
-  await page.evaluate(() => {
-    document.getElementById('eniNewUsername').value = 'testeni';
-    document.getElementById('eniNewInvestment').value = '1000';
-    document.getElementById('eniNewTodayRevenue').value = '50';
+  await page.waitForTimeout(200);
+  const addAccount = await page.evaluate(() => {
+    const userEl = document.getElementById('eniNewUsername');
+    const invEl = document.getElementById('eniNewInvestment');
+    if (!userEl || !invEl || typeof registerEniAccount !== 'function') {
+      return { ok: false, reason: 'form-missing' };
+    }
+    userEl.value = 'testeni';
+    invEl.value = '1000';
     window.confirm = function () { return true; };
     registerEniAccount();
+    return {
+      ok: true,
+      count: typeof getEniInputAccounts === 'function' ? getEniInputAccounts().length : 0
+    };
   });
   await page.waitForTimeout(400);
   const afterAccount = await page.evaluate(() => ({
     count: typeof getEniInputAccounts === 'function' ? getEniInputAccounts().length : 0
   }));
-  assert('ENI account add from revenue input', afterAccount.count >= 1, String(afterAccount.count));
+  assert(
+    'ENI account add from revenue input',
+    addAccount.ok && afterAccount.count >= 1,
+    addAccount.ok ? String(afterAccount.count) : addAccount.reason
+  );
 
   const failed = checks.filter((c) => !c.ok);
   console.log(`\n${checks.length - failed.length}/${checks.length} PASS`);

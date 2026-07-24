@@ -31,9 +31,22 @@ alwaysApply: true
 - 承認後も **`npm run deploy` / `deploy:hosting`**（verify 付き）を使い、`deploy:*:raw` は原則使わない
 - 公開 URL（oukei-hub.web.app）は完成版・リリース時のみ更新
 
-## Git
+## Git / GitHub Push
 
-- Commit / Push はユーザーが「OK」「Commit して」等と明示したときのみ行う
+- Commit はユーザーが「OK」「Commit して」等と明示したときのみ行う
+- **GitHub Push は Cursor から実行しない**（認証の都合で失敗するため）
+- Push が必要なときは Commit まで済ませたうえで、ユーザーに **「GitHub Desktop から Push してください」** と伝える
+- GitHub 認証・キーチェーン・credential helper 等を使った Push 再試行は行わない
+
+## 標準開発フロー（固定）
+
+1. 機能追加・修正
+2. 必要な回帰テストを追加
+3. `npm run verify:release` を実行
+4. Failed = 0 を確認
+5. DEPLOY READY ✅ を確認
+6. 必要に応じて Commit まで実行
+7. GitHub Push は実行せず、GitHub Desktop での手動 Push を案内
 
 ## ローカル Google ログイン
 
