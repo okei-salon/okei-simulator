@@ -7,7 +7,34 @@ on:
   workflow_dispatch:
 
 jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Start hosting emulator
+        run: |
+          npm run dev &
+          for i in $(seq 1 60); do
+            if curl -sf http://127.0.0.1:5050/ >/dev/null; then
+              echo "emulator ready"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "emulator failed to start"
+          exit 1
+      - name: Release verify gate
+        run: npm run verify:release
+
   deploy:
+    needs: verify
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

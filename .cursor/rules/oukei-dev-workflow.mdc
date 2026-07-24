@@ -1,5 +1,5 @@
 ---
-description: OUKEI HUB 開発フロー — ローカル確認優先、デプロイは承認後のみ
+description: OUKEI HUB 開発フロー — ローカル確認優先、デプロイは承認後かつ verify:release 成功後のみ
 alwaysApply: true
 ---
 
@@ -11,6 +11,14 @@ alwaysApply: true
 - 計算ロジック以外の UI 確認も localhost で行う
 - Safari キャッシュが気になる場合は「開発 → キャッシュを空にする」後にスーパーリロード
 
+## リリース検証（Deploy 前・必須）
+
+- 本番 Deploy の直前に **`npm run verify:release`** を実行する
+- **Failed = 0** かつ **DEPLOY READY ✅** のときだけ Deploy 可
+- 失敗時は **DEPLOY BLOCKED ❌** とし、Deploy しない
+- 詳細は `oukei-release-verify.mdc` に従う
+- 機能追加・修正時は対応する回帰テストを必ず追加し、baseline `minPassed` を必要なら上げる
+
 ## バージョン / Build（必須）
 
 - Commit・Push・Hosting デプロイの直前に **Ver** と **Build** を必ず更新する
@@ -19,7 +27,8 @@ alwaysApply: true
 
 ## デプロイ禁止（開発中）
 
-- ユーザーが明示的に承認するまで **`firebase deploy` / `npm run deploy:hosting` を実行しない**
+- ユーザーが明示的に承認するまで **`firebase deploy` / `npm run deploy*` を実行しない**
+- 承認後も **`npm run deploy` / `deploy:hosting`**（verify 付き）を使い、`deploy:*:raw` は原則使わない
 - 公開 URL（oukei-hub.web.app）は完成版・リリース時のみ更新
 
 ## Git

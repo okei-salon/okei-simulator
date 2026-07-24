@@ -1085,7 +1085,14 @@ function pfEniDayHasPaceInput(entry) {
       return false;
     });
   }
-  return entry.eni != null && entry.eni !== '';
+  // Do not use bare entry.eni: pdRecalculateRevenueEntry sets eni=0 on non-ENI days.
+  if (entry.accounts) {
+    return Object.keys(entry.accounts).some(function (id) {
+      let ae = entry.accounts[id];
+      return !!(ae && ae.projectKey === 'eni');
+    });
+  }
+  return false;
 }
 
 function pfEniDayProfitUsd(entry) {

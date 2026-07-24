@@ -1,0 +1,55 @@
+---
+description: OUKEI HUB 本番Deploy前の verify:release 必須ゲートと回帰テスト運用
+alwaysApply: true
+---
+
+# OUKEI HUB リリース検証ゲート
+
+## 本番 Deploy 前（必須）
+
+ユーザーが Deploy を明示承認したあとでも、**必ず先に**次を実行する。
+
+```bash
+npm run dev          # localhost:5050（別端末）
+npm run verify:release
+```
+
+許可条件（両方必須）:
+
+- `Failed: 0`
+- `DEPLOY READY ✅`
+
+1件でも Failed、または `DEPLOY BLOCKED ❌` のときは **Firebase Deploy を実行しない**。
+
+## npm デプロイコマンド
+
+| コマンド | 動作 |
+|----------|------|
+| `npm run deploy` / `deploy:hosting` / `deploy:rules` | 内部で `verify:release` → 成功時のみ `firebase deploy` |
+| `deploy:hosting:safe` | verify → hosting cleanup → verified hosting deploy |
+| `deploy:hosting:raw` / `deploy:raw` | **検証スキップ（緊急用・原則禁止）** |
+
+エージェントは通常 `deploy:*:raw` を使わない。ユーザーが緊急明示した場合のみ。
+
+## 機能追加・修正時のテスト追加（必須）
+
+| 変更領域 | 追加すべきテスト |
+|----------|------------------|
+| ENI | ENI 計算 / 実績 / 組織図 / opt-in 系 |
+| ポートフォリオ | `verify-portfolio-calc` と/または `verify-perf-portfolio-e2e` |
+| 組織図（RAM/ORCA/ENI） | 親子・孤立・削除（subtree/promote） |
+| 実績入力 | 保存→PF反映・再読込・他プロジェクト非破壊 |
+| スマホ UI | Mobile 375 / 390 / 430 |
+| Firestore / sync | merge・tombstone・wipe 防止 |
+
+テストを追加したら `scripts/verify-release-baseline.json` の `minPassed` を **新しい PASS 数以上** に上げる。
+
+## テスト数の下限
+
+- 基準: **253** PASS（`scripts/verify-release-baseline.json`）
+- `verify:release` は PASS が基準未満なら **DEPLOY BLOCKED**
+- 理由なくテスト削除・スキップ増で件数を減らさない
+
+## 隔離
+
+回帰テストは Playwright 隔離コンテキスト / 固定フィクスチャのみ。本番ユーザーデータ・Firestore を書き換えない。

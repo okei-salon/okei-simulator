@@ -12,21 +12,24 @@ function loadHubStorage() {
   const code = readFileSync(path.join(root, 'assets/js/hub-storage.js'), 'utf8');
   const wrapped = code + '\n;return {' +
     'hubMergeHubDocuments, hubCreateEmptyData, hubCreateDefaultSettings, ' +
-    'hubStripRemovedAccountsFromSettings, hubMergeOrcaInputAccounts' +
+    'hubStripRemovedAccountsFromSettings, hubMergeOrcaInputAccounts, hubRecordRemovedOrcaOrgAccountIds' +
     '};';
   return new Function(wrapped)();
 }
 
-function loadAimWithPd(settingsRef) {
+function loadAimWithPd(settingsRef, hubApi) {
   const pdCode = readFileSync(path.join(root, 'assets/js/performance-data.js'), 'utf8');
   const aimCode = readFileSync(path.join(root, 'assets/js/account-input-manage.js'), 'utf8');
   const wrapped =
     'var settings = arguments[0];\n' +
+    'var hubRecordRemovedOrcaOrgAccountIds = arguments[1];\n' +
     'var members = [];\n' +
     'var orcaMembers = [];\n' +
     'var orcaRootAccountIds = [];\n' +
     'var orcaRootId = "";\n' +
     'var orcaFocusId = "";\n' +
+    'var autoBackups = [];\n' +
+    'function downloadBackup() {}\n' +
     'function orcaSubtreeIds(id) { return [id]; }\n' +
     'function markActivity() {}\n' +
     'function markSettingsDirty() {}\n' +
@@ -38,7 +41,7 @@ function loadAimWithPd(settingsRef) {
     pdCode + '\n' +
     aimCode + '\n' +
     ';return { aimDeleteInputAccountFully, pdDeleteAccountPerformanceData };';
-  return new Function(wrapped)(settingsRef);
+  return new Function(wrapped)(settingsRef, hubApi.hubRecordRemovedOrcaOrgAccountIds);
 }
 
 let passed = 0;
@@ -56,6 +59,7 @@ function assert(name, ok, detail) {
 const settings = {
   orcaInputAccounts: [{ id: 'test', username: 'test', name: 'test', investment: 10000 }],
   removedOrcaOrgAccountIds: [],
+  removedOrcaOrgAccountIdTimes: {},
   revenueLog: {
     '2026-07-01': {
       orcaAccounts: { test: { revenueUsd: 120 } },
@@ -82,11 +86,13 @@ const settings = {
   performanceMeta: { schemaVersion: 1, salesImportDedupeFixVersion: 2, ramOperatingRepairVersion: 1 }
 };
 
-const api = loadAimWithPd(settings);
+const hub = loadHubStorage();
+const api = loadAimWithPd(settings, hub);
 api.aimDeleteInputAccountFully('orca', 'test');
 
 assert('Removes orcaInputAccounts entry', !settings.orcaInputAccounts.some((a) => a.id === 'test'));
 assert('Keeps deletion tombstone', settings.removedOrcaOrgAccountIds.indexOf('test') >= 0);
+assert('Records tombstone timestamp', Number(settings.removedOrcaOrgAccountIdTimes.test) > 0);
 assert('Clears revenueLog for account', !settings.revenueLog['2026-07-01']);
 assert('Clears investmentHistory', !settings.investmentHistory.test);
 assert(
@@ -97,11 +103,11 @@ assert(
 assert('Clears manage display refs', settings.manageDisplayAccounts.orca.orgAdded.length === 0);
 assert('Clears performance hidden refs', settings.performanceInputHiddenAccounts.orca.length === 0);
 
-const hub = loadHubStorage();
 const local = hub.hubCreateEmptyData();
 local.updatedAt = 9000;
 local.settings = Object.assign(hub.hubCreateDefaultSettings(), {
   removedOrcaOrgAccountIds: settings.removedOrcaOrgAccountIds.slice(),
+  removedOrcaOrgAccountIdTimes: Object.assign({}, settings.removedOrcaOrgAccountIdTimes),
   orcaInputAccounts: settings.orcaInputAccounts.slice(),
   revenueLog: {},
   investmentHistory: {},
@@ -124,7 +130,11 @@ cloud.settings = Object.assign(hub.hubCreateDefaultSettings(), {
 });
 const merged = hub.hubMergeHubDocuments(local, cloud);
 assert('Merge does not resurrect input account', !merged.settings.orcaInputAccounts.some((a) => a.id === 'test'));
-assert('Merge does not resurrect revenue', !merged.settings.revenueLog['2026-07-01']);
+assert(
+  'Merge does not resurrect revenue',
+  !merged.settings.revenueLog['2026-07-01'] ||
+    !(merged.settings.revenueLog['2026-07-01'].orcaAccounts || {}).test
+);
 assert(
   'Merge does not resurrect account portfolio entry',
   !merged.settings.portfolioOperating.entries.some((e) => e.accountId === 'test')

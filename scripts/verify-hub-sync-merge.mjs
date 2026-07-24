@@ -94,6 +94,8 @@ const deletedLocal = hubCreateEmptyData();
 deletedLocal.updatedAt = 3000;
 deletedLocal.settings = hubCreateDefaultSettings();
 deletedLocal.settings.removedOrcaOrgAccountIds = ['kai1', 'kai2'];
+// Explicit delete timestamps must be newer than cloud.updatedAt to block cloud resurrection
+deletedLocal.settings.removedOrcaOrgAccountIdTimes = { kai1: 4000, kai2: 4000 };
 deletedLocal.orcaOrgChart = {
   members: [{ id: 'kai3', parent: null, name: 'kai3' }],
   currentData: [{ id: 'kai3', parent: null, name: 'kai3' }],
@@ -134,6 +136,7 @@ const fullDeleteLocal = hubCreateEmptyData();
 fullDeleteLocal.updatedAt = 5000;
 fullDeleteLocal.settings = hubCreateDefaultSettings();
 fullDeleteLocal.settings.removedOrcaOrgAccountIds = ['test'];
+fullDeleteLocal.settings.removedOrcaOrgAccountIdTimes = { test: 6000 };
 fullDeleteLocal.settings.orcaInputAccounts = [];
 fullDeleteLocal.settings.revenueLog = {};
 fullDeleteLocal.settings.portfolioOperating = {
@@ -170,7 +173,8 @@ assert(
 );
 assert(
   'Full delete strips revenue for removed account',
-  !fullDeleteMerged.settings.revenueLog['2026-07-01']
+  !fullDeleteMerged.settings.revenueLog['2026-07-01'] ||
+    !(fullDeleteMerged.settings.revenueLog['2026-07-01'].orcaAccounts || {}).test
 );
 assert(
   'Full delete strips investment history',
