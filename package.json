@@ -15,6 +15,7 @@
     "verify:local-dev-mode": "node scripts/verify-local-dev-mode.mjs",
     "verify:org-visibility": "node scripts/verify-org-chart-visibility.mjs",
     "verify:org-localhost": "node scripts/verify-org-chart-localhost.mjs",
+    "verify:org-simulation": "node scripts/verify-org-simulation.mjs",
     "verify:delete-modes": "node scripts/verify-delete-modes.mjs",
     "verify:data-protection": "node scripts/verify-data-protection.mjs",
     "verify:portfolio-calc": "node scripts/verify-portfolio-calc.mjs",

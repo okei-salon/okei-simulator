@@ -548,6 +548,18 @@ function hubPackRamOrgFromData(data) {
 }
 
 function hubPackRamOrgChart() {
+  // シミュレーション中は本番スナップショットのみ永続化（仮組織を書かない）
+  if (typeof simMode !== 'undefined' && simMode &&
+      typeof window !== 'undefined' && window.__ramSimLiveSnapshot) {
+    var snap = window.__ramSimLiveSnapshot;
+    return hubPackRamOrgFromData({
+      members: snap.currentData,
+      currentData: snap.currentData,
+      scenarios: typeof scenarios !== 'undefined' ? scenarios : [],
+      rootId: snap.rootId,
+      rootAccountIds: snap.rootAccountIds
+    });
+  }
   return hubPackRamOrgFromData({
     members: typeof members !== 'undefined' ? members : [],
     currentData: typeof currentData !== 'undefined' ? currentData : [],
@@ -1148,13 +1160,14 @@ function hubNormalizeLoadedData(raw) {
 }
 
 function hubPackLocalData() {
+  var ram = hubPackRamOrgChart();
   return {
-    members: typeof members !== 'undefined' ? members : [],
-    currentData: typeof currentData !== 'undefined' ? currentData : [],
+    members: ram.members,
+    currentData: ram.currentData,
     settings: typeof settings !== 'undefined' ? settings : hubCreateDefaultSettings(),
-    scenarios: typeof scenarios !== 'undefined' ? scenarios : [],
-    rootId: typeof rootId !== 'undefined' ? rootId : '',
-    rootAccountIds: typeof rootAccountIds !== 'undefined' ? rootAccountIds : [],
+    scenarios: ram.scenarios,
+    rootId: ram.rootId,
+    rootAccountIds: ram.rootAccountIds,
     orcaOrgChart: typeof orcaPackOrgChart === 'function' ? orcaPackOrgChart() : hubCreateEmptyOrcaOrgChart(),
     eniOrgChart: typeof eniPackOrgChart === 'function' ? eniPackOrgChart() : hubCreateEmptyEniOrgChart(),
     updatedAt: hubLocalUpdatedAt
@@ -1235,9 +1248,107 @@ function hubComputeContentHash(data) {
   return String(hash);
 }
 
+function hubCaptureActiveOrgSimWorkingState() {
+  var deep = typeof orgSimDeepClone === 'function'
+    ? orgSimDeepClone
+    : function (v) { return JSON.parse(JSON.stringify(v == null ? null : v)); };
+  var state = { ram: null, orca: null, eni: null };
+  if (typeof simMode !== 'undefined' && simMode) {
+    state.ram = {
+      members: deep(typeof members !== 'undefined' ? members : []),
+      rootId: typeof rootId !== 'undefined' ? rootId : '',
+      rootAccountIds: deep(typeof rootAccountIds !== 'undefined' ? rootAccountIds : []),
+      focusId: typeof focusId !== 'undefined' ? focusId : '',
+      zoom: typeof zoom !== 'undefined' ? zoom : 1
+    };
+  }
+  if (typeof orcaSimMode !== 'undefined' && orcaSimMode) {
+    state.orca = {
+      members: deep(typeof orcaMembers !== 'undefined' ? orcaMembers : []),
+      rootId: typeof orcaRootId !== 'undefined' ? orcaRootId : '',
+      rootAccountIds: deep(typeof orcaRootAccountIds !== 'undefined' ? orcaRootAccountIds : []),
+      focusId: typeof orcaFocusId !== 'undefined' ? orcaFocusId : '',
+      zoom: typeof orcaZoom !== 'undefined' ? orcaZoom : 1
+    };
+  }
+  if (typeof eniSimMode !== 'undefined' && eniSimMode) {
+    state.eni = {
+      members: deep(typeof eniMembers !== 'undefined' ? eniMembers : []),
+      rootId: typeof eniRootId !== 'undefined' ? eniRootId : '',
+      rootAccountIds: deep(typeof eniRootAccountIds !== 'undefined' ? eniRootAccountIds : []),
+      focusId: typeof eniFocusId !== 'undefined' ? eniFocusId : '',
+      zoom: typeof eniZoom !== 'undefined' ? eniZoom : 1,
+      stakeOverride: typeof eniStakeOverride !== 'undefined' ? deep(eniStakeOverride) : null
+    };
+  }
+  return state;
+}
+
+function hubRestoreActiveOrgSimWorkingState(state) {
+  if (!state) return;
+  var deep = typeof orgSimDeepClone === 'function'
+    ? orgSimDeepClone
+    : function (v) { return JSON.parse(JSON.stringify(v == null ? null : v)); };
+  if (state.ram) {
+    // 適用後の本番組織をスナップショットへ取り込み（終了時に戻す本番側）
+    if (typeof window !== 'undefined') {
+      window.__ramSimLiveSnapshot = {
+        currentData: deep(typeof currentData !== 'undefined' ? currentData : []),
+        rootId: typeof rootId !== 'undefined' ? rootId : '',
+        rootAccountIds: deep(typeof rootAccountIds !== 'undefined' ? rootAccountIds : []),
+        focusId: typeof focusId !== 'undefined' ? focusId : '',
+        zoom: typeof zoom !== 'undefined' ? zoom : 1
+      };
+    }
+    members = deep(state.ram.members);
+    rootId = state.ram.rootId;
+    rootAccountIds = deep(state.ram.rootAccountIds);
+    focusId = state.ram.focusId || rootId;
+    if (typeof zoom !== 'undefined') zoom = state.ram.zoom;
+    simMode = true;
+  }
+  if (state.orca) {
+    if (typeof window !== 'undefined') {
+      window.__orcaSimLiveSnapshot = {
+        currentData: deep(typeof orcaCurrentData !== 'undefined' ? orcaCurrentData : []),
+        rootId: typeof orcaRootId !== 'undefined' ? orcaRootId : '',
+        rootAccountIds: deep(typeof orcaRootAccountIds !== 'undefined' ? orcaRootAccountIds : []),
+        focusId: typeof orcaFocusId !== 'undefined' ? orcaFocusId : '',
+        zoom: typeof orcaZoom !== 'undefined' ? orcaZoom : 1
+      };
+    }
+    orcaMembers = deep(state.orca.members);
+    orcaRootId = state.orca.rootId;
+    orcaRootAccountIds = deep(state.orca.rootAccountIds);
+    orcaFocusId = state.orca.focusId || orcaRootId;
+    orcaZoom = state.orca.zoom;
+    orcaSimMode = true;
+  }
+  if (state.eni) {
+    if (typeof window !== 'undefined') {
+      window.__eniSimLiveSnapshot = {
+        currentData: deep(typeof eniCurrentData !== 'undefined' ? eniCurrentData : []),
+        rootId: typeof eniRootId !== 'undefined' ? eniRootId : '',
+        rootAccountIds: deep(typeof eniRootAccountIds !== 'undefined' ? eniRootAccountIds : []),
+        focusId: typeof eniFocusId !== 'undefined' ? eniFocusId : '',
+        zoom: typeof eniZoom !== 'undefined' ? eniZoom : 1
+      };
+    }
+    eniMembers = deep(state.eni.members);
+    eniRootId = state.eni.rootId;
+    eniRootAccountIds = deep(state.eni.rootAccountIds);
+    eniFocusId = state.eni.focusId || eniRootId;
+    eniZoom = state.eni.zoom;
+    eniStakeOverride = state.eni.stakeOverride;
+    eniSimMode = true;
+  }
+}
+
 function hubApplyData(data, opts) {
   opts = opts || {};
   let preferLocal = !!opts.preferLocal;
+  // シミュレーション中は apply 後も仮組織を維持（クラウド同期で勝手に終了させない）
+  let activeSimWorking = opts.clearSim ? null : hubCaptureActiveOrgSimWorkingState();
   let preservedRam = hubPackRamOrgChart();
   let preservedOrca = typeof orcaPackOrgChart === 'function' ? orcaPackOrgChart() : null;
   let preservedEni = typeof eniPackOrgChart === 'function' ? eniPackOrgChart() : null;
@@ -1280,7 +1391,7 @@ function hubApplyData(data, opts) {
   }
   rootId = normalized.rootId || '';
   focusId = rootId || focusId || '';
-  simMode = false;
+  if (!activeSimWorking || !activeSimWorking.ram) simMode = false;
   hubLocalUpdatedAt = normalized.updatedAt || 0;
   if (Array.isArray(members)) {
     members.forEach(function (m) {
@@ -1300,6 +1411,7 @@ function hubApplyData(data, opts) {
   }
   if (typeof orcaApplyOrgChart === 'function') orcaApplyOrgChart(normalized.orcaOrgChart);
   if (typeof eniApplyOrgChart === 'function') eniApplyOrgChart(normalized.eniOrgChart);
+  if (activeSimWorking) hubRestoreActiveOrgSimWorkingState(activeSimWorking);
   if (typeof orcaSyncAllPersonalSales === 'function') orcaSyncAllPersonalSales();
   if (typeof pfEnsureManageDisplayAccounts === 'function') pfEnsureManageDisplayAccounts();
   if (typeof pfEnsurePerformanceInputHiddenAccounts === 'function') pfEnsurePerformanceInputHiddenAccounts();
@@ -1364,8 +1476,17 @@ function hubSaveToStorage(options) {
   try {
     let now = Date.now();
     hubLocalUpdatedAt = now;
+    // pack は sim 中でも本番スナップショットのみを書く
     localStorage.setItem(hubResolveStorageKey(), JSON.stringify(Object.assign(hubPackLocalData(), { updatedAt: now })));
-    let cloudWriteOk = !options.localOnly &&
+    let simActive = typeof hubIsAnyOrgSimActive === 'function'
+      ? hubIsAnyOrgSimActive()
+      : !!(
+        (typeof simMode !== 'undefined' && simMode) ||
+        (typeof orcaSimMode !== 'undefined' && orcaSimMode) ||
+        (typeof eniSimMode !== 'undefined' && eniSimMode)
+      );
+    // シミュレーション中はクラウドへ書かない（push→enrich→apply で sim が落ちる経路を遮断）
+    let cloudWriteOk = !options.localOnly && !simActive &&
       (typeof hubIsCloudWriteEnabled !== 'function' || hubIsCloudWriteEnabled());
     if (cloudWriteOk && typeof hubScheduleCloudSave === 'function') {
       hubScheduleCloudSave(options.immediate === true);
@@ -1476,6 +1597,15 @@ if (typeof window !== 'undefined') {
   window.hubPackFirestorePayload = hubPackFirestorePayload;
   window.hubUnpackFirestorePayload = hubUnpackFirestorePayload;
   window.hubComputeContentHash = hubComputeContentHash;
+  window.hubIsAnyOrgSimActive = typeof hubIsAnyOrgSimActive === 'function'
+    ? hubIsAnyOrgSimActive
+    : function () {
+      return !!(
+        (typeof simMode !== 'undefined' && simMode) ||
+        (typeof orcaSimMode !== 'undefined' && orcaSimMode) ||
+        (typeof eniSimMode !== 'undefined' && eniSimMode)
+      );
+    };
   window.hubSaveToStorage = hubSaveToStorage;
   window.hubSaveNow = hubSaveNow;
   window.hubInitStorage = hubInitStorage;

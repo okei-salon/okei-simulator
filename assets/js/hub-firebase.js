@@ -642,6 +642,10 @@ function hubRunCloudSave(force) {
     if (typeof hubRenderLocalDevStatus === 'function') hubRenderLocalDevStatus();
     return Promise.resolve(false);
   }
+  // シミュレーション仮データをクラウドへ送らない／enrich で sim を落とさない
+  if (typeof hubIsAnyOrgSimActive === 'function' && hubIsAnyOrgSimActive()) {
+    return Promise.resolve(false);
+  }
   if (!hubFirebaseReady || !hubFirebaseUid) {
     hubSetSyncStatus('offline');
     return Promise.resolve(false);
@@ -666,6 +670,7 @@ function hubRunCloudSave(force) {
 
 function hubScheduleCloudSave(immediate) {
   if (typeof hubIsCloudWriteEnabled === 'function' && !hubIsCloudWriteEnabled()) return;
+  if (typeof hubIsAnyOrgSimActive === 'function' && hubIsAnyOrgSimActive()) return;
   if (!hubFirebaseReady || !hubFirebaseUid) return;
   if (hubCloudSaveTimer) {
     clearTimeout(hubCloudSaveTimer);

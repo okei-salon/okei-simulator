@@ -163,3 +163,25 @@
 .orgSimBanner.isVisible {
   display: block; border: 1px solid rgba(192, 132, 252, .55); background: rgba(168, 85, 247, .14); color: #f3e8ff;
 }
+.orgSimBannerInner {
+  display: flex; align-items: center; justify-content: center; gap: 12px; flex-wrap: wrap; position: relative; z-index: 1;
+}
+.orgSimBannerLabel { letter-spacing: .04em; }
+.orgSimEndBtn {
+  border: 1px solid rgba(233, 213, 255, .55) !important;
+  background: rgba(88, 28, 135, .55) !important;
+  color: #faf5ff !important;
+  font-weight: 900 !important;
+  border-radius: 999px !important;
+  padding: 6px 14px !important;
+}
+.orgSimChoiceList { display: grid; gap: 10px; margin-top: 10px; }
+.orgSimChoiceBtn {
+  display: block; width: 100%; text-align: left; padding: 12px 14px !important;
+  border-radius: 14px !important; border: 1px solid rgba(192, 132, 252, .45) !important;
+  background: rgba(168, 85, 247, .12) !important; color: #f3e8ff !important;
+}
+.orgSimChoiceTitle { display: block; font-weight: 900; margin-bottom: 4px; }
+.orgSimChooser .help { margin: 6px 0 0; }
+.orgSimEndActions { margin-top: 12px; flex-wrap: wrap; gap: 8px; }
+.orgSimEndConfirm .help { line-height: 1.5; }

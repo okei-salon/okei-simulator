@@ -54,7 +54,18 @@ function eniMoney(n) {
 }
 
 function eniPackOrgChart() {
-  // シミュレーション中は仮データを永続化しない
+  // シミュレーション中は本番スナップショットのみ永続化
+  if (eniSimMode && typeof window !== 'undefined' && window.__eniSimLiveSnapshot) {
+    var snap = window.__eniSimLiveSnapshot;
+    return {
+      members: snap.currentData,
+      currentData: snap.currentData,
+      scenarios: eniScenarios,
+      rootId: snap.rootId,
+      rootAccountIds: snap.rootAccountIds,
+      zoom: typeof snap.zoom === 'number' ? snap.zoom : eniZoom
+    };
+  }
   var liveMembers = eniSimMode ? eniCurrentData : eniMembers;
   return {
     members: liveMembers,
@@ -1654,26 +1665,40 @@ function eniBakeLiveStakesIntoMembers(members) {
   });
 }
 
+function eniCaptureLiveSimSnapshot() {
+  if (!eniCurrentData.length) eniCurrentData = eniClone(eniMembers);
+  return {
+    currentData: eniClone(eniCurrentData),
+    rootId: eniRootId,
+    rootAccountIds: eniClone(eniRootAccountIds),
+    focusId: eniFocusId || eniRootId,
+    zoom: eniZoom
+  };
+}
+
+function eniApplyLiveSimSnapshot(snap) {
+  if (!snap) return;
+  eniCurrentData = eniClone(snap.currentData || []);
+  eniMembers = eniClone(snap.currentData || []);
+  eniRootId = snap.rootId || '';
+  eniRootAccountIds = eniClone(snap.rootAccountIds || []);
+  eniFocusId = snap.focusId || eniRootId;
+  eniZoom = typeof snap.zoom === 'number' ? snap.zoom : eniZoom;
+}
+
 function eniOpenSimulationPanel() {
   if (typeof modalTitle === 'undefined' || typeof modalContent === 'undefined' || typeof modalBg === 'undefined') return;
   modalTitle.textContent = 'シミュレーション';
-  modalContent.innerHTML =
-    '<div class="lineBox"><b>現在の組織図をベースに検証できます</b>' +
-    '<p class="help">シミュレーション開始を押すと、現在データをコピーした仮データで編集できます。</p>' +
-    '<div class="homeToggleRow">' +
-    '<button type="button" onclick="eniStartSimulation();closeModal();showToast(\'🟣 シミュレーションを開始しました\')">シミュレーション開始</button>' +
-    '<button type="button" class="btn2" onclick="eniRestoreCurrent();closeModal();showToast(\'🟢 現在データへ戻しました\')">現在データへ戻る</button>' +
-    '<button type="button" class="btn2" onclick="eniSaveScenario()">シミュレーション保存</button>' +
-    '<button type="button" class="btn2" onclick="eniOpenScenarioList()">保存一覧</button>' +
-    '</div></div>';
+  modalContent.innerHTML = typeof orgSimBuildPanelHtml === 'function'
+    ? orgSimBuildPanelHtml('eni', !!eniSimMode)
+    : '<div class="lineBox">シミュレーションUIを読み込めませんでした</div>';
   modalBg.style.display = 'flex';
 }
 
-function eniStartSimulation() {
+function eniStartSimulationCopy() {
   if (!eniSimMode) {
-    if (!eniCurrentData.length) eniCurrentData = eniClone(eniMembers);
-    // ライブ表示中の実効額を仮組織へ焼き込み（編集可能にする）
-    var working = eniClone(eniCurrentData);
+    window.__eniSimLiveSnapshot = eniCaptureLiveSimSnapshot();
+    var working = eniClone(window.__eniSimLiveSnapshot.currentData);
     eniBakeLiveStakesIntoMembers(working);
     eniMembers = working;
     eniSimMode = true;
@@ -1683,13 +1708,58 @@ function eniStartSimulation() {
   eniRender();
 }
 
-function eniRestoreCurrent() {
-  eniMembers = eniClone(eniCurrentData);
+function eniStartSimulationBlank() {
+  if (!eniSimMode) {
+    window.__eniSimLiveSnapshot = eniCaptureLiveSimSnapshot();
+  }
+  var id = 'sim_eni_' + Date.now();
+  eniMembers = [{
+    id: id,
+    parent: null,
+    name: '仮想ルート',
+    username: 'sim_root',
+    walletAddress: 'sim_root',
+    investment: 0,
+    stakingReward: 0,
+    teamReward: 0,
+    open: true
+  }];
+  eniRootAccountIds = [id];
+  eniRootId = id;
+  eniFocusId = id;
+  eniSimMode = true;
+  eniStakeOverride = null;
+  if (typeof showPage === 'function') showPage('eniOrg');
+  eniRender();
+}
+
+/** @deprecated use eniStartSimulationCopy */
+function eniStartSimulation() {
+  eniStartSimulationCopy();
+}
+
+function eniEndSimulationDiscard() {
+  if (window.__eniSimLiveSnapshot) {
+    eniApplyLiveSimSnapshot(window.__eniSimLiveSnapshot);
+    window.__eniSimLiveSnapshot = null;
+  } else {
+    eniMembers = eniClone(eniCurrentData);
+  }
   eniSimMode = false;
   eniStakeOverride = null;
   eniFocusId = eniRootId;
   if (typeof showPage === 'function') showPage('eniOrg');
   eniRender();
+}
+
+/** UI: 終了確認モーダルを表示 */
+function eniEndSimulation() {
+  if (typeof orgSimRequestEnd === 'function') orgSimRequestEnd('eni');
+  else eniEndSimulationDiscard();
+}
+
+function eniRestoreCurrent() {
+  eniEndSimulation();
 }
 
 function eniBuildScenarioRecord(name) {
@@ -1714,12 +1784,17 @@ function eniBuildScenarioRecord(name) {
 }
 
 function eniSaveScenario() {
+  if (typeof orgSimSaveWorkingScenario === 'function') {
+    if (orgSimSaveWorkingScenario('eni')) {
+      alert('保存しました（シミュレーション専用・本番組織図には未反映）');
+    }
+    return;
+  }
   var name = prompt('シミュレーション名', 'ENI配置シミュレーション');
   if (!name) return;
   eniScenarios.push(eniBuildScenarioRecord(name));
-  // pack は sim 中でも live members を書くため、シナリオ一覧だけ永続化できる
-  if (typeof hubSaveToStorage === 'function') hubSaveToStorage();
-  alert('保存しました');
+  if (typeof hubSaveToStorage === 'function') hubSaveToStorage({ localOnly: true });
+  alert('保存しました（シミュレーション専用・本番組織図には未反映）');
 }
 
 function eniOpenScenarioList() {
@@ -1754,7 +1829,7 @@ function eniDeleteScenario(i) {
 function eniLoadScenario(i) {
   if (!eniScenarios[i] || !eniScenarios[i].data) return;
   if (!eniSimMode) {
-    if (!eniCurrentData.length) eniCurrentData = eniClone(eniMembers);
+    window.__eniSimLiveSnapshot = eniCaptureLiveSimSnapshot();
   }
   eniMembers = eniClone(eniScenarios[i].data);
   eniSimMode = true;

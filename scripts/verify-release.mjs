@@ -118,6 +118,13 @@ const SUITES = [
     cmd: ['node', 'scripts/verify-org-chart-localhost.mjs']
   },
   {
+    id: 'org-simulation',
+    label: 'Organization simulation isolation',
+    category: 'Organization integrity',
+    needsServer: true,
+    cmd: ['node', 'scripts/verify-org-simulation.mjs']
+  },
+  {
     id: 'perf-portfolio-e2e',
     label: 'Performance input → Portfolio E2E',
     category: 'Portfolio',

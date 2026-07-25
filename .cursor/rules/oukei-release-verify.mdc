@@ -40,6 +40,7 @@ Deploy 承認後も、ゲート不合格なら中止する（raw / スキップ 
 | ENI | ENI 計算 / 実績 / 組織図 / opt-in 系 |
 | ポートフォリオ | `verify-portfolio-calc` と/または `verify-perf-portfolio-e2e` |
 | 組織図（RAM/ORCA/ENI） | 親子・孤立・削除（subtree/promote） |
+| シミュレーション | `verify-org-simulation`（自動終了防止・copy/blank・本番分離・Firestore非書込） |
 | 実績入力 | 保存→PF反映・再読込・他プロジェクト非破壊 |
 | スマホ UI | Mobile 375 / 390 / 430 |
 | Firestore / sync | merge・tombstone・wipe 防止 |
@@ -48,7 +49,7 @@ Deploy 承認後も、ゲート不合格なら中止する（raw / スキップ 
 
 ## テスト数の下限
 
-- 基準: **253** PASS（`scripts/verify-release-baseline.json`）
+- 基準: **384** PASS（`scripts/verify-release-baseline.json`）
 - `verify:release` は PASS が基準未満なら **DEPLOY BLOCKED**
 - 理由なくテスト削除・スキップ増で件数を減らさない
 

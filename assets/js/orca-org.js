@@ -41,6 +41,18 @@ function orcaClone(data) {
 }
 
 function orcaPackOrgChart() {
+  // シミュレーション中は本番スナップショットのみ永続化
+  if (orcaSimMode && typeof window !== 'undefined' && window.__orcaSimLiveSnapshot) {
+    var snap = window.__orcaSimLiveSnapshot;
+    return {
+      members: snap.currentData,
+      currentData: snap.currentData,
+      scenarios: orcaScenarios,
+      rootId: snap.rootId,
+      rootAccountIds: snap.rootAccountIds,
+      zoom: typeof snap.zoom === 'number' ? snap.zoom : orcaZoom
+    };
+  }
   return {
     members: orcaMembers,
     currentData: orcaCurrentData,
@@ -486,7 +498,8 @@ function orcaRender() {
   var canvas = document.getElementById('orcaCanvas');
   if (canvas) canvas.style.transform = 'scale(' + orcaZoom + ')';
   orcaRenderAccountManage();
-  if (typeof hubSaveToStorage === 'function') hubSaveToStorage();
+  // シミュレーション中は LocalStorage/Cloud へ仮組織を書かない（シナリオ保存等は個別に localOnly）
+  if (!orcaSimMode && typeof hubSaveToStorage === 'function') hubSaveToStorage();
 }
 
 function orcaMemberStatsData(id) {
@@ -970,36 +983,118 @@ function orcaDeleteRootAccount() {
   orcaRender();
 }
 
+function orcaCaptureLiveSimSnapshot() {
+  if (!orcaCurrentData.length) orcaCurrentData = orcaClone(orcaMembers);
+  return {
+    currentData: orcaClone(orcaCurrentData),
+    rootId: orcaRootId,
+    rootAccountIds: orcaClone(orcaRootAccountIds),
+    focusId: orcaFocusId || orcaRootId,
+    zoom: orcaZoom
+  };
+}
+
+function orcaApplyLiveSimSnapshot(snap) {
+  if (!snap) return;
+  orcaCurrentData = orcaClone(snap.currentData || []);
+  orcaMembers = orcaClone(snap.currentData || []);
+  orcaRootId = snap.rootId || '';
+  orcaRootAccountIds = orcaClone(snap.rootAccountIds || []);
+  orcaFocusId = snap.focusId || orcaRootId;
+  orcaZoom = typeof snap.zoom === 'number' ? snap.zoom : orcaZoom;
+}
+
 function orcaOpenSimulationPanel() {
   modalTitle.textContent = 'シミュレーション';
-  modalContent.innerHTML = '<div class="lineBox"><b>現在の組織図をベースに検証できます</b>' +
-    '<p class="help">シミュレーション開始を押すと、現在データをコピーした仮データで編集できます。</p>' +
-    '<div class="homeToggleRow">' +
-    '<button onclick="orcaStartSimulation();closeModal();showToast(\'🟣 シミュレーションを開始しました\')">シミュレーション開始</button>' +
-    '<button class="btn2" onclick="orcaRestoreCurrent();closeModal();showToast(\'🔵 現在データへ戻しました\')">現在データへ戻る</button>' +
-    '<button class="btn2" onclick="orcaSaveScenario()">シミュレーション保存</button>' +
-    '<button class="btn2" onclick="orcaOpenScenarioList()">保存一覧</button></div></div>';
+  modalContent.innerHTML = typeof orgSimBuildPanelHtml === 'function'
+    ? orgSimBuildPanelHtml('orca', !!orcaSimMode)
+    : '<div class="lineBox">シミュレーションUIを読み込めませんでした</div>';
   modalBg.style.display = 'flex';
 }
 
-function orcaStartSimulation() {
-  if (!orcaSimMode) { orcaMembers = orcaClone(orcaCurrentData); orcaSimMode = true; }
+function orcaStartSimulationCopy() {
+  if (!orcaSimMode) {
+    window.__orcaSimLiveSnapshot = orcaCaptureLiveSimSnapshot();
+    orcaMembers = orcaClone(window.__orcaSimLiveSnapshot.currentData);
+    orcaSimMode = true;
+  }
+  if (typeof showPage === 'function') showPage('orcaOrg');
   orcaRender();
+}
+
+function orcaStartSimulationBlank() {
+  if (!orcaSimMode) {
+    window.__orcaSimLiveSnapshot = orcaCaptureLiveSimSnapshot();
+  }
+  var id = 'sim_orca_' + Date.now();
+  orcaMembers = [{
+    id: id,
+    parent: null,
+    name: '仮想ルート',
+    username: 'sim_root',
+    rank: 0,
+    investment: 0,
+    aiAgent: '不明',
+    personalSales: 0,
+    groupSales: 0,
+    open: true,
+    bvMode: 'MANUAL'
+  }];
+  orcaRootAccountIds = [id];
+  orcaRootId = id;
+  orcaFocusId = id;
+  orcaSimMode = true;
+  if (typeof showPage === 'function') showPage('orcaOrg');
+  orcaRender();
+}
+
+/** @deprecated use orcaStartSimulationCopy */
+function orcaStartSimulation() {
+  orcaStartSimulationCopy();
+}
+
+function orcaEndSimulationDiscard() {
+  if (window.__orcaSimLiveSnapshot) {
+    orcaApplyLiveSimSnapshot(window.__orcaSimLiveSnapshot);
+    window.__orcaSimLiveSnapshot = null;
+  } else {
+    orcaMembers = orcaClone(orcaCurrentData);
+  }
+  orcaSimMode = false;
+  orcaFocusId = orcaRootId;
+  if (typeof showPage === 'function') showPage('orcaOrg');
+  orcaRender();
+}
+
+/** UI: 終了確認モーダルを表示 */
+function orcaEndSimulation() {
+  if (typeof orgSimRequestEnd === 'function') orgSimRequestEnd('orca');
+  else orcaEndSimulationDiscard();
 }
 
 function orcaRestoreCurrent() {
-  orcaMembers = orcaClone(orcaCurrentData);
-  orcaSimMode = false;
-  orcaFocusId = orcaRootId;
-  orcaRender();
+  orcaEndSimulation();
 }
 
 function orcaSaveScenario() {
+  if (typeof orgSimSaveWorkingScenario === 'function') {
+    if (orgSimSaveWorkingScenario('orca')) {
+      alert('保存しました（シミュレーション専用・本番組織図には未反映）');
+    }
+    return;
+  }
   var name = prompt('シミュレーション名', 'ORCA配置シミュレーション');
   if (!name) return;
-  orcaScenarios.push({ name: name, data: orcaClone(orcaMembers), created: new Date().toLocaleString() });
-  orcaRender();
-  alert('保存しました');
+  orcaScenarios.push({
+    project: 'orca',
+    name: name,
+    data: orcaClone(orcaMembers),
+    created: new Date().toLocaleString(),
+    rootId: orcaRootId || '',
+    rootAccountIds: orcaClone(orcaRootAccountIds || [])
+  });
+  if (typeof hubSaveToStorage === 'function') hubSaveToStorage({ localOnly: true });
+  alert('保存しました（シミュレーション専用・本番組織図には未反映）');
 }
 
 function orcaOpenScenarioList() {
@@ -1012,10 +1107,21 @@ function orcaOpenScenarioList() {
 }
 
 function orcaLoadScenario(i) {
+  if (!orcaScenarios[i] || !orcaScenarios[i].data) return;
+  if (!orcaSimMode) {
+    window.__orcaSimLiveSnapshot = orcaCaptureLiveSimSnapshot();
+  }
   orcaMembers = orcaClone(orcaScenarios[i].data);
+  if (Array.isArray(orcaScenarios[i].rootAccountIds) && orcaScenarios[i].rootAccountIds.length) {
+    orcaRootAccountIds = orcaClone(orcaScenarios[i].rootAccountIds);
+  }
+  if (orcaScenarios[i].rootId && orcaMembers.some(function (m) { return m.id === orcaScenarios[i].rootId; })) {
+    orcaRootId = orcaScenarios[i].rootId;
+  }
   orcaSimMode = true;
   orcaFocusId = orcaRootId;
   if (typeof closeModal === 'function') closeModal();
+  if (typeof showPage === 'function') showPage('orcaOrg');
   orcaRender();
 }
 
