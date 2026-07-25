@@ -16,6 +16,7 @@
     "verify:org-visibility": "node scripts/verify-org-chart-visibility.mjs",
     "verify:org-localhost": "node scripts/verify-org-chart-localhost.mjs",
     "verify:org-simulation": "node scripts/verify-org-simulation.mjs",
+    "verify:org-agg-target": "node scripts/verify-org-agg-target.mjs",
     "verify:delete-modes": "node scripts/verify-delete-modes.mjs",
     "verify:data-protection": "node scripts/verify-data-protection.mjs",
     "verify:portfolio-calc": "node scripts/verify-portfolio-calc.mjs",

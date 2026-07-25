@@ -41,6 +41,7 @@ Deploy 承認後も、ゲート不合格なら中止する（raw / スキップ 
 | ポートフォリオ | `verify-portfolio-calc` と/または `verify-perf-portfolio-e2e` |
 | 組織図（RAM/ORCA/ENI） | 親子・孤立・削除（subtree/promote） |
 | シミュレーション | `verify-org-simulation`（自動終了防止・copy/blank・本番分離・Firestore非書込） |
+| 集計対象アカウント | `verify-org-agg-target`（aggTarget非破壊・合算・混入防止・sim非書き戻し） |
 | 実績入力 | 保存→PF反映・再読込・他プロジェクト非破壊 |
 | スマホ UI | Mobile 375 / 390 / 430 |
 | Firestore / sync | merge・tombstone・wipe 防止 |
@@ -49,7 +50,7 @@ Deploy 承認後も、ゲート不合格なら中止する（raw / スキップ 
 
 ## テスト数の下限
 
-- 基準: **384** PASS（`scripts/verify-release-baseline.json`）
+- 基準: **413** PASS（`scripts/verify-release-baseline.json`）
 - `verify:release` は PASS が基準未満なら **DEPLOY BLOCKED**
 - 理由なくテスト削除・スキップ増で件数を減らさない
 

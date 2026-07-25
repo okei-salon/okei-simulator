@@ -1044,6 +1044,7 @@ function eniOpenEdit(data) {
     eniEscape(data.name || '') + '">' +
     '<label>ウォレットアドレス（必須）</label><input id="eniWalletInput" placeholder="0x... またはアドレス" value="' +
     eniEscape(data.walletAddress || '') + '">' +
+    (typeof orgAggCheckboxHtml === 'function' ? orgAggCheckboxHtml('eni', data.aggTarget === true, 'eniAggTargetInput') : '') +
     '<label>ステーキング額</label><input id="eniInvestmentInput" type="number" min="0" step="any" value="' +
     (data.investment != null ? eniEscape(data.investment) : '') + '">' +
     '<input type="hidden" id="eniStakingRewardInput" value="' +
@@ -1089,6 +1090,9 @@ function eniSaveMember() {
     if (old.seriesIndex != null) obj.seriesIndex = old.seriesIndex;
     if (old.seriesRootId != null) obj.seriesRootId = old.seriesRootId;
     if (old.sortOrder != null) obj.sortOrder = old.sortOrder;
+    if (typeof orgAggPreserveOnSave === 'function') orgAggPreserveOnSave(old, obj);
+    var aggCb = document.getElementById('eniAggTargetInput');
+    if (aggCb && typeof orgAggApplyCheckbox === 'function') orgAggApplyCheckbox(obj, aggCb);
     var idx = eniMembers.findIndex(function (m) { return m.id === id; });
     if (idx >= 0) eniMembers[idx] = obj;
   } else {
@@ -1538,6 +1542,9 @@ function eniAllOrgSummary() {
 }
 
 function eniAggregateTotals() {
+  if (typeof orgAggSumEniTotals === 'function' && typeof orgAggTargetIds === 'function') {
+    return orgAggSumEniTotals(orgAggTargetIds('eni'));
+  }
   var s = eniAllOrgSummary();
   return {
     total: s.total,
@@ -1561,23 +1568,28 @@ function eniAggregateCardsHtml(id) {
 function eniRenderAccountManage() {
   var content = document.getElementById('eniAccountManageContent');
   if (!content) return;
-  var s = eniAllOrgSummary();
-  var rows = s.list.map(function (x) {
-    var m = eniFindMember(x.id) || {};
+  var listIds = typeof orgAggTargetIds === 'function' ? orgAggTargetIds('eni') : eniGetRootIdsForSummary();
+  var rootIds = eniGetRootIdsForSummary();
+  var rows = listIds.map(function (id) {
+    var m = eniFindMember(id) || {};
     var homeLabel = m.homeVisible === false ? 'ホーム表示ON' : 'ホーム非表示';
+    var isRoot = rootIds.indexOf(id) >= 0;
     return '<div class="lineBox"><b>' + eniEscape(eniDisplayName(m)) + '</b>' +
       '<div class="homeToggleRow">' +
-      '<button type="button" class="btn2 smallCtl" onclick="eniAccountManageMove(\'' + x.id + '\',-1)">↑</button>' +
-      '<button type="button" class="btn2 smallCtl" onclick="eniAccountManageMove(\'' + x.id + '\',1)">↓</button>' +
-      '<button type="button" class="btn2 smallCtl" onclick="eniToggleHomeVisible(\'' + x.id + '\')">' +
+      (isRoot
+        ? '<button type="button" class="btn2 smallCtl" onclick="eniAccountManageMove(\'' + id + '\',-1)">↑</button>' +
+          '<button type="button" class="btn2 smallCtl" onclick="eniAccountManageMove(\'' + id + '\',1)">↓</button>'
+        : '') +
+      '<button type="button" class="btn2 smallCtl" onclick="eniToggleHomeVisible(\'' + id + '\')">' +
       homeLabel + '</button>' +
-      '</div>' + eniAggregateCardsHtml(x.id) + '</div>';
+      '</div>' + eniAggregateCardsHtml(id) + '</div>';
   }).join('');
+  var bar = typeof orgAggBarHtml === 'function' ? orgAggBarHtml('eni') : '<p class="panelTitle">全アカウント合計</p>';
   content.innerHTML =
-    '<p class="panelTitle">全アカウント合計</p>' +
+    bar +
     eniAggregateCardsHtml('') +
-    '<p class="panelTitle" style="margin-top:16px">アカウント別</p>' +
-    (rows || '<div class="help">登録アカウントがありません。</div>');
+    '<p class="panelTitle" style="margin-top:16px">集計対象アカウント別</p>' +
+    (rows || '<div class="help">集計対象アカウントがありません。「集計対象アカウントを追加・編集」から選択してください。</div>');
 }
 
 function eniToggleHomeVisible(id) {

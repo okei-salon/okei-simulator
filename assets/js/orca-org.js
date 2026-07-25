@@ -694,6 +694,7 @@ function orcaOpenEdit(data) {
     '<label>親</label><select id="orcaParentInput">' + opts + '</select>' +
     '<label>名前</label><input id="orcaNameInput" value="' + (data.name || '') + '">' +
     '<label>ユーザーネーム</label><input id="orcaUsernameInput" value="' + (data.username || '') + '">' +
+    (typeof orgAggCheckboxHtml === 'function' ? orgAggCheckboxHtml('orca', data.aggTarget === true, 'orcaAggTargetInput') : '') +
     '<div class="grid2"><div><label>保有ランク</label><select id="orcaRankInput">' + orcaRankOptions(data.rank) + '</select></div>' +
     '<div><label>個人投資額</label><input id="orcaInvestmentInput" type="number" value="' + (data.investment != null ? data.investment : '') + '"></div></div>' +
     '<label>運用AIエージェント</label><select id="orcaAiAgentInput">' + orcaAgentOptions(data.aiAgent || '不明') + '</select>' +
@@ -740,6 +741,9 @@ function orcaSaveMember() {
     obj.open = old.open;
     obj.bvMode = old.bvMode || 'MANUAL';
     obj.bvPrompted = old.bvPrompted || false;
+    if (typeof orgAggPreserveOnSave === 'function') orgAggPreserveOnSave(old, obj);
+    var aggCb = document.getElementById('orcaAggTargetInput');
+    if (aggCb && typeof orgAggApplyCheckbox === 'function') orgAggApplyCheckbox(obj, aggCb);
     orcaMembers[orcaMembers.findIndex(function (m) { return m.id === id; })] = obj;
     if (oldParent === obj.parent) {
       orcaAdjustAncestorManualVolumes(obj.parent, newLine - oldLine);
@@ -1160,6 +1164,9 @@ function orcaAllOrgSummary() {
 }
 
 function orcaAggregateTotals() {
+  if (typeof orgAggSumOrcaTotals === 'function' && typeof orgAggTargetIds === 'function') {
+    return orgAggSumOrcaTotals(orgAggTargetIds('orca'));
+  }
   var s = orcaAllOrgSummary();
   return {
     total: s.total,
@@ -1197,22 +1204,27 @@ function orcaAggregateCardsHtml(id) {
 function orcaRenderAccountManage() {
   var content = document.getElementById('orcaAccountManageContent');
   if (!content) return;
-  var s = orcaAllOrgSummary();
-  var rows = s.list.map(function (x) {
-    var m = orcaMembers.find(function (mem) { return mem.id === x.id; }) || {};
+  var listIds = typeof orgAggTargetIds === 'function' ? orgAggTargetIds('orca') : orcaGetRootIdsForSummary();
+  var rootIds = orcaGetRootIdsForSummary();
+  var rows = listIds.map(function (id) {
+    var m = orcaMembers.find(function (mem) { return mem.id === id; }) || {};
     var homeLabel = m.homeVisible === false ? 'ホーム表示ON' : 'ホーム非表示';
+    var isRoot = rootIds.indexOf(id) >= 0;
     return '<div class="lineBox"><b>' + orcaDisplayName(m) + '</b>' +
       '<div class="homeToggleRow">' +
-      '<button class="btn2 smallCtl" onclick="orcaAccountManageMove(\'' + x.id + '\',-1)">↑</button>' +
-      '<button class="btn2 smallCtl" onclick="orcaAccountManageMove(\'' + x.id + '\',1)">↓</button>' +
-      '<button class="btn2 smallCtl" onclick="orcaToggleHomeVisible(\'' + x.id + '\')">' + homeLabel + '</button>' +
-      '</div>' + orcaAggregateCardsHtml(x.id) + '</div>';
+      (isRoot
+        ? '<button class="btn2 smallCtl" onclick="orcaAccountManageMove(\'' + id + '\',-1)">↑</button>' +
+          '<button class="btn2 smallCtl" onclick="orcaAccountManageMove(\'' + id + '\',1)">↓</button>'
+        : '') +
+      '<button class="btn2 smallCtl" onclick="orcaToggleHomeVisible(\'' + id + '\')">' + homeLabel + '</button>' +
+      '</div>' + orcaAggregateCardsHtml(id) + '</div>';
   }).join('');
+  var bar = typeof orgAggBarHtml === 'function' ? orgAggBarHtml('orca') : '<p class="panelTitle">全アカウント合計</p>';
   content.innerHTML =
-    '<p class="panelTitle">全アカウント合計</p>' +
+    bar +
     orcaAggregateCardsHtml('') +
-    '<p class="panelTitle" style="margin-top:16px">アカウント別</p>' +
-    (rows || '<div class="help">登録アカウントがありません。</div>');
+    '<p class="panelTitle" style="margin-top:16px">集計対象アカウント別</p>' +
+    (rows || '<div class="help">集計対象アカウントがありません。「集計対象アカウントを追加・編集」から選択してください。</div>');
 }
 
 function orcaShowAggregateDetail() {

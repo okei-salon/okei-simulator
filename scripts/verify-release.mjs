@@ -125,6 +125,13 @@ const SUITES = [
     cmd: ['node', 'scripts/verify-org-simulation.mjs']
   },
   {
+    id: 'org-agg-target',
+    label: 'Organization aggregation-target accounts',
+    category: 'Organization integrity',
+    needsServer: true,
+    cmd: ['node', 'scripts/verify-org-agg-target.mjs']
+  },
+  {
     id: 'perf-portfolio-e2e',
     label: 'Performance input → Portfolio E2E',
     category: 'Portfolio',
