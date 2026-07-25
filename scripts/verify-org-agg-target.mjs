@@ -284,6 +284,149 @@ async function runProject(page, project) {
   assert(`${label} 既存データが消えない`, after.memberCount === baseline.memberCount && after.memberCount === 3);
 }
 
+/** Manage cards must not mutate org chart rootId (sim + live). */
+async function runManageCardRootIsolation(page) {
+  for (const project of ['ram', 'orca']) {
+    const label = project.toUpperCase();
+    const ids = idsFor(project);
+    const result = await page.evaluate((args) => {
+      const { project, a, b, c } = args;
+      const listNow = () => (project === 'ram' ? members : orcaMembers);
+      const getRoot = () => (project === 'ram' ? rootId : orcaRootId);
+      const setRoot = (id) => {
+        if (project === 'ram') { rootId = id; focusId = id; }
+        else { orcaRootId = id; orcaFocusId = id; }
+      };
+      const markTargets = () => {
+        listNow().forEach((m) => { delete m.aggTarget; });
+        listNow().find((m) => m.id === a).aggTarget = true;
+        listNow().find((m) => m.id === b).aggTarget = true;
+        listNow().find((m) => m.id === c).aggTarget = true;
+      };
+      const startSim = () => {
+        if (project === 'ram') {
+          if (typeof startSimulationCopy === 'function') startSimulationCopy();
+          else startSimulation();
+        } else if (typeof orcaStartSimulationCopy === 'function') orcaStartSimulationCopy();
+        else orcaStartSimulation();
+      };
+      const endSim = () => {
+        if (project === 'ram') endSimulationDiscard();
+        else orcaEndSimulationDiscard();
+      };
+      const renderManage = () => {
+        if (project === 'ram') { showPage('accountManage'); renderAccountManage(); }
+        else { showPage('orcaAccountManage'); orcaRenderAccountManage(); }
+      };
+      const openOrg = () => {
+        if (project === 'ram') { showPage('ram'); if (typeof render === 'function') render(); }
+        else { showPage('orcaOrg'); orcaRender(); }
+      };
+      const parentsOf = () => {
+        const o = {};
+        listNow().forEach((m) => { o[m.id] = m.parent; });
+        return o;
+      };
+
+      // live baseline root = a
+      setRoot(a);
+      markTargets();
+      const liveParents = parentsOf();
+
+      renderManage();
+      let htmlHasRootAssign = false;
+      if (project === 'ram') {
+        focusId = c;
+        if (typeof showCardDetail === 'function') showCardDetail('total');
+        if (typeof closeModal === 'function') closeModal();
+        focusId = b;
+        if (typeof showCardDetail === 'function') showCardDetail('personal');
+        if (typeof closeModal === 'function') closeModal();
+        focusId = a;
+        if (typeof showCardDetail === 'function') showCardDetail('total');
+        if (typeof closeModal === 'function') closeModal();
+        const html = (document.getElementById('accountManageContent') || {}).innerHTML || '';
+        htmlHasRootAssign = /rootId\s*=\s*'[^']+'/.test(html);
+      } else {
+        if (typeof orcaShowCardHelp === 'function') orcaShowCardHelp('total');
+        if (typeof closeModal === 'function') closeModal();
+        if (typeof orcaShowAffiliateDetail === 'function') orcaShowAffiliateDetail(c);
+        if (typeof closeModal === 'function') closeModal();
+        const html = (document.getElementById('orcaAccountManageContent') || {}).innerHTML || '';
+        htmlHasRootAssign = /orcaSwitchRootAccount\s*\(/.test(html);
+      }
+      const liveRootAfterCards = getRoot();
+      openOrg();
+      const liveRootAfterOrg = getRoot();
+      const liveParentsAfter = parentsOf();
+
+      // simulation path (required scenario)
+      startSim();
+      setRoot(a);
+      markTargets();
+      const simRootBefore = getRoot();
+      const simParents = parentsOf();
+      renderManage();
+      if (project === 'ram') {
+        focusId = c;
+        showCardDetail('total');
+        if (typeof closeModal === 'function') closeModal();
+        focusId = b;
+        showCardDetail('direct');
+        if (typeof closeModal === 'function') closeModal();
+      } else {
+        orcaShowAffiliateDetail(c);
+        if (typeof closeModal === 'function') closeModal();
+        orcaShowCardHelp('personal');
+        if (typeof closeModal === 'function') closeModal();
+      }
+      const simRootAfterCards = getRoot();
+      openOrg();
+      const simRootAfterOrg = getRoot();
+      const simParentsAfter = parentsOf();
+
+      if (typeof orgAggOpenEditModal === 'function') {
+        orgAggOpenEditModal(project);
+        document.querySelectorAll('.orgAggAssignCb').forEach((cb) => {
+          cb.checked = (cb.value === a || cb.value === b);
+        });
+        orgAggSaveAssign(project);
+      }
+      const simRootAfterAgg = getRoot();
+
+      endSim();
+      const afterEndRoot = getRoot();
+      const afterEndParents = parentsOf();
+
+      return {
+        liveRootAfterCards,
+        liveRootAfterOrg,
+        liveParentsOk: JSON.stringify(liveParents) === JSON.stringify(liveParentsAfter),
+        htmlHasRootAssign,
+        simRootBefore,
+        simRootAfterCards,
+        simRootAfterOrg,
+        simRootAfterAgg,
+        simParentsOk: JSON.stringify(simParents) === JSON.stringify(simParentsAfter),
+        afterEndRoot,
+        afterEndParentsOk: JSON.stringify(liveParents) === JSON.stringify(afterEndParents)
+      };
+    }, { project, a: ids.a, b: ids.b, c: ids.c });
+
+    assert(`${label} 集計HTMLがroot切替を含まない`, !result.htmlHasRootAssign);
+    assert(`${label} 通常: 子カード後もroot維持`, result.liveRootAfterCards === ids.a && result.liveRootAfterOrg === ids.a,
+      `${result.liveRootAfterCards}->${result.liveRootAfterOrg}`);
+    assert(`${label} 通常: 親子不変`, result.liveParentsOk);
+    assert(`${label} Sim: 東條3相当カード後もルート維持`,
+      result.simRootBefore === ids.a && result.simRootAfterCards === ids.a && result.simRootAfterOrg === ids.a,
+      `${result.simRootBefore}/${result.simRootAfterCards}/${result.simRootAfterOrg}`);
+    assert(`${label} Sim: 集計対象ON/OFF後もroot維持`, result.simRootAfterAgg === ids.a);
+    assert(`${label} Sim: 親子不変`, result.simParentsOk);
+    assert(`${label} Sim終了後本番親子が戻る`, result.afterEndParentsOk);
+    assert(`${label} Sim終了後本番root`, result.afterEndRoot === ids.a, result.afterEndRoot);
+  }
+}
+
 async function runSimIsolation(page) {
   // Live: a+b targeted
   await page.evaluate(() => {
@@ -384,6 +527,7 @@ async function main() {
   for (const project of ['ram', 'orca', 'eni']) {
     await runProject(page, project);
   }
+  await runManageCardRootIsolation(page);
   await runSimIsolation(page);
 
   // apply roundtrip keeps members

@@ -277,8 +277,9 @@ function orcaCalcBaseProfitMonthly(m) {
   return orcaCalcBaseProfitDaily(m) * 30;
 }
 
-function orcaShowAffiliateDetail() {
-  var id = orcaRootId;
+function orcaShowAffiliateDetail(optAccountId) {
+  // optAccountId: 集計画面などから指定。未指定時は表示中ルート。rootId は変更しない。
+  var id = optAccountId || orcaRootId;
   var self = orcaMembers.find(function (x) { return x.id === id; });
   if (!self || typeof modalTitle === 'undefined' || typeof modalContent === 'undefined' || typeof modalBg === 'undefined') {
     return;
@@ -1181,17 +1182,18 @@ function orcaAggregateCardsHtml(id) {
   var rankingLabel =
     '<span class="orcaCardLabel orcaCardLabel--pc">推定アフィリエイト利益</span>' +
     '<span class="orcaCardLabel orcaCardLabel--sp">推定AF利益</span>';
+  // 集計カードは詳細表示のみ。orcaRootId / 組織図表示起点は変更しない。
   var totalClick = id
-    ? "orcaSwitchRootAccount('" + id + "');orcaShowCardHelp('total')"
+    ? "orcaShowCardHelp('total')"
     : 'orcaShowAggregateDetail()';
   var personalClick = id
-    ? "orcaSwitchRootAccount('" + id + "');orcaShowCardHelp('personal')"
+    ? "orcaShowCardHelp('personal')"
     : 'orcaShowAggregateDetail()';
   var rankingClick = id
-    ? "orcaSwitchRootAccount('" + id + "');orcaShowAffiliateDetail()"
+    ? "orcaShowAffiliateDetail('" + id + "')"
     : 'orcaShowAggregateDetail()';
   var volumeClick = id
-    ? "orcaSwitchRootAccount('" + id + "');orcaShowCardHelp('volume')"
+    ? "orcaShowCardHelp('volume')"
     : 'orcaShowAggregateDetail()';
   return '<section class="cards orcaIncomeCards">' +
     '<div class="card total" onclick="' + totalClick + '"><div class="label">合計利益</div><div class="main">' + orcaMoney(t.total) + '/月</div></div>' +
