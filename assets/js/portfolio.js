@@ -831,13 +831,136 @@ function pfGetOrcaAggregateTotals() {
   return orcaAggregateTotals();
 }
 
+/**
+ * PF利益詳細の内訳用：組織図集計（aggTarget）ではなく、
+ * 月末予測と同じ revenueLog ペース窓から構成比を取る。
+ */
+function pfGetProjectRevenueLogComposition(projectKey, viewY, viewM) {
+  let now = typeof getHomeReferenceDate === 'function' ? getHomeReferenceDate() : new Date();
+  let y = viewY != null ? Number(viewY) : now.getFullYear();
+  let m = viewM != null ? Number(viewM) : now.getMonth();
+  let daysInMonth = new Date(y, m + 1, 0).getDate();
+  let isCurrentMonth = (y === now.getFullYear() && m === now.getMonth());
+  let todayD = isCurrentMonth ? now.getDate() : daysInMonth;
+  let scanEnd = isCurrentMonth ? todayD : daysInMonth;
+  let endKey = pfEniDateKey(y, m, scanEnd);
+
+  function roundProject(v) {
+    if (typeof pdRoundEni === 'function' && projectKey === 'eni') return pdRoundEni(v);
+    if (typeof pdRound === 'function') return pdRound(v);
+    return Math.round((Number(v) || 0) * 10000) / 10000;
+  }
+
+  function dayHasInput(entry, dateKey) {
+    if (!entry) return false;
+    if (typeof pdProjectDayHasRevenue === 'function') {
+      return pdProjectDayHasRevenue(entry, projectKey, dateKey);
+    }
+    return false;
+  }
+
+  let keys = typeof pdListRevenueDateKeys === 'function'
+    ? pdListRevenueDateKeys()
+    : (typeof settings !== 'undefined' && settings && settings.revenueLog
+      ? Object.keys(settings.revenueLog).sort()
+      : []);
+
+  let personal = 0;
+  let referral = 0;
+  let title = 0;
+  let ai = 0;
+  let affiliate = 0;
+  let sampleCount = 0;
+
+  for (let i = keys.length - 1; i >= 0 && sampleCount < PF_PACE_LOOKBACK_DAYS; i--) {
+    let dateKey = keys[i];
+    if (dateKey > endKey) continue;
+    let entry = typeof pdGetRevenueEntry === 'function'
+      ? pdGetRevenueEntry(dateKey)
+      : (settings && settings.revenueLog ? settings.revenueLog[dateKey] : null);
+    if (!dayHasInput(entry, dateKey)) continue;
+    sampleCount += 1;
+
+    if (projectKey === 'ram' && entry && entry.ramAccounts) {
+      Object.keys(entry.ramAccounts).forEach(function (id) {
+        let ae = entry.ramAccounts[id];
+        if (!ae || ae.todayRevenue == null || ae.todayRevenue === '') return;
+        let op = typeof pdGetRamOperationRevenue === 'function'
+          ? pdGetRamOperationRevenue(ae, id, dateKey)
+          : (Number(ae.operationRevenue) || 0);
+        let rev = Number(ae.todayRevenue) || 0;
+        personal += op;
+        // RAM実績の todayRevenue は組織側（紹介・タイトル等）として扱う
+        if (ae.referralProfit != null || ae.titleProfit != null) {
+          referral += Number(ae.referralProfit) || 0;
+          title += Number(ae.titleProfit) || 0;
+          // todayRevenue が別枠の場合もあるが、通常は内訳合計と二重計上しない
+          let split = (Number(ae.referralProfit) || 0) + (Number(ae.titleProfit) || 0);
+          if (rev > split) referral += (rev - split);
+        } else {
+          referral += rev;
+        }
+      });
+    } else if (projectKey === 'orca' && entry && entry.orcaAccounts) {
+      Object.keys(entry.orcaAccounts).forEach(function (id) {
+        let ae = entry.orcaAccounts[id];
+        if (!ae) return;
+        if (ae.yesterdayAiProfit != null || ae.todayAffiliateProfit != null) {
+          ai += Number(ae.yesterdayAiProfit) || 0;
+          affiliate += Number(ae.todayAffiliateProfit) || 0;
+        } else if (ae.todayRevenue != null) {
+          // レガシー単一欄は AI 側へ寄せる（比率用）
+          ai += Number(ae.todayRevenue) || 0;
+        }
+      });
+    }
+  }
+
+  personal = roundProject(personal);
+  referral = roundProject(referral);
+  title = roundProject(title);
+  ai = roundProject(ai);
+  affiliate = roundProject(affiliate);
+
+  if (projectKey === 'ram') {
+    return {
+      projectKey: 'ram',
+      personal: personal,
+      referral: referral,
+      title: title,
+      org: roundProject(referral + title),
+      total: roundProject(personal + referral + title),
+      sampleCount: sampleCount,
+      hasData: sampleCount > 0 && (personal + referral + title) > 0
+    };
+  }
+  if (projectKey === 'orca') {
+    return {
+      projectKey: 'orca',
+      ai: ai,
+      affiliate: affiliate,
+      total: roundProject(ai + affiliate),
+      sampleCount: sampleCount,
+      hasData: sampleCount > 0 && (ai + affiliate) > 0
+    };
+  }
+  return { projectKey: projectKey, total: 0, sampleCount: 0, hasData: false };
+}
+
 function pfScaleProfitSegmentsToTotal(segments, targetTotal) {
   let list = (segments || []).map(function (s) {
     return Object.assign({}, s, { amount: Math.max(0, Number(s.amount) || 0) });
   });
   let sum = list.reduce(function (acc, s) { return acc + s.amount; }, 0);
   let target = Math.max(0, Number(targetTotal) || 0);
-  if (!(sum > 0) || !(target > 0)) return list;
+  if (!(target > 0)) return list;
+  if (!(sum > 0)) {
+    // 予測はあるが構成比が取れない場合：先頭セグメントへ全額（空円を避ける）
+    if (!list.length) return list;
+    return list.map(function (s, idx) {
+      return Object.assign({}, s, { amount: idx === 0 ? target : 0 });
+    });
+  }
   let k = target / sum;
   return list.map(function (s) {
     return Object.assign({}, s, { amount: s.amount * k });
@@ -854,26 +977,28 @@ function pfGetProjectProfitBreakdown(projectKey, operatingUsd) {
   let pacedPredicted = pace && pace.canForecast
     ? Math.max(0, Number(pace.predictedMonthProfitUsd) || 0)
     : null;
+  let comp = (projectKey === 'ram' || projectKey === 'orca')
+    ? pfGetProjectRevenueLogComposition(projectKey, viewMonth.y, viewMonth.m)
+    : null;
 
   if (projectKey === 'ram') {
-    let agg = pfGetRamAggregateTotals();
-    if (!agg && pacedPredicted == null) return null;
-    let personal = Math.max(0, Number(agg && agg.personal) || 0);
-    let direct = Math.max(0, Number(agg && agg.direct) || 0);
-    let second = Math.max(0, Number(agg && agg.second) || 0);
-    let title = Math.max(0, Number(agg && agg.title) || 0);
-    let referral = direct + second;
-    let orgTotal = personal + referral + title;
+    let personal = Math.max(0, Number(comp && comp.personal) || 0);
+    let referral = Math.max(0, Number(comp && comp.referral) || 0);
+    let title = Math.max(0, Number(comp && comp.title) || 0);
+    let hasComp = !!(comp && comp.hasData);
     let predicted = pacedPredicted != null
       ? pacedPredicted
-      : Math.max(0, Number(agg && agg.total) || orgTotal || 0);
+      : (hasComp ? Math.max(0, Number(comp.total) || 0) : 0);
+    if (!(predicted > 0) && !hasComp) return null;
     let chartSegments = pfScaleProfitSegmentsToTotal([
       { key: 'personal', label: '個人運用利益', amount: personal, color: '#fdba74' },
       { key: 'referral', label: '紹介報酬', amount: referral, color: '#fb923c' },
       { key: 'title', label: 'タイトル報酬', amount: title, color: '#f97316' }
     ], predicted);
-    let scaledPersonal = chartSegments[0] ? chartSegments[0].amount : personal;
-    let scaledOrg = predicted - scaledPersonal;
+    let scaledPersonal = chartSegments[0] ? chartSegments[0].amount : 0;
+    let scaledReferral = chartSegments[1] ? chartSegments[1].amount : 0;
+    let scaledTitle = chartSegments[2] ? chartSegments[2].amount : 0;
+    let scaledOrg = Math.max(0, scaledReferral + scaledTitle);
     return {
       projectKey: 'ram',
       theme: 'ram',
@@ -881,7 +1006,7 @@ function pfGetProjectProfitBreakdown(projectKey, operatingUsd) {
       hasOperating: hasOperating,
       personal: scaledPersonal,
       personalYield: pfCalcYieldPctValue(scaledPersonal, operatingUsd),
-      org: Math.max(0, scaledOrg),
+      org: scaledOrg,
       orgYield: pfCalcYieldPctValue(scaledOrg, operatingUsd),
       predicted: predicted,
       predictedYield: pfCalcYieldPctValue(predicted, operatingUsd),
@@ -891,19 +1016,19 @@ function pfGetProjectProfitBreakdown(projectKey, operatingUsd) {
   }
 
   if (projectKey === 'orca') {
-    let agg = pfGetOrcaAggregateTotals();
-    if (!agg && pacedPredicted == null) return null;
-    let ai = Math.max(0, Number(agg && agg.personal) || 0);
-    let affiliate = Math.max(0, Number(agg && agg.ranking) || 0);
+    let ai = Math.max(0, Number(comp && comp.ai) || 0);
+    let affiliate = Math.max(0, Number(comp && comp.affiliate) || 0);
+    let hasComp = !!(comp && comp.hasData);
     let predicted = pacedPredicted != null
       ? pacedPredicted
-      : Math.max(0, Number(agg && agg.total) || 0);
+      : (hasComp ? Math.max(0, Number(comp.total) || 0) : 0);
+    if (!(predicted > 0) && !hasComp) return null;
     let chartSegments = pfScaleProfitSegmentsToTotal([
       { key: 'ai', label: 'AI利益', amount: ai, color: '#67e8f9' },
       { key: 'affiliate', label: 'アフィリエイト利益', amount: affiliate, color: '#06b6d4' }
     ], predicted);
-    let scaledAi = chartSegments[0] ? chartSegments[0].amount : ai;
-    let scaledAf = chartSegments[1] ? chartSegments[1].amount : affiliate;
+    let scaledAi = chartSegments[0] ? chartSegments[0].amount : 0;
+    let scaledAf = chartSegments[1] ? chartSegments[1].amount : 0;
     return {
       projectKey: 'orca',
       theme: 'orca',
@@ -2474,3 +2599,6 @@ function renderPortfolio() {
 }
 
 window.pfOpenProjectProfitDetail = pfOpenProjectProfitDetail;
+window.pfGetProjectProfitBreakdown = pfGetProjectProfitBreakdown;
+window.pfGetProjectRevenueLogComposition = pfGetProjectRevenueLogComposition;
+window.pfGetProjectSharedPaceMetrics = pfGetProjectSharedPaceMetrics;

@@ -262,6 +262,43 @@ async function main() {
   c.assert('ENI forecast exact', nearly(seeded.eniPace.predictedMonthProfitUsd, 310), String(seeded.eniPace.predictedMonthProfitUsd));
   c.assert('ENI pace samples only ENI days', seeded.eniPace.paceSampleDays === 2, String(seeded.eniPace.paceSampleDays));
 
+  // PF detail modal must match card forecast even when org aggregateTotals are zero
+  const detailMatch = await page.evaluate(() => {
+    window.aggregateTotals = function () {
+      return { personal: 0, direct: 0, second: 0, title: 0, total: 0 };
+    };
+    window.orcaAggregateTotals = function () {
+      return { personal: 0, ranking: 0, total: 0, volume: 0 };
+    };
+    const rows = pfGetEnabledProjectRows();
+    const by = {};
+    rows.forEach((r) => { by[r.key] = r; });
+    const ramBd = pfGetProjectProfitBreakdown('ram', by.ram.operatingUsd);
+    const orcaBd = pfGetProjectProfitBreakdown('orca', by.orca.operatingUsd);
+    const ramHtml = typeof pfRenderProjectProfitDetailBody === 'function'
+      ? pfRenderProjectProfitDetailBody(ramBd) : '';
+    const orcaHtml = typeof pfRenderProjectProfitDetailBody === 'function'
+      ? pfRenderProjectProfitDetailBody(orcaBd) : '';
+    return {
+      ramCard: by.ram.monthProfitUsd,
+      orcaCard: by.orca.monthProfitUsd,
+      ramPred: ramBd && ramBd.predicted,
+      orcaPred: orcaBd && orcaBd.predicted,
+      ramPersonal: ramBd && ramBd.personal,
+      ramOrg: ramBd && ramBd.org,
+      orcaAi: orcaBd && orcaBd.ai,
+      orcaAf: orcaBd && orcaBd.affiliate,
+      ramPieEmpty: ramHtml.indexOf('利益データがありません') >= 0,
+      orcaPieEmpty: orcaHtml.indexOf('利益データがありません') >= 0
+    };
+  });
+  c.assert('detail RAM predicted matches PF card', nearly(detailMatch.ramPred, detailMatch.ramCard), JSON.stringify(detailMatch));
+  c.assert('detail ORCA predicted matches PF card', nearly(detailMatch.orcaPred, detailMatch.orcaCard), JSON.stringify(detailMatch));
+  c.assert('detail RAM has composition', (detailMatch.ramPersonal + detailMatch.ramOrg) > 0, JSON.stringify(detailMatch));
+  c.assert('detail ORCA has AI/AF', (detailMatch.orcaAi + detailMatch.orcaAf) > 0, JSON.stringify(detailMatch));
+  c.assert('detail RAM pie not empty message', !detailMatch.ramPieEmpty);
+  c.assert('detail ORCA pie not empty message', !detailMatch.orcaPieEmpty);
+
   // Reload persistence
   await page.reload({ waitUntil: 'domcontentloaded', timeout: 45000 });
   await page.waitForTimeout(1500);

@@ -258,5 +258,52 @@ c.assert(
 const orcaDay1 = ctx.pdGetRevenueEntry('2026-07-01');
 c.assert('ORCA day1 project total 10', nearly(orcaDay1.orca, 10), String(orcaDay1.orca));
 
+// PF profit detail breakdown must use revenueLog (same as card forecast), not org aggregateTotals
+ctx.aggregateTotals = function () {
+  return { personal: 0, direct: 0, second: 0, title: 0, total: 0 };
+};
+ctx.orcaAggregateTotals = function () {
+  return { personal: 0, ranking: 0, total: 0, volume: 0 };
+};
+
+const ramBd = ctx.pfGetProjectProfitBreakdown('ram', 10000);
+c.assert('RAM breakdown predicted matches card forecast', nearly(ramBd.predicted, byKey.ram.monthProfitUsd), String(ramBd.predicted));
+c.assert('RAM breakdown has pie segments > 0', (ramBd.chartSegments || []).some((s) => Number(s.amount) > 0));
+c.assert('RAM breakdown pie sum ~= predicted', nearly(
+  (ramBd.chartSegments || []).reduce((a, s) => a + (Number(s.amount) || 0), 0),
+  ramBd.predicted
+), String(ramBd.predicted));
+c.assert('RAM org+personal ~= predicted', nearly(ramBd.personal + ramBd.org, ramBd.predicted));
+c.assert('RAM empty org-agg still has non-zero breakdown', ramBd.personal + ramBd.org > 0);
+
+const orcaBd = ctx.pfGetProjectProfitBreakdown('orca', 5000);
+c.assert('ORCA breakdown predicted matches card', nearly(orcaBd.predicted, byKey.orca.monthProfitUsd), String(orcaBd.predicted));
+c.assert('ORCA AI+AF ~= predicted', nearly(orcaBd.ai + orcaBd.affiliate, orcaBd.predicted));
+c.assert('ORCA AI > 0 from revenueLog', orcaBd.ai > 0, String(orcaBd.ai));
+c.assert('ORCA AF > 0 from revenueLog', orcaBd.affiliate > 0, String(orcaBd.affiliate));
+c.assert('ORCA empty org-agg still has non-zero AI/AF', orcaBd.ai + orcaBd.affiliate > 0);
+
+// Multi-account ORCA composition
+ctx.pdSaveRevenueAccountEntry('2026-07-10', 'orca', 't_orca1', {
+  yesterdayAiProfit: 8,
+  todayAffiliateProfit: 2
+});
+ctx.pdSaveRevenueAccountEntry('2026-07-10', 'orca', 't_orca2', {
+  yesterdayAiProfit: 1,
+  todayAffiliateProfit: 4
+});
+ctx.settings.orcaInputAccounts.push({ id: 't_orca2', name: 'T-ORCA-2', investment: 0 });
+const orcaComp = ctx.pfGetProjectRevenueLogComposition('orca', 2026, 6);
+c.assert('ORCA multi-account composition has AI+AF', orcaComp.ai > 0 && orcaComp.affiliate > 0, JSON.stringify(orcaComp));
+const orcaBd2 = ctx.pfGetProjectProfitBreakdown('orca', 5000);
+c.assert('ORCA multi-account predicted still matches pace', nearly(orcaBd2.predicted, ctx.pfGetProjectSharedPaceMetrics('orca', 5000, 2026, 6).predictedMonthProfitUsd));
+c.assert('ORCA multi-account pie not empty', (orcaBd2.chartSegments || []).some((s) => Number(s.amount) > 0));
+
+// Truly empty project: no forecast, no composition
+const emptyBd = ctx.pfGetProjectProfitBreakdown('ram', 0);
+// still has seeded ram data — clear and check null/empty consistency via composition on cary
+const caryBd = ctx.pfGetProjectProfitBreakdown('cary', 1000);
+c.assert('Non RAM/ORCA breakdown returns null', caryBd == null);
+
 console.log(`\nPortfolio calc: ${c.passed} passed, ${c.failed} failed`);
 exitFromCounter(c);
