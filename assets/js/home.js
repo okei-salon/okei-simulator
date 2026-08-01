@@ -1696,10 +1696,10 @@ function updateHomeTodaySection(sAll) {
   if (compareEl) {
     compareEl.innerHTML =
       '<div class="homeTodayCompareItem">' +
-      '<span class="homeTodayCompareLabel">昨日の収益</span>' +
+      '<span class="homeTodayCompareLabel">前回日収</span>' +
       '<span class="homeTodayCompareVal">' + formatPerformanceAmount(yesterdayTotal) + '</span></div>' +
       '<div class="homeTodayCompareItem homeTodayCompareItem--today">' +
-      '<span class="homeTodayCompareLabel">本日の収益</span>' +
+      '<span class="homeTodayCompareLabel">最新日収</span>' +
       '<span class="homeTodayCompareVal">' + formatPerformanceAmount(todayTotal) + '</span></div>';
   }
 
