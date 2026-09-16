@@ -22,7 +22,7 @@ service cloud.firestore {
 
     // hubData writes require matching schemaVersion so stale cached JS cannot overwrite.
     // Also honor control/writeGate.suspended (cross-client maintenance lock).
-    function writeGateSuspended() {
+    function writeGateSuspended(userId) {
       let gatePath = /databases/$(database)/documents/users/$(userId)/control/writeGate;
       return exists(gatePath)
         && get(gatePath).data.suspended == true
@@ -36,8 +36,8 @@ service cloud.firestore {
 
     match /users/{userId}/hubData/{docId} {
       allow read: if isOwner(userId);
-      allow create, update: if isOwner(userId) && hasValidSchemaVersion() && !writeGateSuspended();
-      allow delete: if isOwner(userId) && !writeGateSuspended();
+      allow create, update: if isOwner(userId) && hasValidSchemaVersion() && !writeGateSuspended(userId);
+      allow delete: if isOwner(userId) && !writeGateSuspended(userId);
     }
 
     // Other user docs (e.g. profile) — no schemaVersion gate.
