@@ -60,6 +60,12 @@ const SUITES = [
     cmd: ['node', 'scripts/verify-hub-sync-merge.mjs']
   },
   {
+    id: 'hub-destructive-guard',
+    label: 'Destructive cloud push guard (kai2 wipe block)',
+    category: 'Firestore',
+    cmd: ['node', 'scripts/verify-hub-destructive-guard.mjs']
+  },
+  {
     id: 'data-protection',
     label: 'Data protection / isolation',
     category: 'LocalStorage',

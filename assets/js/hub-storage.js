@@ -663,54 +663,118 @@ function hubMergeAccountMapById(cloudMap, localMap, preferLocal, removedSet) {
 
 function hubRemovedIdSet(ids) {
   let out = {};
-  (ids || []).forEach(function (id) { if (id) out[id] = true; });
+  if (!ids) return out;
+  if (Array.isArray(ids)) {
+    ids.forEach(function (id) { if (id) out[id] = true; });
+    return out;
+  }
+  if (typeof ids === 'object') {
+    Object.keys(ids).forEach(function (id) {
+      if (id && ids[id]) out[id] = true;
+    });
+  }
   return out;
 }
 
-/** Keep ORCA revenue slices from cloud even when preferLocal replaced the day entry. */
-function hubMergeOrcaRevenueLogs(cloudLog, localLog, preferLocal, removedIds) {
+function hubNormalizeRemovedSets(removedIdsOrSets) {
+  if (!removedIdsOrSets) {
+    return { orca: {}, ram: {}, eni: {}, all: {} };
+  }
+  // Backward compat: array of ORCA removed ids
+  if (Array.isArray(removedIdsOrSets)) {
+    let orca = hubRemovedIdSet(removedIdsOrSets);
+    return { orca: orca, ram: {}, eni: {}, all: Object.assign({}, orca) };
+  }
+  // Already normalized ({ orca/ram/eni/all } id→true maps)
+  if (removedIdsOrSets.all && typeof removedIdsOrSets.all === 'object' &&
+      removedIdsOrSets.orca && typeof removedIdsOrSets.orca === 'object' &&
+      !Array.isArray(removedIdsOrSets.orca)) {
+    return {
+      orca: hubRemovedIdSet(removedIdsOrSets.orca),
+      ram: hubRemovedIdSet(removedIdsOrSets.ram),
+      eni: hubRemovedIdSet(removedIdsOrSets.eni),
+      all: hubRemovedIdSet(removedIdsOrSets.all)
+    };
+  }
+  let orca = hubRemovedIdSet(removedIdsOrSets.orca || removedIdsOrSets.removedOrcaOrgAccountIds);
+  let ram = hubRemovedIdSet(removedIdsOrSets.ram || removedIdsOrSets.removedRamOrgAccountIds);
+  let eni = hubRemovedIdSet(removedIdsOrSets.eni || removedIdsOrSets.removedEniOrgAccountIds);
+  return {
+    orca: orca,
+    ram: ram,
+    eni: eni,
+    all: Object.assign({}, orca, ram, eni)
+  };
+}
+
+var HUB_REVENUE_ACCOUNT_MAP_KEYS = [
+  'ramAccounts',
+  'orcaAccounts',
+  'eniAccounts',
+  'caryAccounts',
+  'accounts'
+];
+
+/**
+ * Field-level day merge: never replace whole account maps via Object.assign.
+ * Cloud-only account IDs are kept unless explicitly tombstoned.
+ */
+function hubMergeRevenueDayEntry(cloudEntry, localEntry, preferLocal, removedSets) {
+  let c = cloudEntry && typeof cloudEntry === 'object' ? cloudEntry : null;
+  let l = localEntry && typeof localEntry === 'object' ? localEntry : null;
+  let removed = hubNormalizeRemovedSets(removedSets);
+  if (!c && !l) return {};
+  if (!c) return Object.assign({}, l);
+  if (!l) return Object.assign({}, c);
+
+  let base = {};
+  let keys = {};
+  Object.keys(c).forEach(function (k) { keys[k] = true; });
+  Object.keys(l).forEach(function (k) { keys[k] = true; });
+  Object.keys(keys).forEach(function (k) {
+    if (HUB_REVENUE_ACCOUNT_MAP_KEYS.indexOf(k) >= 0) return;
+    let cv = c[k];
+    let lv = l[k];
+    if (preferLocal) {
+      if (lv === undefined) {
+        base[k] = cv;
+        return;
+      }
+      // Project totals are recomputed from maps; do not let a stale local 0 wipe cloud.
+      if ((k === 'ram' || k === 'orca' || k === 'eni' || k === 'cary' ||
+           k === 'total' || k === 'other' || k === 'genesis') &&
+          typeof lv === 'number' && lv === 0 &&
+          typeof cv === 'number' && cv !== 0) {
+        base[k] = cv;
+        return;
+      }
+      base[k] = lv;
+      return;
+    }
+    if (cv !== undefined) base[k] = cv;
+    else base[k] = lv;
+  });
+
+  base.ramAccounts = hubMergeAccountMapById(c.ramAccounts, l.ramAccounts, preferLocal, removed.ram);
+  base.orcaAccounts = hubMergeAccountMapById(c.orcaAccounts, l.orcaAccounts, preferLocal, removed.orca);
+  base.eniAccounts = hubMergeAccountMapById(c.eniAccounts, l.eniAccounts, preferLocal, removed.eni);
+  base.caryAccounts = hubMergeAccountMapById(c.caryAccounts, l.caryAccounts, preferLocal, null);
+  // Generic accounts map: union all IDs; only drop explicit tombstones.
+  base.accounts = hubMergeAccountMapById(c.accounts, l.accounts, preferLocal, removed.all);
+  return base;
+}
+
+/** Keep all project revenue account maps (RAM/ORCA/ENI/…) across preferLocal merges. */
+function hubMergeOrcaRevenueLogs(cloudLog, localLog, preferLocal, removedIdsOrSets) {
   let cloudObj = cloudLog && typeof cloudLog === 'object' ? cloudLog : {};
   let localObj = localLog && typeof localLog === 'object' ? localLog : {};
-  let removed = hubRemovedIdSet(removedIds);
+  let removedSets = hubNormalizeRemovedSets(removedIdsOrSets);
   let dates = {};
   Object.keys(cloudObj).forEach(function (dk) { dates[dk] = true; });
   Object.keys(localObj).forEach(function (dk) { dates[dk] = true; });
   let out = {};
   Object.keys(dates).forEach(function (dk) {
-    let c = cloudObj[dk];
-    let l = localObj[dk];
-    let base;
-    if (c && l) base = preferLocal ? Object.assign({}, c, l) : Object.assign({}, l, c);
-    else base = Object.assign({}, c || l || {});
-
-    base.orcaAccounts = hubMergeAccountMapById(
-      c && c.orcaAccounts,
-      l && l.orcaAccounts,
-      preferLocal,
-      removed
-    );
-
-    // Keep non-ORCA account rows on the preferLocal side; only backfill ORCA rows from cloud.
-    let preferredAccounts = preferLocal
-      ? Object.assign({}, (l && l.accounts) || {})
-      : Object.assign({}, (c && c.accounts) || {});
-    if (!preferLocal) {
-      Object.keys((l && l.accounts) || {}).forEach(function (id) {
-        if (!preferredAccounts[id]) preferredAccounts[id] = l.accounts[id];
-      });
-    } else {
-      Object.keys((c && c.accounts) || {}).forEach(function (id) {
-        let ae = c.accounts[id];
-        if (!ae || ae.projectKey !== 'orca' || removed[id]) return;
-        if (!preferredAccounts[id]) preferredAccounts[id] = ae;
-      });
-    }
-    Object.keys(preferredAccounts).forEach(function (id) {
-      if (removed[id]) delete preferredAccounts[id];
-    });
-    if (Object.keys(preferredAccounts).length || (c && c.accounts) || (l && l.accounts)) {
-      base.accounts = preferredAccounts;
-    }
+    let base = hubMergeRevenueDayEntry(cloudObj[dk], localObj[dk], preferLocal, removedSets);
 
     if (typeof pdRecalculateRevenueEntry === 'function') {
       base = pdRecalculateRevenueEntry(base, dk);
@@ -733,10 +797,10 @@ function hubMergeOrcaRevenueLogs(cloudLog, localLog, preferLocal, removedIds) {
   return out;
 }
 
-function hubMergeOrcaSalesLogs(cloudLog, localLog, preferLocal, removedIds) {
+function hubMergeOrcaSalesLogs(cloudLog, localLog, preferLocal, removedIdsOrSets) {
   let cloudObj = cloudLog && typeof cloudLog === 'object' ? cloudLog : {};
   let localObj = localLog && typeof localLog === 'object' ? localLog : {};
-  let removed = hubRemovedIdSet(removedIds);
+  let removedSets = hubNormalizeRemovedSets(removedIdsOrSets);
   let dates = {};
   Object.keys(cloudObj).forEach(function (dk) { dates[dk] = true; });
   Object.keys(localObj).forEach(function (dk) { dates[dk] = true; });
@@ -745,34 +809,36 @@ function hubMergeOrcaSalesLogs(cloudLog, localLog, preferLocal, removedIds) {
     let c = cloudObj[dk];
     let l = localObj[dk];
     let base;
-    if (c && l) base = preferLocal ? Object.assign({}, c, l) : Object.assign({}, l, c);
-    else base = Object.assign({}, c || l || {});
-
-    let preferredAccounts = preferLocal
-      ? Object.assign({}, (l && l.accounts) || {})
-      : Object.assign({}, (c && c.accounts) || {});
-    if (!preferLocal) {
-      Object.keys((l && l.accounts) || {}).forEach(function (id) {
-        if (!preferredAccounts[id]) preferredAccounts[id] = l.accounts[id];
+    if (c && l) {
+      base = {};
+      let keys = {};
+      Object.keys(c).forEach(function (k) { keys[k] = true; });
+      Object.keys(l).forEach(function (k) { keys[k] = true; });
+      Object.keys(keys).forEach(function (k) {
+        if (k === 'accounts') return;
+        let cv = c[k];
+        let lv = l[k];
+        if (preferLocal) {
+          if (lv === undefined) base[k] = cv;
+          else base[k] = lv;
+        } else if (cv !== undefined) {
+          base[k] = cv;
+        } else {
+          base[k] = lv;
+        }
       });
+      base.accounts = hubMergeAccountMapById(
+        c.accounts,
+        l.accounts,
+        preferLocal,
+        removedSets.all
+      );
     } else {
-      Object.keys((c && c.accounts) || {}).forEach(function (id) {
-        let ae = c.accounts[id];
-        if (!ae || ae.projectKey !== 'orca' || removed[id]) return;
-        if (!preferredAccounts[id]) preferredAccounts[id] = ae;
-      });
+      base = Object.assign({}, c || l || {});
+      if (base.accounts) {
+        base.accounts = hubMergeAccountMapById(base.accounts, null, preferLocal, removedSets.all);
+      }
     }
-    // ORCA rows present on both sides: preferLocal chooses
-    Object.keys((c && c.accounts) || {}).forEach(function (id) {
-      let ce = c.accounts[id];
-      let le = l && l.accounts && l.accounts[id];
-      if (!ce || ce.projectKey !== 'orca' || removed[id]) return;
-      if (ce && le) preferredAccounts[id] = preferLocal ? le : ce;
-    });
-    Object.keys(preferredAccounts).forEach(function (id) {
-      if (removed[id]) delete preferredAccounts[id];
-    });
-    base.accounts = preferredAccounts;
 
     if (typeof pdRecalculateSalesEntry === 'function') {
       base = pdRecalculateSalesEntry(base);
@@ -843,35 +909,6 @@ function hubMergeHubSettings(localSettings, cloudSettings, localUpdatedAt, cloud
   let orcaRemoved = hubMergeOrcaRemovedIds(local, cloud, localUpdatedAt, cloudUpdatedAt);
   merged.removedOrcaOrgAccountIds = orcaRemoved.ids;
   merged.removedOrcaOrgAccountIdTimes = orcaRemoved.times;
-  merged.revenueLog = hubMergeOrcaRevenueLogs(
-    cloud.revenueLog,
-    local.revenueLog,
-    preferLocal,
-    merged.removedOrcaOrgAccountIds
-  );
-  merged.salesLog = hubMergeOrcaSalesLogs(
-    cloud.salesLog,
-    local.salesLog,
-    preferLocal,
-    merged.removedOrcaOrgAccountIds
-  );
-  merged.investmentHistory = hubMergeOrcaInvestmentHistory(
-    cloud.investmentHistory,
-    local.investmentHistory,
-    preferLocal,
-    merged.removedOrcaOrgAccountIds
-  );
-  merged.manageDisplayAccounts = hubMergeKeyedObjects(cloud.manageDisplayAccounts, local.manageDisplayAccounts, preferLocal);
-  merged.performanceInputHiddenAccounts = hubMergeKeyedObjects(
-    cloud.performanceInputHiddenAccounts,
-    local.performanceInputHiddenAccounts,
-    preferLocal
-  );
-  if (cloud.projectMaster || local.projectMaster) {
-    merged.projectMaster = preferLocal
-      ? Object.assign({}, cloud.projectMaster || {}, local.projectMaster || {})
-      : Object.assign({}, local.projectMaster || {}, cloud.projectMaster || {});
-  }
   merged.removedRamOrgAccountIds = hubUnionStringIds(
     cloud.removedRamOrgAccountIds,
     local.removedRamOrgAccountIds
@@ -890,6 +927,40 @@ function hubMergeHubSettings(localSettings, cloudSettings, localUpdatedAt, cloud
     cloud.removedEniOrgAccountIds,
     local.removedEniOrgAccountIds
   );
+  let revenueRemovedSets = {
+    orca: merged.removedOrcaOrgAccountIds,
+    ram: merged.removedRamOrgAccountIds,
+    eni: merged.removedEniOrgAccountIds
+  };
+  merged.revenueLog = hubMergeOrcaRevenueLogs(
+    cloud.revenueLog,
+    local.revenueLog,
+    preferLocal,
+    revenueRemovedSets
+  );
+  merged.salesLog = hubMergeOrcaSalesLogs(
+    cloud.salesLog,
+    local.salesLog,
+    preferLocal,
+    revenueRemovedSets
+  );
+  merged.investmentHistory = hubMergeOrcaInvestmentHistory(
+    cloud.investmentHistory,
+    local.investmentHistory,
+    preferLocal,
+    merged.removedOrcaOrgAccountIds
+  );
+  merged.manageDisplayAccounts = hubMergeKeyedObjects(cloud.manageDisplayAccounts, local.manageDisplayAccounts, preferLocal);
+  merged.performanceInputHiddenAccounts = hubMergeKeyedObjects(
+    cloud.performanceInputHiddenAccounts,
+    local.performanceInputHiddenAccounts,
+    preferLocal
+  );
+  if (cloud.projectMaster || local.projectMaster) {
+    merged.projectMaster = preferLocal
+      ? Object.assign({}, cloud.projectMaster || {}, local.projectMaster || {})
+      : Object.assign({}, local.projectMaster || {}, cloud.projectMaster || {});
+  }
   merged.orcaInputAccounts = hubMergeOrcaInputAccounts(
     cloud.orcaInputAccounts,
     local.orcaInputAccounts,
@@ -1835,6 +1906,10 @@ if (typeof window !== 'undefined') {
   window.hubMergeOrcaOrgCharts = hubMergeOrcaOrgCharts;
   window.hubMergeRamOrgCharts = hubMergeRamOrgCharts;
   window.hubMergeHubDocuments = hubMergeHubDocuments;
+  window.hubMergeOrcaRevenueLogs = hubMergeOrcaRevenueLogs;
+  window.hubMergeOrcaSalesLogs = hubMergeOrcaSalesLogs;
+  window.hubMergeRevenueDayEntry = hubMergeRevenueDayEntry;
+  window.hubMergeAccountMapById = hubMergeAccountMapById;
   window.hubStripRemovedAccountsFromSettings = hubStripRemovedAccountsFromSettings;
   window.hubMergeOrcaInputAccounts = hubMergeOrcaInputAccounts;
   window.hubFilterOrgChartByRemovedIds = hubFilterOrgChartByRemovedIds;

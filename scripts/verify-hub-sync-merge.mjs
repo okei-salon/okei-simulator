@@ -186,5 +186,77 @@ assert(
     fullDeleteMerged.settings.portfolioOperating.entries[0].id === 'keep-project'
 );
 
+// --- kai2-style: preferLocal must NOT drop cloud-only RAM account maps ---
+const kai2Id = 'imp_mr604mrj_0';
+const preferLocalStale = hubCreateEmptyData();
+preferLocalStale.updatedAt = 9000;
+preferLocalStale.settings = hubCreateDefaultSettings();
+preferLocalStale.settings.revenueLog = {
+  '2026-03-01': {
+    ramAccounts: { m1: { todayRevenue: 10, addInvestment: 0 } },
+    ram: 10,
+    total: 10
+  }
+};
+preferLocalStale.settings.salesLog = {
+  '2026-03-01': {
+    accounts: { m1: { projectKey: 'ram', todaySales: 5 } }
+  }
+};
+const preferCloudRich = hubCreateEmptyData();
+preferCloudRich.updatedAt = 1000;
+preferCloudRich.settings = hubCreateDefaultSettings();
+preferCloudRich.settings.revenueLog = {
+  '2026-03-01': {
+    ramAccounts: {
+      m1: { todayRevenue: 10, addInvestment: 0 },
+      [kai2Id]: { todayRevenue: 20, addInvestment: 0 }
+    },
+    ram: 30,
+    total: 30
+  }
+};
+preferCloudRich.settings.salesLog = {
+  '2026-03-01': {
+    accounts: {
+      m1: { projectKey: 'ram', todaySales: 5 },
+      [kai2Id]: { projectKey: 'ram', todaySales: 8 }
+    }
+  }
+};
+const preferMerged = hubMergeHubDocuments(preferLocalStale, preferCloudRich);
+const preferRev = preferMerged.settings.revenueLog['2026-03-01'] || {};
+const preferSales = preferMerged.settings.salesLog['2026-03-01'] || {};
+assert(
+  'preferLocal keeps cloud-only kai2 in ramAccounts',
+  !!(preferRev.ramAccounts && preferRev.ramAccounts[kai2Id])
+);
+assert(
+  'preferLocal keeps m1 alongside kai2',
+  !!(preferRev.ramAccounts && preferRev.ramAccounts.m1)
+);
+assert(
+  'preferLocal keeps cloud-only kai2 in sales accounts',
+  !!(preferSales.accounts && preferSales.accounts[kai2Id])
+);
+
+// Explicit RAM tombstone may drop kai2
+const tombLocal = hubCreateEmptyData();
+tombLocal.updatedAt = 9000;
+tombLocal.settings = hubCreateDefaultSettings();
+tombLocal.settings.removedRamOrgAccountIds = [kai2Id];
+tombLocal.settings.revenueLog = {
+  '2026-03-01': { ramAccounts: { m1: { todayRevenue: 10 } }, ram: 10 }
+};
+const tombMerged = hubMergeHubDocuments(tombLocal, preferCloudRich);
+assert(
+  'RAM tombstone allows dropping kai2 from revenue merge',
+  !(tombMerged.settings.revenueLog['2026-03-01'].ramAccounts || {})[kai2Id]
+);
+assert(
+  'RAM tombstone keeps m1',
+  !!(tombMerged.settings.revenueLog['2026-03-01'].ramAccounts || {}).m1
+);
+
 console.log(`\n${passed}/${passed + failed} PASS`);
 process.exit(failed ? 1 : 0);

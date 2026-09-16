@@ -1,5 +1,5 @@
 {
-  "minPassed": 508,
-  "note": "Baseline PASS count for npm run verify:release. Raised after cloud write gate verify (+14) on top of RAM localOnly (+21).",
+  "minPassed": 521,
+  "note": "Baseline after hub destructive guard + preferLocal account-map union (kai2 wipe prevention). verify:release Passed 521.",
   "updatedAt": "2026-09-16"
 }

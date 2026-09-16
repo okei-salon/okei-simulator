@@ -205,6 +205,88 @@ function hubProfileDocRef() {
   return hubFirebaseDb.collection('users').doc(hubFirebaseUid).collection('profile').doc('main');
 }
 
+/** Cloud-side maintenance gate (source of truth across clients). */
+function hubWriteGateDocRef() {
+  if (!hubFirebaseDb || !hubFirebaseUid) return null;
+  return hubFirebaseDb.collection('users').doc(hubFirebaseUid).collection('control').doc('writeGate');
+}
+
+var hubCloudWriteGateCache = null;
+var hubCloudWriteGateCacheAt = 0;
+var hubCloudWriteGateCacheMs = 5000;
+/** Last cloud hubData.updatedAt observed via fetch (stale-client guard). */
+var hubLastSeenCloudUpdatedAt = 0;
+/** Explicit full hub reset (rare); allows destructive account wipe in guard. */
+var hubExplicitHubDataResetPending = false;
+var hubExplicitHubDataResetAt = 0;
+var hubExplicitHubDataResetReason = '';
+
+function hubMarkExplicitHubDataReset(reason) {
+  hubExplicitHubDataResetPending = true;
+  hubExplicitHubDataResetAt = Date.now();
+  hubExplicitHubDataResetReason = reason || '';
+}
+
+function hubClearExplicitHubDataReset() {
+  hubExplicitHubDataResetPending = false;
+  hubExplicitHubDataResetAt = 0;
+  hubExplicitHubDataResetReason = '';
+}
+
+function hubIsCloudWriteGateDocSuspended(gate) {
+  if (!gate || gate.suspended !== true) return false;
+  let exp = Number(gate.expiresAt) || 0;
+  if (exp > 0 && Date.now() > exp) return false;
+  return true;
+}
+
+function hubFetchCloudWriteGate(force) {
+  if (typeof hubIsCloudReadEnabled === 'function' && !hubIsCloudReadEnabled()) {
+    return Promise.resolve(null);
+  }
+  if (!force && hubCloudWriteGateCache &&
+      (Date.now() - hubCloudWriteGateCacheAt) < hubCloudWriteGateCacheMs) {
+    return Promise.resolve(hubCloudWriteGateCache);
+  }
+  let ref = hubWriteGateDocRef();
+  if (!ref) return Promise.resolve(null);
+  return ref.get().then(function (snap) {
+    let data = snap && snap.exists ? (snap.data() || null) : null;
+    hubCloudWriteGateCache = data;
+    hubCloudWriteGateCacheAt = Date.now();
+    return data;
+  }).catch(function () {
+    return hubCloudWriteGateCache;
+  });
+}
+
+/**
+ * Operator helper: suspend automatic cloud hubData writes for all clients.
+ * Writes control/writeGate only (not hubData). Do not call during read-only recovery.
+ */
+function hubSetCloudWriteGateSuspended(suspended, reason, expiresAt) {
+  if (typeof hubIsCloudWriteEnabled === 'function' && !hubIsCloudWriteEnabled()) {
+    return Promise.resolve(false);
+  }
+  let ref = hubWriteGateDocRef();
+  if (!ref) return Promise.resolve(false);
+  let payload = {
+    suspended: !!suspended,
+    reason: reason || '',
+    updatedAt: Date.now(),
+    updatedByUid: hubFirebaseUid || ''
+  };
+  if (expiresAt != null) payload.expiresAt = Number(expiresAt) || 0;
+  return ref.set(payload, { merge: true }).then(function () {
+    hubCloudWriteGateCache = Object.assign({}, hubCloudWriteGateCache || {}, payload);
+    hubCloudWriteGateCacheAt = Date.now();
+    try {
+      console.log('[hubCloudWriteGate] remote gate set', payload);
+    } catch (e) {}
+    return true;
+  });
+}
+
 function hubInitFirebaseServices() {
   if (hubFirebaseReady) return true;
   if (typeof firebase === 'undefined') return false;
@@ -237,7 +319,10 @@ function hubFetchCloudDoc() {
   if (!ref) return Promise.resolve(null);
   return ref.get().then(function (snap) {
     if (!snap.exists) return null;
-    return snap.data();
+    let data = snap.data();
+    let ua = data && typeof data === 'object' ? (Number(data.updatedAt) || 0) : 0;
+    if (ua > 0) hubLastSeenCloudUpdatedAt = ua;
+    return data;
   });
 }
 
@@ -538,6 +623,151 @@ function hubGuardOrcaPayloadBeforePush(payload, cloudDoc, callerHint) {
   };
 }
 
+/**
+ * Collect account IDs present in hubData revenue/sales account maps.
+ * Returns { byBucket: { ramAccounts: {id: days}, ... }, allIds: {id: true}, revDaysById, salesDaysById }
+ */
+function hubCollectHubPayloadAccountStats(payload) {
+  let byBucket = {
+    ramAccounts: {},
+    orcaAccounts: {},
+    eniAccounts: {},
+    caryAccounts: {},
+    accounts: {}
+  };
+  let revDaysById = {};
+  let salesDaysById = {};
+  let allIds = {};
+  let revenueLog = (payload && payload.revenue && payload.revenue.revenueLog) || {};
+  Object.keys(revenueLog).forEach(function (dk) {
+    let entry = revenueLog[dk];
+    if (!entry || typeof entry !== 'object') return;
+    Object.keys(byBucket).forEach(function (bucket) {
+      let map = entry[bucket];
+      if (!map || typeof map !== 'object') return;
+      Object.keys(map).forEach(function (id) {
+        if (!id) return;
+        byBucket[bucket][id] = (byBucket[bucket][id] || 0) + 1;
+        revDaysById[id] = (revDaysById[id] || 0) + 1;
+        allIds[id] = true;
+      });
+    });
+  });
+  let salesLog = (payload && payload.revenue && payload.revenue.salesLog) || {};
+  Object.keys(salesLog).forEach(function (dk) {
+    let entry = salesLog[dk];
+    let map = entry && entry.accounts;
+    if (!map || typeof map !== 'object') return;
+    Object.keys(map).forEach(function (id) {
+      if (!id) return;
+      salesDaysById[id] = (salesDaysById[id] || 0) + 1;
+      allIds[id] = true;
+      byBucket.accounts[id] = byBucket.accounts[id] || 0;
+    });
+  });
+  return {
+    byBucket: byBucket,
+    allIds: allIds,
+    revDaysById: revDaysById,
+    salesDaysById: salesDaysById
+  };
+}
+
+function hubTombstoneAllowsAccountDrop(payload, accountId, cloudUpdatedAt) {
+  if (!accountId || !payload) return false;
+  let settings = payload.settings || {};
+  let removed = [];
+  if (Array.isArray(settings.removedOrcaOrgAccountIds)) {
+    removed = removed.concat(settings.removedOrcaOrgAccountIds);
+  }
+  if (Array.isArray(settings.removedRamOrgAccountIds)) {
+    removed = removed.concat(settings.removedRamOrgAccountIds);
+  }
+  if (Array.isArray(settings.removedEniOrgAccountIds)) {
+    removed = removed.concat(settings.removedEniOrgAccountIds);
+  }
+  if (removed.indexOf(accountId) < 0) return false;
+  let times = Object.assign(
+    {},
+    settings.removedOrcaOrgAccountIdTimes || {},
+    settings.removedRamOrgAccountIdTimes || {},
+    settings.removedEniOrgAccountIdTimes || {}
+  );
+  let t = Number(times[accountId]) || 0;
+  // Fresh tombstone (newer than cloud) OR listed without times (legacy RAM/ENI lists).
+  if (!t) return true;
+  return t > (Number(cloudUpdatedAt) || 0);
+}
+
+/**
+ * Abort automatic writes that would drop cloud account rows (e.g. kai2 wipe)
+ * without explicit tombstone / explicit hub reset.
+ */
+function hubGuardDestructiveHubPayloadBeforePush(payload, cloudDoc, callerHint) {
+  let cloudStats = hubCollectHubPayloadAccountStats(cloudDoc || {});
+  let payloadStats = hubCollectHubPayloadAccountStats(payload || {});
+  let cloudUpdatedAt = hubCloudUpdatedAt(cloudDoc);
+  let droppedIds = [];
+  let reducedRevIds = [];
+  let reducedSalesIds = [];
+
+  Object.keys(cloudStats.allIds).forEach(function (id) {
+    if (payloadStats.allIds[id]) return;
+    if (hubTombstoneAllowsAccountDrop(payload, id, cloudUpdatedAt)) return;
+    droppedIds.push(id);
+  });
+  Object.keys(cloudStats.revDaysById).forEach(function (id) {
+    let before = cloudStats.revDaysById[id] || 0;
+    let after = payloadStats.revDaysById[id] || 0;
+    if (before > 0 && after === 0 && !hubTombstoneAllowsAccountDrop(payload, id, cloudUpdatedAt)) {
+      if (reducedRevIds.indexOf(id) < 0) reducedRevIds.push(id);
+    }
+  });
+  Object.keys(cloudStats.salesDaysById).forEach(function (id) {
+    let before = cloudStats.salesDaysById[id] || 0;
+    let after = payloadStats.salesDaysById[id] || 0;
+    if (before > 0 && after === 0 && !hubTombstoneAllowsAccountDrop(payload, id, cloudUpdatedAt)) {
+      if (reducedSalesIds.indexOf(id) < 0) reducedSalesIds.push(id);
+    }
+  });
+
+  let destructive = droppedIds.length > 0 || reducedRevIds.length > 0 || reducedSalesIds.length > 0;
+  let allowExplicit = !!hubExplicitHubDataResetPending;
+  let writeAllowed = !destructive || allowExplicit;
+  let action = 'allow';
+  if (destructive && allowExplicit) action = 'allow_explicit_hub_reset';
+  if (destructive && !allowExplicit) action = 'block_destructive_account_drop';
+
+  let log = {
+    tag: '[hubDestructivePushGuard]',
+    caller: callerHint || '',
+    cloudUpdatedAt: cloudUpdatedAt,
+    localUpdatedAt: typeof hubLocalUpdatedAt !== 'undefined' ? hubLocalUpdatedAt : null,
+    preferLocal: (typeof hubLocalUpdatedAt !== 'undefined' ? hubLocalUpdatedAt : 0) >= cloudUpdatedAt,
+    droppedAccountIds: droppedIds.slice(0, 50),
+    droppedAccountIdCount: droppedIds.length,
+    reducedRevAccountIds: reducedRevIds.slice(0, 50),
+    reducedSalesAccountIds: reducedSalesIds.slice(0, 50),
+    explicitHubReset: allowExplicit,
+    explicitHubResetReason: hubExplicitHubDataResetReason,
+    action: action,
+    writeAllowed: writeAllowed
+  };
+  try {
+    console.log(log.tag, log);
+  } catch (e) {}
+
+  return {
+    writeAllowed: writeAllowed,
+    blocked: !writeAllowed,
+    action: action,
+    log: log,
+    droppedIds: droppedIds,
+    reducedRevIds: reducedRevIds,
+    reducedSalesIds: reducedSalesIds
+  };
+}
+
 function hubApplyPreservedOrcaPayloadLocally(payload) {
   if (!payload || typeof settings === 'undefined') return;
   let s = payload.settings || {};
@@ -634,6 +864,9 @@ function hubPushCloudDoc(force, _cloudDocOpt, callerHint) {
 
   function buildGuardedPayload(cloudDoc) {
     if (cloudDoc) hubEnrichLocalFromCloud(cloudDoc);
+    let preferLocal =
+      (typeof hubLocalUpdatedAt !== 'undefined' ? Number(hubLocalUpdatedAt) || 0 : 0) >=
+      hubCloudUpdatedAt(cloudDoc);
     let payload = hubPackFirestorePayload(Date.now());
     let guarded = hubGuardOrcaPayloadBeforePush(
       payload,
@@ -644,61 +877,122 @@ function hubPushCloudDoc(force, _cloudDocOpt, callerHint) {
     if (guarded.blocked || guarded.action === 'allow_explicit_orca_delete') {
       hubApplyPreservedOrcaPayloadLocally(payload);
     }
-    return { payload: payload, guarded: guarded };
+    let destructive = hubGuardDestructiveHubPayloadBeforePush(
+      payload,
+      cloudDoc,
+      callerHint || 'hubPushCloudDoc'
+    );
+    try {
+      console.log('[hubCloudSave] pre-write', {
+        caller: callerHint || 'hubPushCloudDoc',
+        localUpdatedAt: typeof hubLocalUpdatedAt !== 'undefined' ? hubLocalUpdatedAt : null,
+        cloudUpdatedAt: hubCloudUpdatedAt(cloudDoc),
+        lastSeenCloudUpdatedAt: hubLastSeenCloudUpdatedAt,
+        preferLocal: preferLocal,
+        orcaAction: guarded.action,
+        destructiveAction: destructive.action,
+        droppedAccountIds: destructive.droppedIds && destructive.droppedIds.slice(0, 20),
+        reducedRevAccountIds: destructive.reducedRevIds && destructive.reducedRevIds.slice(0, 20),
+        reducedSalesAccountIds: destructive.reducedSalesIds && destructive.reducedSalesIds.slice(0, 20),
+        writeAllowed: !!destructive.writeAllowed
+      });
+    } catch (e) {}
+    return {
+      payload: payload,
+      guarded: guarded,
+      destructive: destructive,
+      preferLocal: preferLocal
+    };
   }
 
   function attempt(n) {
-    // Always fetch latest cloud, merge into local, then pack.
-    return hubFetchCloudDoc().then(function (cloudAtStart) {
-      let built = buildGuardedPayload(cloudAtStart);
-      let hash = hubComputeContentHash(hubUnpackFirestorePayload(built.payload));
-      if (!force && hash === hubLastPushedHash) {
+    return hubFetchCloudWriteGate(false).then(function (gate) {
+      if (hubIsCloudWriteGateDocSuspended(gate)) {
+        try {
+          console.log('[hubCloudWriteGate] block hubPushCloudDoc remote suspended', {
+            caller: callerHint || '',
+            reason: gate && gate.reason,
+            expiresAt: gate && gate.expiresAt
+          });
+        } catch (e) {}
         hubSetSyncStatus('done');
         return false;
       }
 
-      // Re-fetch immediately before write. If another device/tab updated
-      // mid-flight, re-merge and rebuild payload before set().
-      return hubFetchCloudDoc().then(function (cloudJustBeforeWrite) {
-        if (hubCloudDocChanged(cloudAtStart, cloudJustBeforeWrite)) {
-          if (n + 1 < maxAttempts) {
-            console.log('[hubCloudSave] cloud changed mid-flight; re-merge and retry', {
-              attempt: n + 1,
-              prevUpdatedAt: hubCloudUpdatedAt(cloudAtStart),
-              nextUpdatedAt: hubCloudUpdatedAt(cloudJustBeforeWrite),
-              caller: callerHint || 'hubPushCloudDoc'
-            });
-            return attempt(n + 1);
-          }
-          // Last attempt: rebuild from the freshest cloud, then write.
-          console.log('[hubCloudSave] cloud changed mid-flight; final rematch before write', {
-            prevUpdatedAt: hubCloudUpdatedAt(cloudAtStart),
-            nextUpdatedAt: hubCloudUpdatedAt(cloudJustBeforeWrite),
-            caller: callerHint || 'hubPushCloudDoc'
-          });
-          built = buildGuardedPayload(cloudJustBeforeWrite);
-          hash = hubComputeContentHash(hubUnpackFirestorePayload(built.payload));
+      // Always fetch latest cloud, merge into local, then pack.
+      return hubFetchCloudDoc().then(function (cloudAtStart) {
+        let built = buildGuardedPayload(cloudAtStart);
+        if (built.destructive && built.destructive.blocked) {
+          hubSetSyncStatus('done');
+          return false;
+        }
+        let hash = hubComputeContentHash(hubUnpackFirestorePayload(built.payload));
+        if (!force && hash === hubLastPushedHash) {
+          hubSetSyncStatus('done');
+          return false;
         }
 
-        console.log('[hubOrcaPushGuard] ref.set about to write', {
-          cloudOrca: built.guarded.cloudCounts,
-          payloadOrca: built.guarded.payloadCounts,
-          explicitOrcaDelete: !!hubExplicitOrcaDeletePending,
-          action: built.guarded.action,
-          writeAllowed: true,
-          orcaEmptyWipeBlocked: !!built.guarded.blocked,
-          schemaVersion: built.payload.schemaVersion,
-          rematchAttempts: n,
-          caller: (built.guarded.log && built.guarded.log.caller) || callerHint || 'hubPushCloudDoc'
-        });
-
-        return ref.set(built.payload).then(function () {
-          hubLastPushedHash = hash;
-          if (built.guarded.action === 'allow_explicit_orca_delete') {
-            hubClearExplicitOrcaDelete();
+        // Re-fetch immediately before write. If another device/tab updated
+        // mid-flight, re-merge and rebuild payload before set().
+        return hubFetchCloudDoc().then(function (cloudJustBeforeWrite) {
+          let startUa = hubCloudUpdatedAt(cloudAtStart);
+          let freshUa = hubCloudUpdatedAt(cloudJustBeforeWrite);
+          // Stale client: cloud moved ahead of the doc we merged → rematch.
+          if (hubCloudDocChanged(cloudAtStart, cloudJustBeforeWrite) ||
+              (freshUa > 0 && freshUa > startUa) ||
+              (hubLastSeenCloudUpdatedAt > 0 && freshUa > hubLastSeenCloudUpdatedAt && n === 0)) {
+            if (n + 1 < maxAttempts) {
+              console.log('[hubCloudSave] cloud changed mid-flight; re-merge and retry', {
+                attempt: n + 1,
+                prevUpdatedAt: startUa,
+                nextUpdatedAt: freshUa,
+                caller: callerHint || 'hubPushCloudDoc'
+              });
+              return attempt(n + 1);
+            }
+            console.log('[hubCloudSave] cloud changed mid-flight; final rematch before write', {
+              prevUpdatedAt: startUa,
+              nextUpdatedAt: freshUa,
+              caller: callerHint || 'hubPushCloudDoc'
+            });
+            built = buildGuardedPayload(cloudJustBeforeWrite);
+            if (built.destructive && built.destructive.blocked) {
+              hubSetSyncStatus('done');
+              return false;
+            }
+            hash = hubComputeContentHash(hubUnpackFirestorePayload(built.payload));
           }
-          hubSetSyncStatus('done');
-          return true;
+
+          console.log('[hubOrcaPushGuard] ref.set about to write', {
+            cloudOrca: built.guarded.cloudCounts,
+            payloadOrca: built.guarded.payloadCounts,
+            explicitOrcaDelete: !!hubExplicitOrcaDeletePending,
+            action: built.guarded.action,
+            destructiveAction: built.destructive && built.destructive.action,
+            writeAllowed: !(built.destructive && built.destructive.blocked),
+            orcaEmptyWipeBlocked: !!built.guarded.blocked,
+            schemaVersion: built.payload.schemaVersion,
+            rematchAttempts: n,
+            caller: (built.guarded.log && built.guarded.log.caller) || callerHint || 'hubPushCloudDoc'
+          });
+
+          if (built.destructive && built.destructive.blocked) {
+            hubSetSyncStatus('done');
+            return false;
+          }
+
+          return ref.set(built.payload).then(function () {
+            hubLastPushedHash = hash;
+            hubLastSeenCloudUpdatedAt = Number(built.payload.updatedAt) || Date.now();
+            if (built.guarded.action === 'allow_explicit_orca_delete') {
+              hubClearExplicitOrcaDelete();
+            }
+            if (built.destructive && built.destructive.action === 'allow_explicit_hub_reset') {
+              hubClearExplicitHubDataReset();
+            }
+            hubSetSyncStatus('done');
+            return true;
+          });
         });
       });
     });
@@ -711,20 +1005,28 @@ function hubPushCloudDoc(force, _cloudDocOpt, callerHint) {
 }
 
 function hubDeleteCloudData() {
+  if (typeof hubIsCloudWriteEnabled === 'function' && !hubIsCloudWriteEnabled()) {
+    return Promise.resolve(false);
+  }
   if (hubAreAutomaticCloudWritesBlocked()) {
     try {
       console.log('[hubCloudWriteGate] block hubDeleteCloudData');
     } catch (e) {}
     return Promise.resolve(false);
   }
-  if (typeof hubIsCloudWriteEnabled === 'function' && !hubIsCloudWriteEnabled()) {
-    return Promise.resolve(false);
-  }
   if (!hubFirebaseReady || !hubFirebaseUid) return Promise.resolve(false);
   let ref = hubFirestoreDocRef();
   if (!ref) return Promise.resolve(false);
-  hubLastPushedHash = '';
-  return ref.delete().catch(function () { return false; });
+  return hubFetchCloudWriteGate(true).then(function (gate) {
+    if (hubIsCloudWriteGateDocSuspended(gate)) {
+      try {
+        console.log('[hubCloudWriteGate] block hubDeleteCloudData remote suspended');
+      } catch (e) {}
+      return false;
+    }
+    hubLastPushedHash = '';
+    return ref.delete().catch(function () { return false; });
+  });
 }
 
 function hubRefreshViewsAfterSync(viewState) {
@@ -993,8 +1295,16 @@ if (typeof window !== 'undefined') {
   window.hubPushCloudDoc = hubPushCloudDoc;
   window.hubMarkExplicitOrcaDelete = hubMarkExplicitOrcaDelete;
   window.hubClearExplicitOrcaDelete = hubClearExplicitOrcaDelete;
+  window.hubMarkExplicitHubDataReset = hubMarkExplicitHubDataReset;
+  window.hubClearExplicitHubDataReset = hubClearExplicitHubDataReset;
   window.hubGuardOrcaPayloadBeforePush = hubGuardOrcaPayloadBeforePush;
+  window.hubGuardDestructiveHubPayloadBeforePush = hubGuardDestructiveHubPayloadBeforePush;
+  window.hubCollectHubPayloadAccountStats = hubCollectHubPayloadAccountStats;
   window.hubCountOrcaInFirestorePayload = hubCountOrcaInFirestorePayload;
+  window.hubFetchCloudWriteGate = hubFetchCloudWriteGate;
+  window.hubSetCloudWriteGateSuspended = hubSetCloudWriteGateSuspended;
+  window.hubWriteGateDocRef = hubWriteGateDocRef;
+  window.hubIsCloudWriteGateDocSuspended = hubIsCloudWriteGateDocSuspended;
   window.hubEnrichLocalFromCloud = hubEnrichLocalFromCloud;
   window.hubEnrichLocalOrcaFromCloud = hubEnrichLocalOrcaFromCloud;
   window.hubDeleteCloudData = hubDeleteCloudData;
