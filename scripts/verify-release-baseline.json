@@ -1,5 +1,5 @@
 {
-  "minPassed": 413,
-  "note": "Baseline PASS count for npm run verify:release. Raise when adding tests; never lower without documented reason.",
-  "updatedAt": "2026-07-25"
+  "minPassed": 508,
+  "note": "Baseline PASS count for npm run verify:release. Raised after cloud write gate verify (+14) on top of RAM localOnly (+21).",
+  "updatedAt": "2026-09-16"
 }

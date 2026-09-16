@@ -15,6 +15,141 @@ var hubLastPushedHash = '';
 var hubFirebaseReady = false;
 var hubSyncState = 'offline';
 var hubSyncInFlight = false;
+/** Nested suspend depth: while > 0, no Firestore push / sync write paths run. */
+var hubCloudWriteSuspendDepth = 0;
+/**
+ * When true (typically after resume from a restore session), automatic
+ * schedule/sync/save paths must not write. Only hubRunExplicitCloudSaveOnce() may write.
+ */
+var hubCloudWriteExplicitOnly = false;
+/** One-shot bypass for hubRunExplicitCloudSaveOnce while explicit-only is armed. */
+var hubCloudWriteExplicitBypass = false;
+
+function hubIsCloudWriteSuspended() {
+  return hubCloudWriteSuspendDepth > 0;
+}
+
+function hubIsCloudWriteExplicitOnly() {
+  return !!hubCloudWriteExplicitOnly;
+}
+
+/** True when automatic Firestore writes must not run. */
+function hubAreAutomaticCloudWritesBlocked() {
+  if (hubCloudWriteExplicitBypass) return false;
+  return hubIsCloudWriteSuspended() || hubIsCloudWriteExplicitOnly();
+}
+
+function hubClearCloudSaveTimerAndQueue(reason) {
+  if (hubCloudSaveTimer) {
+    clearTimeout(hubCloudSaveTimer);
+    hubCloudSaveTimer = null;
+  }
+  hubCloudSaveQueued = false;
+  try {
+    console.log('[hubCloudWriteGate] clear timer/queue', { reason: reason || '' });
+  } catch (e) {}
+}
+
+/**
+ * Suspend all cloud write / sync-push paths (timer, queue, visibility sync, ref.set).
+ * Does not rely on window.* monkey-patches. Safe to nest.
+ */
+function hubSuspendCloudWrites(reason) {
+  hubCloudWriteSuspendDepth += 1;
+  hubClearCloudSaveTimerAndQueue('suspend:' + (reason || ''));
+  try {
+    console.log('[hubCloudWriteGate] suspend', {
+      depth: hubCloudWriteSuspendDepth,
+      explicitOnly: hubCloudWriteExplicitOnly,
+      reason: reason || ''
+    });
+  } catch (e) {}
+  return hubCloudWriteSuspendDepth;
+}
+
+/**
+ * End one suspend level. Does NOT write to Firestore.
+ * @param {string} [reason]
+ * @param {{explicitOnly?: boolean, allowAutomatic?: boolean}} [opts]
+ *   - explicitOnly:true (default when leaving suspend) → auto paths stay blocked until
+ *     hubRunExplicitCloudSaveOnce() or hubAllowAutomaticCloudWrites()
+ *   - allowAutomatic:true → return to normal automatic sync (use carefully)
+ */
+function hubResumeCloudWrites(reason, opts) {
+  opts = opts || {};
+  if (hubCloudWriteSuspendDepth > 0) hubCloudWriteSuspendDepth -= 1;
+  // Never flush stale saves on resume.
+  hubClearCloudSaveTimerAndQueue('resume:' + (reason || ''));
+  if (hubCloudWriteSuspendDepth === 0) {
+    if (opts.allowAutomatic === true) {
+      hubCloudWriteExplicitOnly = false;
+    } else if (opts.explicitOnly === false) {
+      hubCloudWriteExplicitOnly = false;
+    } else {
+      // Default: resume does not re-enable automatic cloud writes.
+      hubCloudWriteExplicitOnly = true;
+    }
+  }
+  try {
+    console.log('[hubCloudWriteGate] resume', {
+      depth: hubCloudWriteSuspendDepth,
+      explicitOnly: hubCloudWriteExplicitOnly,
+      reason: reason || ''
+    });
+  } catch (e) {}
+  return hubCloudWriteSuspendDepth;
+}
+
+function hubAllowAutomaticCloudWrites(reason) {
+  hubCloudWriteExplicitOnly = false;
+  hubCloudWriteExplicitBypass = false;
+  hubClearCloudSaveTimerAndQueue('allow-automatic:' + (reason || ''));
+  try {
+    console.log('[hubCloudWriteGate] allow automatic', { reason: reason || '' });
+  } catch (e) {}
+}
+
+function hubArmCloudWriteExplicitOnly(reason) {
+  hubCloudWriteExplicitOnly = true;
+  hubClearCloudSaveTimerAndQueue('arm-explicit:' + (reason || ''));
+  try {
+    console.log('[hubCloudWriteGate] arm explicit-only', { reason: reason || '' });
+  } catch (e) {}
+}
+
+/**
+ * Single intentional Firestore push. Safe to call after resume(explicitOnly).
+ * Does not leave queued/timer saves behind.
+ */
+function hubRunExplicitCloudSaveOnce(reason) {
+  if (hubIsCloudWriteSuspended()) {
+    try {
+      console.log('[hubCloudWriteGate] explicit save blocked while suspended', reason || '');
+    } catch (e) {}
+    return Promise.resolve(false);
+  }
+  hubClearCloudSaveTimerAndQueue('before-explicit:' + (reason || ''));
+  hubCloudWriteExplicitBypass = true;
+  return hubRunCloudSave(true).then(function (ok) {
+    hubCloudWriteExplicitBypass = false;
+    hubClearCloudSaveTimerAndQueue('after-explicit:' + (reason || ''));
+    // Stay in explicit-only until operator clears it (prevents follow-on auto sync).
+    hubCloudWriteExplicitOnly = true;
+    try {
+      console.log('[hubCloudWriteGate] explicit save finished', {
+        ok: !!ok,
+        reason: reason || '',
+        explicitOnly: hubCloudWriteExplicitOnly
+      });
+    } catch (e) {}
+    return ok;
+  }).catch(function (err) {
+    hubCloudWriteExplicitBypass = false;
+    hubCloudWriteExplicitOnly = true;
+    hubClearCloudSaveTimerAndQueue('explicit-error:' + (reason || ''));
+    throw err;
+  });
+}
 
 function hubFirebaseConfigValid() {
   let cfg = typeof HUB_FIREBASE_CONFIG !== 'undefined' ? HUB_FIREBASE_CONFIG : null;
@@ -475,6 +610,17 @@ function hubCloudDocChanged(prev, next) {
 }
 
 function hubPushCloudDoc(force, _cloudDocOpt, callerHint) {
+  if (hubAreAutomaticCloudWritesBlocked()) {
+    try {
+      console.log('[hubCloudWriteGate] block hubPushCloudDoc', {
+        caller: callerHint || '',
+        suspended: hubIsCloudWriteSuspended(),
+        explicitOnly: hubIsCloudWriteExplicitOnly(),
+        bypass: !!hubCloudWriteExplicitBypass
+      });
+    } catch (e) {}
+    return Promise.resolve(false);
+  }
   if (typeof hubIsCloudWriteEnabled === 'function' && !hubIsCloudWriteEnabled()) {
     if (typeof hubRenderLocalDevStatus === 'function') hubRenderLocalDevStatus();
     return Promise.resolve(false);
@@ -565,6 +711,12 @@ function hubPushCloudDoc(force, _cloudDocOpt, callerHint) {
 }
 
 function hubDeleteCloudData() {
+  if (hubAreAutomaticCloudWritesBlocked()) {
+    try {
+      console.log('[hubCloudWriteGate] block hubDeleteCloudData');
+    } catch (e) {}
+    return Promise.resolve(false);
+  }
   if (typeof hubIsCloudWriteEnabled === 'function' && !hubIsCloudWriteEnabled()) {
     return Promise.resolve(false);
   }
@@ -638,6 +790,17 @@ function hubEnrichLocalOrcaFromCloud(cloudDoc) {
 }
 
 function hubRunCloudSave(force) {
+  if (hubAreAutomaticCloudWritesBlocked()) {
+    hubCloudSaveQueued = false;
+    try {
+      console.log('[hubCloudWriteGate] block hubRunCloudSave', {
+        suspended: hubIsCloudWriteSuspended(),
+        explicitOnly: hubIsCloudWriteExplicitOnly(),
+        bypass: !!hubCloudWriteExplicitBypass
+      });
+    } catch (e) {}
+    return Promise.resolve(false);
+  }
   if (typeof hubIsCloudWriteEnabled === 'function' && !hubIsCloudWriteEnabled()) {
     if (typeof hubRenderLocalDevStatus === 'function') hubRenderLocalDevStatus();
     return Promise.resolve(false);
@@ -651,6 +814,10 @@ function hubRunCloudSave(force) {
     return Promise.resolve(false);
   }
   if (hubCloudSaveInFlight) {
+    // Do not queue follow-up saves while explicit-only / restore gates are active.
+    if (hubIsCloudWriteExplicitOnly() && !hubCloudWriteExplicitBypass) {
+      return Promise.resolve(false);
+    }
     hubCloudSaveQueued = true;
     return Promise.resolve(false);
   }
@@ -661,6 +828,10 @@ function hubRunCloudSave(force) {
     return false;
   }).finally(function () {
     hubCloudSaveInFlight = false;
+    if (hubAreAutomaticCloudWritesBlocked()) {
+      hubCloudSaveQueued = false;
+      return;
+    }
     if (hubCloudSaveQueued) {
       hubCloudSaveQueued = false;
       hubRunCloudSave(false);
@@ -669,6 +840,17 @@ function hubRunCloudSave(force) {
 }
 
 function hubScheduleCloudSave(immediate) {
+  if (hubAreAutomaticCloudWritesBlocked()) {
+    hubClearCloudSaveTimerAndQueue('schedule-blocked');
+    try {
+      console.log('[hubCloudWriteGate] block hubScheduleCloudSave', {
+        immediate: !!immediate,
+        suspended: hubIsCloudWriteSuspended(),
+        explicitOnly: hubIsCloudWriteExplicitOnly()
+      });
+    } catch (e) {}
+    return;
+  }
   if (typeof hubIsCloudWriteEnabled === 'function' && !hubIsCloudWriteEnabled()) return;
   if (typeof hubIsAnyOrgSimActive === 'function' && hubIsAnyOrgSimActive()) return;
   if (!hubFirebaseReady || !hubFirebaseUid) return;
@@ -682,6 +864,7 @@ function hubScheduleCloudSave(immediate) {
   }
   hubCloudSaveTimer = setTimeout(function () {
     hubCloudSaveTimer = null;
+    if (hubAreAutomaticCloudWritesBlocked()) return;
     hubRunCloudSave(false);
   }, hubCloudSaveDelayMs);
 }
@@ -702,6 +885,16 @@ function hubApplyCloudDataIfNewer(cloudDoc, localUpdatedAt) {
 function hubSyncHubData() {
   if (typeof hubIsLocalDevMode === 'function' && hubIsLocalDevMode()) {
     if (typeof hubRenderLocalDevStatus === 'function') hubRenderLocalDevStatus();
+    return Promise.resolve(false);
+  }
+  // suspend / explicit-only: pull+push 同期を走らせない（復元セッション中の再汚染・自動WRITE防止）
+  if (hubAreAutomaticCloudWritesBlocked()) {
+    try {
+      console.log('[hubCloudWriteGate] block hubSyncHubData', {
+        suspended: hubIsCloudWriteSuspended(),
+        explicitOnly: hubIsCloudWriteExplicitOnly()
+      });
+    } catch (e) {}
     return Promise.resolve(false);
   }
   if (!hubFirebaseReady || !hubFirebaseUid) {
@@ -784,6 +977,14 @@ function hubBindFirebaseConnectivity() {
 
 if (typeof window !== 'undefined') {
   window.hubScheduleCloudSave = hubScheduleCloudSave;
+  window.hubIsCloudWriteSuspended = hubIsCloudWriteSuspended;
+  window.hubIsCloudWriteExplicitOnly = hubIsCloudWriteExplicitOnly;
+  window.hubAreAutomaticCloudWritesBlocked = hubAreAutomaticCloudWritesBlocked;
+  window.hubSuspendCloudWrites = hubSuspendCloudWrites;
+  window.hubResumeCloudWrites = hubResumeCloudWrites;
+  window.hubAllowAutomaticCloudWrites = hubAllowAutomaticCloudWrites;
+  window.hubArmCloudWriteExplicitOnly = hubArmCloudWriteExplicitOnly;
+  window.hubRunExplicitCloudSaveOnce = hubRunExplicitCloudSaveOnce;
   window.hubSaveNow = function () {
     hubSaveToStorage({ immediate: true });
   };

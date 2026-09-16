@@ -549,15 +549,27 @@ function hubPackRamOrgFromData(data) {
 
 function hubPackRamOrgChart() {
   // シミュレーション中は本番スナップショットのみ永続化（仮組織を書かない）
-  if (typeof simMode !== 'undefined' && simMode &&
-      typeof window !== 'undefined' && window.__ramSimLiveSnapshot) {
-    var snap = window.__ramSimLiveSnapshot;
+  if (typeof simMode !== 'undefined' && simMode) {
+    if (typeof window !== 'undefined' && window.__ramSimLiveSnapshot) {
+      var snap = window.__ramSimLiveSnapshot;
+      return hubPackRamOrgFromData({
+        members: snap.currentData,
+        currentData: snap.currentData,
+        scenarios: typeof scenarios !== 'undefined' ? scenarios : [],
+        rootId: snap.rootId,
+        rootAccountIds: snap.rootAccountIds
+      });
+    }
+    // fail-closed: スナップショット欠落時は live members（sim）を絶対に書かない
+    if (typeof console !== 'undefined' && console.warn) {
+      console.warn('[OUKEI][RAM] simMode without __ramSimLiveSnapshot — packing currentData only');
+    }
     return hubPackRamOrgFromData({
-      members: snap.currentData,
-      currentData: snap.currentData,
+      members: typeof currentData !== 'undefined' ? currentData : [],
+      currentData: typeof currentData !== 'undefined' ? currentData : [],
       scenarios: typeof scenarios !== 'undefined' ? scenarios : [],
-      rootId: snap.rootId,
-      rootAccountIds: snap.rootAccountIds
+      rootId: typeof rootId !== 'undefined' ? rootId : '',
+      rootAccountIds: typeof rootAccountIds !== 'undefined' ? rootAccountIds : []
     });
   }
   return hubPackRamOrgFromData({
@@ -864,6 +876,16 @@ function hubMergeHubSettings(localSettings, cloudSettings, localUpdatedAt, cloud
     cloud.removedRamOrgAccountIds,
     local.removedRamOrgAccountIds
   );
+  // 復元直後など、ローカルが明示的に保護する ID は cloud tombstone でも消さない
+  if (Array.isArray(local.ramRestoredProtectIds) && local.ramRestoredProtectIds.length) {
+    let protect = {};
+    local.ramRestoredProtectIds.forEach(function (id) { if (id) protect[id] = true; });
+    merged.removedRamOrgAccountIds = merged.removedRamOrgAccountIds.filter(function (id) {
+      return !protect[id];
+    });
+    merged.ramRestoredProtectIds = local.ramRestoredProtectIds.slice();
+    if (local.ramRestoredAt) merged.ramRestoredAt = local.ramRestoredAt;
+  }
   merged.removedEniOrgAccountIds = hubUnionStringIds(
     cloud.removedEniOrgAccountIds,
     local.removedEniOrgAccountIds
@@ -1161,10 +1183,13 @@ function hubNormalizeLoadedData(raw) {
 
 function hubPackLocalData() {
   var ram = hubPackRamOrgChart();
+  var settingsPack = typeof settings !== 'undefined' ? settings : hubCreateDefaultSettings();
+  // sim 中は tombstone / 入力アカウントを本番スナップショットに固定（settings 汚染を永続化しない）
+  settingsPack = hubSanitizeSettingsForSimPack(settingsPack);
   return {
     members: ram.members,
     currentData: ram.currentData,
-    settings: typeof settings !== 'undefined' ? settings : hubCreateDefaultSettings(),
+    settings: settingsPack,
     scenarios: ram.scenarios,
     rootId: ram.rootId,
     rootAccountIds: ram.rootAccountIds,
@@ -1172,6 +1197,217 @@ function hubPackLocalData() {
     eniOrgChart: typeof eniPackOrgChart === 'function' ? eniPackOrgChart() : hubCreateEmptyEniOrgChart(),
     updatedAt: hubLocalUpdatedAt
   };
+}
+
+function hubDeepCloneJson(value) {
+  try {
+    return JSON.parse(JSON.stringify(value == null ? null : value));
+  } catch (e) {
+    return value;
+  }
+}
+
+/** During any org sim, freeze production-affecting settings fields from live snapshots. */
+function hubSanitizeSettingsForSimPack(settingsObj) {
+  var out = hubDeepCloneJson(settingsObj || hubCreateDefaultSettings());
+  var ramSnap = (typeof window !== 'undefined') ? window.__ramSimLiveSnapshot : null;
+  var orcaSnap = (typeof window !== 'undefined') ? window.__orcaSimLiveSnapshot : null;
+  var eniSnap = (typeof window !== 'undefined') ? window.__eniSimLiveSnapshot : null;
+  if (typeof simMode !== 'undefined' && simMode && ramSnap) {
+    if (Array.isArray(ramSnap.removedRamOrgAccountIds)) {
+      out.removedRamOrgAccountIds = hubDeepCloneJson(ramSnap.removedRamOrgAccountIds);
+    }
+    if (Array.isArray(ramSnap.ramInputAccounts)) {
+      out.ramInputAccounts = hubDeepCloneJson(ramSnap.ramInputAccounts);
+    }
+  }
+  if (typeof orcaSimMode !== 'undefined' && orcaSimMode && orcaSnap) {
+    if (Array.isArray(orcaSnap.removedOrcaOrgAccountIds)) {
+      out.removedOrcaOrgAccountIds = hubDeepCloneJson(orcaSnap.removedOrcaOrgAccountIds);
+    }
+    if (orcaSnap.removedOrcaOrgAccountIdTimes && typeof orcaSnap.removedOrcaOrgAccountIdTimes === 'object') {
+      out.removedOrcaOrgAccountIdTimes = hubDeepCloneJson(orcaSnap.removedOrcaOrgAccountIdTimes);
+    }
+    if (Array.isArray(orcaSnap.orcaInputAccounts)) {
+      out.orcaInputAccounts = hubDeepCloneJson(orcaSnap.orcaInputAccounts);
+    }
+  }
+  if (typeof eniSimMode !== 'undefined' && eniSimMode && eniSnap) {
+    if (Array.isArray(eniSnap.removedEniOrgAccountIds)) {
+      out.removedEniOrgAccountIds = hubDeepCloneJson(eniSnap.removedEniOrgAccountIds);
+    }
+    if (Array.isArray(eniSnap.eniInputAccounts)) {
+      out.eniInputAccounts = hubDeepCloneJson(eniSnap.eniInputAccounts);
+    }
+  }
+  return out;
+}
+
+var HUB_RAM_ORG_BACKUP_KEY = 'oukei_hub_v15_ram_org_backup';
+var HUB_RAM_SIM_KEY = 'oukei_hub_v15_ram_simulation';
+
+function hubRamOrgBackupStorageKey() {
+  return hubActiveUid ? (HUB_RAM_ORG_BACKUP_KEY + ':' + hubActiveUid) : HUB_RAM_ORG_BACKUP_KEY;
+}
+
+function hubRamSimulationStorageKey() {
+  return hubActiveUid ? (HUB_RAM_SIM_KEY + ':' + hubActiveUid) : HUB_RAM_SIM_KEY;
+}
+
+/** Persist last known production RAM org chart (1 generation) before overwrite. */
+function hubBackupRamOrgChartBeforeProductionSave(packed) {
+  if (typeof localStorage === 'undefined') return;
+  try {
+    var simActive = typeof hubIsAnyOrgSimActive === 'function'
+      ? hubIsAnyOrgSimActive()
+      : !!(typeof simMode !== 'undefined' && simMode);
+    if (simActive) return;
+    var prevKey = hubRamOrgBackupStorageKey();
+    // Prefer previous localStorage hub blob (true pre-overwrite snapshot)
+    var existingRaw = null;
+    try { existingRaw = localStorage.getItem(hubResolveStorageKey()); } catch (eRead) {}
+    var payload = null;
+    if (existingRaw) {
+      try {
+        var existing = JSON.parse(existingRaw);
+        payload = {
+          savedAt: new Date().toISOString(),
+          members: existing.members || [],
+          currentData: existing.currentData || [],
+          rootId: existing.rootId || '',
+          rootAccountIds: existing.rootAccountIds || [],
+          scenarios: existing.scenarios || [],
+          ramInputAccounts: existing.settings ? (existing.settings.ramInputAccounts || []) : [],
+          removedRamOrgAccountIds: existing.settings ? (existing.settings.removedRamOrgAccountIds || []) : []
+        };
+      } catch (eParse) {}
+    }
+    if (!payload && packed) {
+      payload = {
+        savedAt: new Date().toISOString(),
+        members: packed.members || [],
+        currentData: packed.currentData || [],
+        rootId: packed.rootId || '',
+        rootAccountIds: packed.rootAccountIds || [],
+        scenarios: packed.scenarios || [],
+        ramInputAccounts: packed.settings ? (packed.settings.ramInputAccounts || []) : [],
+        removedRamOrgAccountIds: packed.settings ? (packed.settings.removedRamOrgAccountIds || []) : []
+      };
+    }
+    if (!payload) return;
+    var prev = localStorage.getItem(prevKey);
+    if (prev) {
+      try { localStorage.setItem(prevKey + ':prev', prev); } catch (ePrev) {}
+    }
+    localStorage.setItem(prevKey, JSON.stringify(payload));
+  } catch (e) {}
+}
+
+/** Save RAM simulation scenarios to a dedicated key (never used as production org). */
+function hubPersistRamSimulationSideStore(scenariosList) {
+  if (typeof localStorage === 'undefined') return;
+  try {
+    localStorage.setItem(hubRamSimulationStorageKey(), JSON.stringify({
+      savedAt: new Date().toISOString(),
+      scenarios: Array.isArray(scenariosList) ? scenariosList : []
+    }));
+  } catch (e) {}
+}
+
+/**
+ * Surgical RAM production restore from a .hub / packed object.
+ * Does NOT wipe revenueLog / ORCA / ENI. Clears tombstones for restored member ids.
+ * When localOnly (default for surgical restore), cloud writes are suspended for the call.
+ */
+function hubRestoreRamOrgChartFromBackup(backup, opts) {
+  opts = opts || {};
+  if (!backup || typeof backup !== 'object') return { ok: false, error: 'invalid backup' };
+  var deep = hubDeepCloneJson;
+  var srcMembers = Array.isArray(backup.members) ? backup.members : [];
+  var srcCurrent = Array.isArray(backup.currentData) && backup.currentData.length
+    ? backup.currentData
+    : srcMembers;
+  if (!srcMembers.length) return { ok: false, error: 'backup has no RAM members' };
+
+  var wantLocalOnly = opts.localOnly !== false && !opts.cloud;
+  var keepSuspended = !!opts.keepCloudSuspended;
+  var suspended = false;
+  if (wantLocalOnly && typeof hubSuspendCloudWrites === 'function') {
+    hubSuspendCloudWrites('hubRestoreRamOrgChartFromBackup');
+    suspended = true;
+  }
+
+  try {
+  // Backup current corrupted state first
+  try {
+    hubBackupRamOrgChartBeforeProductionSave(hubPackLocalData());
+  } catch (eBak) {}
+
+  var liveIds = {};
+  srcMembers.forEach(function (m) { if (m && m.id) liveIds[m.id] = true; });
+
+  members = deep(srcMembers);
+  currentData = deep(srcCurrent);
+  rootId = typeof backup.rootId === 'string' ? backup.rootId : (members[0] && members[0].id) || '';
+  rootAccountIds = Array.isArray(backup.rootAccountIds) && backup.rootAccountIds.length
+    ? deep(backup.rootAccountIds)
+    : (rootId ? [rootId] : []);
+  focusId = rootId;
+
+  if (typeof settings === 'undefined') {
+    return { ok: false, error: 'settings missing' };
+  }
+
+  // Restore input accounts if present in backup settings or top-level
+  var bakSettings = backup.settings || {};
+  var bakInputs = Array.isArray(backup.ramInputAccounts)
+    ? backup.ramInputAccounts
+    : (Array.isArray(bakSettings.ramInputAccounts) ? bakSettings.ramInputAccounts : null);
+  if (bakInputs && bakInputs.length) {
+    settings.ramInputAccounts = deep(bakInputs);
+  }
+
+  // Drop tombstones for anyone we just restored (prevents immediate re-wipe on merge)
+  if (Array.isArray(settings.removedRamOrgAccountIds)) {
+    settings.removedRamOrgAccountIds = settings.removedRamOrgAccountIds.filter(function (id) {
+      return !liveIds[id];
+    });
+  }
+  // Protect restored ids from cloud tombstone re-union
+  settings.ramRestoredProtectIds = Object.keys(liveIds);
+  settings.ramRestoredAt = new Date().toISOString();
+
+  simMode = false;
+  if (typeof window !== 'undefined') window.__ramSimLiveSnapshot = null;
+
+  if (opts.skipSave) {
+    return {
+      ok: true,
+      members: members.length,
+      roots: rootAccountIds.length,
+      localOnly: wantLocalOnly,
+      cloudSuspended: suspended && (keepSuspended || hubIsCloudWriteSuspended && hubIsCloudWriteSuspended())
+    };
+  }
+  if (typeof hubSaveToStorage === 'function') {
+    hubSaveToStorage({ localOnly: true, immediate: true });
+  }
+  // RAM canvas only — do NOT call orcaRender() (it always hubSaveToStorage without localOnly).
+  if (opts.render !== false && typeof render === 'function') render();
+  return {
+    ok: true,
+    members: members.length,
+    roots: rootAccountIds.length,
+    protectedIds: settings.ramRestoredProtectIds.length,
+    localOnly: true,
+    cloudSuspended: suspended,
+    keepCloudSuspended: keepSuspended
+  };
+  } finally {
+    if (suspended && !keepSuspended && typeof hubResumeCloudWrites === 'function') {
+      hubResumeCloudWrites('hubRestoreRamOrgChartFromBackup');
+    }
+  }
 }
 
 function hubPackFirestorePayload(updatedAt) {
@@ -1297,7 +1533,15 @@ function hubRestoreActiveOrgSimWorkingState(state) {
         rootId: typeof rootId !== 'undefined' ? rootId : '',
         rootAccountIds: deep(typeof rootAccountIds !== 'undefined' ? rootAccountIds : []),
         focusId: typeof focusId !== 'undefined' ? focusId : '',
-        zoom: typeof zoom !== 'undefined' ? zoom : 1
+        zoom: typeof zoom !== 'undefined' ? zoom : 1,
+        removedRamOrgAccountIds: deep(
+          (typeof settings !== 'undefined' && Array.isArray(settings.removedRamOrgAccountIds))
+            ? settings.removedRamOrgAccountIds : []
+        ),
+        ramInputAccounts: deep(
+          (typeof settings !== 'undefined' && Array.isArray(settings.ramInputAccounts))
+            ? settings.ramInputAccounts : []
+        )
       };
     }
     members = deep(state.ram.members);
@@ -1477,7 +1721,14 @@ function hubSaveToStorage(options) {
     let now = Date.now();
     hubLocalUpdatedAt = now;
     // pack は sim 中でも本番スナップショットのみを書く
-    localStorage.setItem(hubResolveStorageKey(), JSON.stringify(Object.assign(hubPackLocalData(), { updatedAt: now })));
+    let packed = Object.assign(hubPackLocalData(), { updatedAt: now });
+    // 本番保存直前に1世代バックアップ（sim 中はスキップ）
+    hubBackupRamOrgChartBeforeProductionSave(packed);
+    localStorage.setItem(hubResolveStorageKey(), JSON.stringify(packed));
+    // シミュレーション専用サイドストア（本番キーとは分離）
+    try {
+      hubPersistRamSimulationSideStore(packed.scenarios);
+    } catch (eSim) {}
     let simActive = typeof hubIsAnyOrgSimActive === 'function'
       ? hubIsAnyOrgSimActive()
       : !!(
@@ -1486,7 +1737,11 @@ function hubSaveToStorage(options) {
         (typeof eniSimMode !== 'undefined' && eniSimMode)
       );
     // シミュレーション中はクラウドへ書かない（push→enrich→apply で sim が落ちる経路を遮断）
-    let cloudWriteOk = !options.localOnly && !simActive &&
+    // cloud-write suspend / explicit-only 中も自動クラウド予約しない
+    let cloudBlocked = typeof hubAreAutomaticCloudWritesBlocked === 'function'
+      ? hubAreAutomaticCloudWritesBlocked()
+      : (typeof hubIsCloudWriteSuspended === 'function' && hubIsCloudWriteSuspended());
+    let cloudWriteOk = !options.localOnly && !simActive && !cloudBlocked &&
       (typeof hubIsCloudWriteEnabled !== 'function' || hubIsCloudWriteEnabled());
     if (cloudWriteOk && typeof hubScheduleCloudSave === 'function') {
       hubScheduleCloudSave(options.immediate === true);
@@ -1585,6 +1840,42 @@ if (typeof window !== 'undefined') {
   window.hubFilterOrgChartByRemovedIds = hubFilterOrgChartByRemovedIds;
   window.hubRepairOrphanOrgParents = hubRepairOrphanOrgParents;
   window.hubPackRamOrgChart = hubPackRamOrgChart;
+  window.hubRestoreRamOrgChartFromBackup = hubRestoreRamOrgChartFromBackup;
+  window.hubBackupRamOrgChartBeforeProductionSave = hubBackupRamOrgChartBeforeProductionSave;
+  window.hubPersistRamSimulationSideStore = hubPersistRamSimulationSideStore;
+  window.hubRamOrgBackupStorageKey = hubRamOrgBackupStorageKey;
+  window.hubRamSimulationStorageKey = hubRamSimulationStorageKey;
+  window.hubRestoreRamOrgFromFilePicker = function hubRestoreRamOrgFromFilePicker(opts) {
+    opts = opts || {};
+    return new Promise(function (resolve) {
+      var input = document.createElement('input');
+      input.type = 'file';
+      input.accept = '.hub,.json,application/json';
+      input.onchange = function () {
+        var f = input.files && input.files[0];
+        if (!f) { resolve({ ok: false, error: 'cancelled' }); return; }
+        var reader = new FileReader();
+        reader.onload = function () {
+          try {
+            var data = JSON.parse(String(reader.result || '{}'));
+            var result = hubRestoreRamOrgChartFromBackup(data, {
+              localOnly: opts.localOnly !== false ? !opts.cloud : false
+            });
+            if (typeof showToast === 'function') {
+              showToast(result && result.ok
+                ? ('✅ RAM組織図を復元しました（' + result.members + '名）')
+                : ('⚠️ 復元失敗: ' + ((result && result.error) || 'unknown')));
+            }
+            resolve(result);
+          } catch (e) {
+            resolve({ ok: false, error: String(e && e.message || e) });
+          }
+        };
+        reader.readAsText(f);
+      };
+      input.click();
+    });
+  };
   window.hubRamOrgChartScore = hubRamOrgChartScore;
   window.hubRebuildOrcaOrgFromSettings = hubRebuildOrcaOrgFromSettings;
   window.hubResolveOrcaOrgChart = hubResolveOrcaOrgChart;

@@ -152,6 +152,20 @@ const SUITES = [
     needsServer: true,
     optional: true,
     cmd: ['node', 'scripts/verify-eni-optin.mjs']
+  },
+  {
+    id: 'ram-localonly-restore',
+    label: 'RAM localOnly restore (no Firestore writes)',
+    category: 'Organization integrity',
+    needsServer: true,
+    cmd: ['node', 'scripts/verify-ram-localonly-restore.mjs']
+  },
+  {
+    id: 'cloud-write-gate',
+    label: 'Cloud write gate suspend/resume/explicit-only',
+    category: 'Organization integrity',
+    needsServer: true,
+    cmd: ['node', 'scripts/verify-cloud-write-gate.mjs']
   }
 ];
 
