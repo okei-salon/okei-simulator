@@ -54,6 +54,22 @@ var PF_MOCK_STACKED = [
 
 var PF_STACK_ORDER = ['ram', 'orca', 'cary', 'genesis', 'eni', 'other'];
 
+/** Portfolio project cards: row1 RAM|ORCA, row2 ENI|MATRIX (mobile: single column same order). */
+var PF_PROJECT_CARD_ORDER = ['ram', 'orca', 'eni', 'matrix'];
+
+function pfSortPortfolioProjectRows(rows) {
+  let orderMap = {};
+  PF_PROJECT_CARD_ORDER.forEach(function (key, i) { orderMap[key] = i; });
+  return (rows || []).slice().sort(function (a, b) {
+    let ai = orderMap[a.key];
+    let bi = orderMap[b.key];
+    if (ai == null && bi == null) return 0;
+    if (ai == null) return 1;
+    if (bi == null) return -1;
+    return ai - bi;
+  });
+}
+
 var pfGoalEditSnapshot = '';
 var pfOperatingEditId = null;
 var pfOperatingFormMode = 'project';
@@ -1530,12 +1546,8 @@ function pfRenderProjectCard(row) {
 function pfRenderProjectCards() {
   let el = document.getElementById('pfProjectGrid');
   if (!el) return;
-  let rows = pfGetEnabledProjectRows();
-  el.style.setProperty('--pf-cols', String(
-    typeof homeResponsiveGridCols === 'function'
-      ? homeResponsiveGridCols(rows.length)
-      : Math.min(Math.max(rows.length, 1), 5)
-  ));
+  let rows = pfSortPortfolioProjectRows(pfGetEnabledProjectRows());
+  el.removeAttribute('style');
   el.setAttribute('data-count', rows.length);
   if (!rows.length) {
     if (typeof pjClearHtmlKeepIconsCache === 'function') pjClearHtmlKeepIconsCache(el);
