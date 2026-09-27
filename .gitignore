@@ -1,3 +1,18 @@
 node_modules/
 .firebase/
 .DS_Store
+
+# Local-only restore / verification artifacts (not for git deploy)
+local/
+tmp/
+
+# Production backup inputs (keep files locally; do not commit)
+merge-input/*.hub
+merge-input/*BACKUP*
+merge-input/*RESTORE*
+merge-input/*VERIFY*
+
+# Safari / prod restore helper pages (local ops only)
+tools/prod-ram-localonly-restore-README.html
+tools/safari-ram-*.html
+tools/verify-orca-fix-live.html
