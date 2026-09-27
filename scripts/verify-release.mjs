@@ -60,6 +60,13 @@ const SUITES = [
     cmd: ['node', 'scripts/verify-hub-sync-merge.mjs']
   },
   {
+    id: 'hub-multi-device-sync',
+    label: 'Multi-device sync (READ/WRITE split + LWW merge)',
+    category: 'Firestore',
+    cmd: ['node', 'scripts/verify-hub-multi-device-sync.mjs'],
+    needsServer: true
+  },
+  {
     id: 'hub-destructive-guard',
     label: 'Destructive cloud push guard (kai2 wipe block)',
     category: 'Firestore',

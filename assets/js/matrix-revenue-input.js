@@ -214,15 +214,18 @@ function matrixSaveRevenueEntry() {
         vals.matrixBonus
       );
     });
-    if (typeof persistHubSettings === 'function') persistHubSettings();
     if (typeof markActivity === 'function') markActivity();
     if (typeof pdNotifyPerformanceChanged === 'function') {
       pdNotifyPerformanceChanged({ type: 'save', projectKey: 'matrix', dateKey: dateKey });
     }
-    if (typeof render === 'function') render();
     if (typeof hubFinishRevenueInputSave === 'function') {
-      hubFinishRevenueInputSave('✅ MATRIX収益を保存しました');
+      hubFinishRevenueInputSave('✅ MATRIX収益を保存しました', function () {
+        let entry = typeof getRevenueEntry === 'function' ? getRevenueEntry(dateKey) : null;
+        return !!(entry && entry.matrixAccounts && Object.keys(entry.matrixAccounts).length);
+      });
     } else {
+      if (typeof persistHubSettings === 'function') persistHubSettings({ immediate: true });
+      if (typeof render === 'function') render();
       if (typeof refreshHomeAfterRevenueSave === 'function') refreshHomeAfterRevenueSave();
       if (typeof showPage === 'function') showPage('home');
       if (typeof closeModal === 'function') closeModal();

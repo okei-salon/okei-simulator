@@ -621,6 +621,32 @@ function hubPickRicherEniOrgChart(a, b) {
   return hubUnionOrgCharts(left, right, preferRight, hubCreateEmptyEniOrgChart);
 }
 
+/** Account / entry revision for field-level Last-Write-Wins (ms). */
+function hubAccountEntryRevisionMs(ae) {
+  if (!ae || typeof ae !== 'object') return 0;
+  if (ae.revision != null) {
+    let r = Number(ae.revision);
+    if (Number.isFinite(r) && r > 0) return r;
+  }
+  if (ae.updatedAt != null) {
+    let n = Number(ae.updatedAt);
+    if (Number.isFinite(n) && n > 0) return n;
+  }
+  if (ae.savedAt) {
+    let t = Date.parse(String(ae.savedAt));
+    if (Number.isFinite(t)) return t;
+  }
+  return 0;
+}
+
+function hubPickNewerEntry(cloudEntry, localEntry) {
+  let cRev = hubAccountEntryRevisionMs(cloudEntry);
+  let lRev = hubAccountEntryRevisionMs(localEntry);
+  if (lRev > cRev) return localEntry;
+  if (cRev > lRev) return cloudEntry;
+  return localEntry || cloudEntry;
+}
+
 function hubMergeArrayEntriesById(cloudEntries, localEntries, preferLocal) {
   let map = {};
   (cloudEntries || []).forEach(function (entry) {
@@ -632,7 +658,7 @@ function hubMergeArrayEntriesById(cloudEntries, localEntries, preferLocal) {
       map[entry.id] = entry;
       return;
     }
-    map[entry.id] = preferLocal ? entry : map[entry.id];
+    map[entry.id] = hubPickNewerEntry(map[entry.id], entry);
   });
   return Object.keys(map).map(function (id) { return map[id]; });
 }
@@ -658,8 +684,10 @@ function hubMergeAccountMapById(cloudMap, localMap, preferLocal, removedSet) {
     if (removedSet && removedSet[id]) return;
     let c = cloudMap && cloudMap[id];
     let l = localMap && localMap[id];
-    if (c && l) out[id] = preferLocal ? l : c;
-    else if (c) out[id] = c;
+    if (c && l) {
+      let picked = hubPickNewerEntry(c, l);
+      out[id] = picked;
+    } else if (c) out[id] = c;
     else if (l) out[id] = l;
   });
   return out;
@@ -725,7 +753,7 @@ var HUB_REVENUE_ACCOUNT_MAP_KEYS = [
  * Field-level day merge: never replace whole account maps via Object.assign.
  * Cloud-only account IDs are kept unless explicitly tombstoned.
  */
-function hubMergeRevenueDayEntry(cloudEntry, localEntry, preferLocal, removedSets) {
+function hubMergeRevenueDayEntry(cloudEntry, localEntry, _preferLocalIgnored, removedSets) {
   let c = cloudEntry && typeof cloudEntry === 'object' ? cloudEntry : null;
   let l = localEntry && typeof localEntry === 'object' ? localEntry : null;
   let removed = hubNormalizeRemovedSets(removedSets);
@@ -741,34 +769,32 @@ function hubMergeRevenueDayEntry(cloudEntry, localEntry, preferLocal, removedSet
     if (HUB_REVENUE_ACCOUNT_MAP_KEYS.indexOf(k) >= 0) return;
     let cv = c[k];
     let lv = l[k];
-    if (preferLocal) {
-      if (lv === undefined) {
-        base[k] = cv;
-        return;
-      }
-      // Project totals are recomputed from maps; do not let a stale local 0 wipe cloud.
-      if ((k === 'ram' || k === 'orca' || k === 'eni' || k === 'matrix' || k === 'bitsync' || k === 'cary' ||
-           k === 'total' || k === 'other' || k === 'genesis') &&
-          typeof lv === 'number' && lv === 0 &&
-          typeof cv === 'number' && cv !== 0) {
-        base[k] = cv;
-        return;
-      }
+    if (lv === undefined) {
+      base[k] = cv;
+      return;
+    }
+    if (cv === undefined) {
       base[k] = lv;
       return;
     }
-    if (cv !== undefined) base[k] = cv;
-    else base[k] = lv;
+    // Project totals are recomputed from account maps; keep non-zero cloud when local is stale 0.
+    if ((k === 'ram' || k === 'orca' || k === 'eni' || k === 'matrix' || k === 'bitsync' || k === 'cary' ||
+         k === 'total' || k === 'other' || k === 'genesis') &&
+        typeof lv === 'number' && lv === 0 &&
+        typeof cv === 'number' && cv !== 0) {
+      base[k] = cv;
+      return;
+    }
+    base[k] = lv;
   });
 
-  base.ramAccounts = hubMergeAccountMapById(c.ramAccounts, l.ramAccounts, preferLocal, removed.ram);
-  base.orcaAccounts = hubMergeAccountMapById(c.orcaAccounts, l.orcaAccounts, preferLocal, removed.orca);
-  base.eniAccounts = hubMergeAccountMapById(c.eniAccounts, l.eniAccounts, preferLocal, removed.eni);
-  base.matrixAccounts = hubMergeAccountMapById(c.matrixAccounts, l.matrixAccounts, preferLocal, null);
-  base.bitsyncAccounts = hubMergeAccountMapById(c.bitsyncAccounts, l.bitsyncAccounts, preferLocal, null);
-  base.caryAccounts = hubMergeAccountMapById(c.caryAccounts, l.caryAccounts, preferLocal, null);
-  // Generic accounts map: union all IDs; only drop explicit tombstones.
-  base.accounts = hubMergeAccountMapById(c.accounts, l.accounts, preferLocal, removed.all);
+  base.ramAccounts = hubMergeAccountMapById(c.ramAccounts, l.ramAccounts, false, removed.ram);
+  base.orcaAccounts = hubMergeAccountMapById(c.orcaAccounts, l.orcaAccounts, false, removed.orca);
+  base.eniAccounts = hubMergeAccountMapById(c.eniAccounts, l.eniAccounts, false, removed.eni);
+  base.matrixAccounts = hubMergeAccountMapById(c.matrixAccounts, l.matrixAccounts, false, null);
+  base.bitsyncAccounts = hubMergeAccountMapById(c.bitsyncAccounts, l.bitsyncAccounts, false, null);
+  base.caryAccounts = hubMergeAccountMapById(c.caryAccounts, l.caryAccounts, false, null);
+  base.accounts = hubMergeAccountMapById(c.accounts, l.accounts, false, removed.all);
   return base;
 }
 
@@ -838,7 +864,7 @@ function hubMergeOrcaSalesLogs(cloudLog, localLog, preferLocal, removedIdsOrSets
       base.accounts = hubMergeAccountMapById(
         c.accounts,
         l.accounts,
-        preferLocal,
+        false,
         removedSets.all
       );
     } else {
@@ -943,13 +969,13 @@ function hubMergeHubSettings(localSettings, cloudSettings, localUpdatedAt, cloud
   merged.revenueLog = hubMergeOrcaRevenueLogs(
     cloud.revenueLog,
     local.revenueLog,
-    preferLocal,
+    false,
     revenueRemovedSets
   );
   merged.salesLog = hubMergeOrcaSalesLogs(
     cloud.salesLog,
     local.salesLog,
-    preferLocal,
+    false,
     revenueRemovedSets
   );
   merged.investmentHistory = hubMergeOrcaInvestmentHistory(
@@ -1838,6 +1864,10 @@ function hubSaveToStorage(options) {
       (typeof hubIsCloudWriteEnabled !== 'function' || hubIsCloudWriteEnabled());
     if (cloudWriteOk && typeof hubScheduleCloudSave === 'function') {
       hubScheduleCloudSave(options.immediate === true);
+    } else if (!options.localOnly && !simActive &&
+        typeof hubMarkPendingCloudWrite === 'function' &&
+        (typeof hubIsCloudWriteEnabled !== 'function' || hubIsCloudWriteEnabled())) {
+      hubMarkPendingCloudWrite();
     }
   } catch (e) {}
 }

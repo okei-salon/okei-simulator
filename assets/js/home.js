@@ -965,9 +965,10 @@ function getRevenueEntry(key) {
   return settings.revenueLog[key] || null;
 }
 
-function persistHubSettings() {
+function persistHubSettings(options) {
+  options = options || {};
   if (typeof hubSaveToStorage === 'function') {
-    hubSaveToStorage();
+    hubSaveToStorage(options);
     return;
   }
   if (typeof localStorage === 'undefined' || typeof settings === 'undefined') return;
@@ -1920,12 +1921,31 @@ function refreshHomeAfterRevenueSave() {
   }
 }
 
-/** 実績入力保存成功後: 再描画 → モーダル閉じる → ホームへ（RAM/ORCA/ENI と同じ） */
-function hubFinishRevenueInputSave(toastMessage) {
-  if (typeof refreshHomeAfterRevenueSave === 'function') refreshHomeAfterRevenueSave();
-  if (typeof showPage === 'function') showPage('home');
-  if (typeof closeModal === 'function') closeModal();
-  if (toastMessage && typeof showToast === 'function') showToast(toastMessage);
+/** 実績入力保存成功後: Cloud確認 → 再描画 → モーダル閉じる → ホームへ */
+function hubFinishRevenueInputSave(toastMessage, verifyFn) {
+  function finishUi(message) {
+    if (typeof refreshHomeAfterRevenueSave === 'function') refreshHomeAfterRevenueSave();
+    if (typeof render === 'function') render();
+    if (typeof showPage === 'function') showPage('home');
+    if (typeof closeModal === 'function') closeModal();
+    if (message && typeof showToast === 'function') showToast(message);
+  }
+  if (typeof hubSaveRevenueWithCloudConfirm === 'function') {
+    return hubSaveRevenueWithCloudConfirm({
+      successMessage: toastMessage || '✅ 保存しました',
+      verifyFn: verifyFn
+    }).then(function (result) {
+      finishUi(result.message);
+      return result;
+    });
+  }
+  persistHubSettings({ immediate: true });
+  finishUi(toastMessage || '✅ 保存しました');
+  return Promise.resolve({ ok: true, status: 'fallback', message: toastMessage });
+}
+
+function hubFinishRevenueSaveAfterLocal(toastMessage, verifyFn) {
+  return hubFinishRevenueInputSave(toastMessage, verifyFn);
 }
 
 function executeRamSave(collected) {
@@ -1938,11 +1958,11 @@ function executeRamSave(collected) {
   if (collected.ramSales && Object.keys(collected.ramSales).length) {
     persistRamSalesFromTotals(collected.ramSales, todayKey());
   }
-  if (typeof render === 'function') render();
-  refreshHomeAfterRevenueSave();
-  if (typeof showPage === 'function') showPage('home');
-  if (typeof closeModal === 'function') closeModal();
-  showToast('✅ 保存しました');
+  let dateKey = todayKey();
+  hubFinishRevenueInputSave('✅ 保存しました', function () {
+    let entry = typeof getRevenueEntry === 'function' ? getRevenueEntry(dateKey) : null;
+    return !!(entry && entry.ramAccounts && Object.keys(entry.ramAccounts).length);
+  });
 }
 
 function proceedRamSaveAfterSalesChecks(collected) {
@@ -2555,11 +2575,11 @@ function executeOrcaSave(collected) {
   if (collected.orcaAccounts && Object.keys(collected.orcaAccounts).length) {
     persistOrcaRevenueEntry(collected.orcaAccounts, collected.totalOrca);
   }
-  if (typeof render === 'function') render();
-  refreshHomeAfterRevenueSave();
-  if (typeof showPage === 'function') showPage('home');
-  if (typeof closeModal === 'function') closeModal();
-  showToast('✅ 保存しました');
+  let dateKey = todayKey();
+  hubFinishRevenueInputSave('✅ 保存しました', function () {
+    let entry = typeof getRevenueEntry === 'function' ? getRevenueEntry(dateKey) : null;
+    return !!(entry && entry.orcaAccounts && Object.keys(entry.orcaAccounts).length);
+  });
 }
 
 function proceedOrcaSaveAfterSalesChecks(collected) {

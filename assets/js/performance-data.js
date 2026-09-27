@@ -898,7 +898,8 @@ function pdSaveEniPerformanceEntry(dateKey, accountId, raw, opts) {
     todayRevenue: calc.dailyProfit,
     schemaVersion: 1,
     createdAt: (prevEntry && prevEntry.createdAt) ? prevEntry.createdAt : nowIso,
-    updatedAt: nowIso
+    updatedAt: nowIso,
+    revision: Date.now()
   };
 
   let entry = existingDay || {};
@@ -1637,9 +1638,15 @@ function pdGetSalesEntry(dateKey) {
   return pdGetSalesEntryRaw(dateKey);
 }
 
+function pdStampAccountRevision(ae) {
+  if (!ae || typeof ae !== 'object') return ae;
+  ae.revision = Date.now();
+  return ae;
+}
+
 function pdPersist() {
   if (typeof persistHubSettings === 'function') {
-    persistHubSettings();
+    persistHubSettings({ immediate: true });
     return;
   }
   if (typeof localStorage === 'undefined' || typeof settings === 'undefined') return;
@@ -1695,14 +1702,14 @@ function pdSaveMatrixPerformanceEntry(dateKey, accountId, accountName, revenueBo
   let mb = pdNormalizeMatrixBonusValue(matrixBonus);
   let entry = pdGetRevenueEntryRaw(dateKey) || {};
   entry.matrixAccounts = entry.matrixAccounts || {};
-  entry.matrixAccounts[accountId] = {
+  entry.matrixAccounts[accountId] = pdStampAccountRevision({
     accountId: accountId,
     accountName: accountName || accountId,
     revenueBonus: rb,
     matrixBonus: mb,
     total: pdRound(rb + mb),
     savedAt: new Date().toLocaleString()
-  };
+  });
   entry = pdRecalculateRevenueEntry(entry, dateKey);
   pdWriteRevenueEntry(dateKey, entry);
   return entry.matrixAccounts[accountId];
@@ -1739,7 +1746,7 @@ function pdSaveBitsyncPerformanceEntry(dateKey, accountId, accountName, nftSaleR
   let bonus = pdNormalizeBitsyncValue(profitBonus);
   let entry = pdGetRevenueEntryRaw(dateKey) || {};
   entry.bitsyncAccounts = entry.bitsyncAccounts || {};
-  entry.bitsyncAccounts[accountId] = {
+  entry.bitsyncAccounts[accountId] = pdStampAccountRevision({
     accountId: accountId,
     accountName: accountName || accountId,
     nftSaleReward: nft,
@@ -1747,7 +1754,7 @@ function pdSaveBitsyncPerformanceEntry(dateKey, accountId, accountName, nftSaleR
     profitBonus: bonus,
     total: pdRound(nft + op + bonus),
     savedAt: new Date().toLocaleString()
-  };
+  });
   entry = pdRecalculateRevenueEntry(entry, dateKey);
   pdWriteRevenueEntry(dateKey, entry);
   return entry.bitsyncAccounts[accountId];
@@ -2093,9 +2100,16 @@ function pdSaveTotalSalesEntry(dateKey, accountId, totalSales, projectKey) {
 
 function pdMergeRevenueEntry(dateKey, patch) {
   let entry = pdGetRevenueEntryRaw(dateKey) || {};
+  let accountMapKeys = [
+    'ramAccounts', 'orcaAccounts', 'eniAccounts', 'matrixAccounts', 'bitsyncAccounts',
+    'caryAccounts', 'accounts'
+  ];
   Object.keys(patch || {}).forEach(function (k) {
-    if (k === 'ramAccounts' || k === 'orcaAccounts' || k === 'caryAccounts' || k === 'accounts') {
-      entry[k] = Object.assign({}, entry[k] || {}, patch[k]);
+    if (accountMapKeys.indexOf(k) >= 0) {
+      entry[k] = entry[k] || {};
+      Object.keys(patch[k] || {}).forEach(function (id) {
+        entry[k][id] = pdStampAccountRevision(Object.assign({}, entry[k][id] || {}, patch[k][id]));
+      });
     } else {
       entry[k] = patch[k];
     }

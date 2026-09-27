@@ -216,7 +216,6 @@ function collectBitsyncInvestmentFromForm() {
 }
 
 function bitsyncRefreshAfterSave() {
-  if (typeof persistHubSettings === 'function') persistHubSettings();
   if (typeof markActivity === 'function') markActivity();
   if (typeof pdNotifyPerformanceChanged === 'function') {
     pdNotifyPerformanceChanged({ type: 'save', projectKey: 'bitsync' });
@@ -357,9 +356,15 @@ function saveBitsyncRevenueInput() {
     if (hasInvestment) persistBitsyncInvestmentEntry(investmentCollected.investments);
     bitsyncRefreshAfterSave();
     let toastMsg = bitsyncBuildSaveToast(hasRevenue, hasInvestment);
+    let dateKey = typeof todayKey === 'function' ? todayKey() : '';
     if (typeof hubFinishRevenueInputSave === 'function') {
-      hubFinishRevenueInputSave(toastMsg);
+      hubFinishRevenueInputSave(toastMsg, function () {
+        if (!hasRevenue) return true;
+        let entry = typeof getRevenueEntry === 'function' ? getRevenueEntry(dateKey) : null;
+        return !!(entry && entry.bitsyncAccounts && Object.keys(entry.bitsyncAccounts).length);
+      });
     } else {
+      if (typeof persistHubSettings === 'function') persistHubSettings({ immediate: true });
       if (typeof refreshHomeAfterRevenueSave === 'function') refreshHomeAfterRevenueSave();
       if (typeof showPage === 'function') showPage('home');
       if (typeof closeModal === 'function') closeModal();
@@ -381,8 +386,9 @@ function saveBitsyncInvestmentInput() {
     persistBitsyncInvestmentEntry(collected.investments);
     bitsyncRefreshAfterSave();
     if (typeof hubFinishRevenueInputSave === 'function') {
-      hubFinishRevenueInputSave('✅ BITSYNC追加投資を保存しました');
+      hubFinishRevenueInputSave('✅ BITSYNC追加投資を保存しました', function () { return true; });
     } else {
+      if (typeof persistHubSettings === 'function') persistHubSettings({ immediate: true });
       if (typeof refreshHomeAfterRevenueSave === 'function') refreshHomeAfterRevenueSave();
       if (typeof showPage === 'function') showPage('home');
       if (typeof closeModal === 'function') closeModal();

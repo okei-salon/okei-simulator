@@ -438,12 +438,20 @@ function saveEniRevenueInput() {
       aimPersistInputAccountMetaFromForm('eni');
     }
     persistEniRevenueEntry(collected.eniAccounts);
-    if (typeof persistHubSettings === 'function') persistHubSettings();
-    if (typeof render === 'function') render();
-    if (typeof refreshHomeAfterRevenueSave === 'function') refreshHomeAfterRevenueSave();
-    if (typeof showPage === 'function') showPage('home');
-    if (typeof closeModal === 'function') closeModal();
-    if (typeof showToast === 'function') showToast('✅ 保存しました');
+    let dateKey = getEniEntryDateKey();
+    if (typeof hubFinishRevenueInputSave === 'function') {
+      hubFinishRevenueInputSave('✅ 保存しました', function () {
+        let entry = typeof getRevenueEntry === 'function' ? getRevenueEntry(dateKey) : null;
+        return !!(entry && entry.eniAccounts && Object.keys(entry.eniAccounts).length);
+      });
+    } else {
+      if (typeof persistHubSettings === 'function') persistHubSettings({ immediate: true });
+      if (typeof render === 'function') render();
+      if (typeof refreshHomeAfterRevenueSave === 'function') refreshHomeAfterRevenueSave();
+      if (typeof showPage === 'function') showPage('home');
+      if (typeof closeModal === 'function') closeModal();
+      if (typeof showToast === 'function') showToast('✅ 保存しました');
+    }
   } catch (err) {
     console.error('[eni]', err);
     alert('保存できませんでした。時間をおいて再度お試しください。');
