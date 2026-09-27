@@ -1,4 +1,5 @@
 /* OUKEI HUB Local Storage + Cloud Save Hooks — Ver2.0.8 */
+var HUB_STORAGE_JS_BUILD = 'Ver2.0.54/Build20260927-v006';
 
 var HUB_STORAGE_KEY = 'oukei_hub_v15_data';
 var HUB_STORAGE_LEGACY_KEY = 'okei_v14_data';
@@ -1528,10 +1529,18 @@ function hubRestoreRamOrgChartFromBackup(backup, opts) {
     keepCloudSuspended: keepSuspended
   };
   } finally {
-    if (operatorSession && !keepSuspended && typeof hubEndOperatorCloudWriteSession === 'function') {
+    if (operatorSession && typeof hubEndOperatorCloudWriteSession === 'function') {
       hubEndOperatorCloudWriteSession('hubRestoreRamOrgChartFromBackup');
     } else if (suspended && !keepSuspended && typeof hubResumeCloudWrites === 'function') {
       hubResumeCloudWrites('hubRestoreRamOrgChartFromBackup');
+    }
+    if (keepSuspended) {
+      if (typeof hubArmCloudWriteExplicitOnly === 'function') {
+        hubArmCloudWriteExplicitOnly('keep-cloud-suspended');
+      }
+      if (typeof hubSuspendCloudWrites === 'function') {
+        hubSuspendCloudWrites('keep-cloud-suspended');
+      }
     }
   }
 }

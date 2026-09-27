@@ -442,6 +442,7 @@ async function browserExplicitRevenueSaveGateTests() {
       try { hubFirebaseReady = true; hubFirebaseUid = 'rev-save-test'; } catch (e) {}
       hubCloudWriteSuspendDepth = 0;
       hubCloudWriteOperatorActiveDepth = 0;
+      hubCloudWriteOperatorRestoreInProgress = false;
       hubCloudSaveInFlight = false;
       hubPullInFlight = false;
       hubAllowAutomaticCloudWrites('rev-save-test-reset');
@@ -575,7 +576,26 @@ async function browserExplicitRevenueSaveGateTests() {
     hubEndOperatorCloudWriteSession('case-n-end');
     out.caseN = {
       suspendDepth: hubCloudWriteSuspendDepth,
-      operatorDepth: hubCloudWriteOperatorActiveDepth
+      operatorDepth: hubCloudWriteOperatorActiveDepth,
+      restoreInProgress: !!hubCloudWriteOperatorRestoreInProgress
+    };
+
+    // O: leaked operator depth (keepCloudSuspended bug) + explicit save succeeds
+    setupMocks();
+    hubCloudWriteOperatorActiveDepth = 1;
+    hubCloudWriteSuspendDepth = 1;
+    hubCloudWriteOperatorRestoreInProgress = false;
+    hubArmCloudWriteExplicitOnly('case-o-leaked');
+    let baseO = refCount();
+    let saveO = await hubSaveRevenueWithCloudConfirm({
+      cloudVerifyDateKey: '2026-09-27',
+      verifyFn: function () { return true; }
+    });
+    out.caseO = {
+      refSets: refCount() - baseO,
+      ok: saveO.ok,
+      operatorDepthAfter: hubCloudWriteOperatorActiveDepth,
+      suspendDepthAfter: hubCloudWriteSuspendDepth
     };
 
     // H/I: 9/27 on cloud after save; second device pull
@@ -663,6 +683,10 @@ assert('CASE N-M: operator session blocks explicit save → 0 ref.set', revGateR
 assert('CASE N-M: operator session blocks explicit save', revGateResult.caseM.ok === false);
 assert('CASE N-N: operator session end clears suspend depth', revGateResult.caseN.suspendDepth === 0);
 assert('CASE N-N: operator session end clears operator depth', revGateResult.caseN.operatorDepth === 0);
+assert('CASE N-N: operator session end clears restore flag', revGateResult.caseN.restoreInProgress === false);
+assert('CASE N-O: leaked operator depth + explicit save → 1 ref.set', revGateResult.caseO.refSets === 1);
+assert('CASE N-O: leaked operator depth + explicit save → ok', revGateResult.caseO.ok === true);
+assert('CASE N-O: leaked operator depth cleared after save', revGateResult.caseO.operatorDepthAfter === 0);
 assert('CASE N-H: revenue save creates Cloud 9/27', revGateResult.caseHI.cloudHas927 === true);
 assert('CASE N-I: other device pull gets 9/27', revGateResult.caseHI.local927AfterPull === true);
 assert('CASE N-I: pull after save → 0 extra ref.set', revGateResult.caseHI.pullExtraWrites === 0);
