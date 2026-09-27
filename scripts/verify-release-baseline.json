@@ -1,5 +1,5 @@
 {
-  "minPassed": 639,
-  "note": "Baseline after multi-device sync (READ/WRITE split + LWW + 16 new checks). verify:release Passed 629.",
+  "minPassed": 653,
+  "note": "Baseline after explicit revenue save through automatic gate (14 new sync checks). verify:release Passed 653.",
   "updatedAt": "2026-09-27"
 }

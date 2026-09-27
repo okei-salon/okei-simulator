@@ -1423,6 +1423,32 @@ function hubSyncHubData() {
 }
 
 /**
+ * User-initiated revenue save Cloud push.
+ * Uses explicit-once path when automatic gate (explicitOnly) is armed; still blocked on hard suspend.
+ */
+function hubRunRevenueCloudSaveOnce() {
+  if (hubIsCloudWriteSuspended()) {
+    return Promise.resolve(false);
+  }
+  if (hubAreAutomaticCloudWritesBlocked()) {
+    return hubRunExplicitCloudSaveOnce('revenue-save');
+  }
+  return hubRunCloudSave(true);
+}
+
+function hubCloudHasRevenueDay(doc, dateKey) {
+  if (!doc || !dateKey) return false;
+  if (doc.revenue && doc.revenue.revenueLog && doc.revenue.revenueLog[dateKey]) return true;
+  if (typeof hubUnpackFirestorePayload === 'function') {
+    let unpacked = hubUnpackFirestorePayload(doc);
+    let rev = (unpacked.settings && unpacked.settings.revenueLog) ||
+      (unpacked.revenue && unpacked.revenue.revenueLog) || {};
+    return !!rev[dateKey];
+  }
+  return false;
+}
+
+/**
  * Revenue save: local → cloud write → re-read → verify → toast message.
  * Returns Promise<{ ok, status, message }>.
  */
@@ -1442,7 +1468,8 @@ function hubSaveRevenueWithCloudConfirm(opts) {
     hubMarkPendingCloudWrite();
     return Promise.resolve({ ok: false, status: 'local-only', message: pendingMessage });
   }
-  if (hubAreAutomaticCloudWritesBlocked()) {
+  // Hard suspend (restore depth): block even user explicit saves.
+  if (hubIsCloudWriteSuspended()) {
     hubMarkPendingCloudWrite();
     return Promise.resolve({ ok: false, status: 'write-gate', message: pendingMessage });
   }
@@ -1453,7 +1480,7 @@ function hubSaveRevenueWithCloudConfirm(opts) {
 
   hubMarkLocalDirtyForCloud('revenue-save');
   hubSetSyncStatus('syncing', 'Cloud保存中…');
-  return hubRunCloudSave(true).then(function (written) {
+  return hubRunRevenueCloudSaveOnce().then(function (written) {
     if (!written) {
       hubMarkPendingCloudWrite();
       return { ok: false, status: 'cloud-write-failed', message: pendingMessage };
@@ -1463,7 +1490,20 @@ function hubSaveRevenueWithCloudConfirm(opts) {
         hubMarkPendingCloudWrite();
         return { ok: false, status: 'verify-failed', message: pendingMessage };
       }
+      let cloudDateKey = opts.cloudVerifyDateKey || '';
+      if (cloudDateKey && typeof hubFetchCloudDoc === 'function') {
+        return hubFetchCloudDoc().then(function (doc) {
+          if (!hubCloudHasRevenueDay(doc, cloudDateKey)) {
+            hubMarkPendingCloudWrite();
+            return { ok: false, status: 'verify-failed', message: pendingMessage };
+          }
+          hubClearPendingCloudWrite();
+          hubSetSyncStatus('done', 'Cloud同期済み');
+          return { ok: true, status: 'synced', message: successMessage };
+        });
+      }
       hubClearPendingCloudWrite();
+      hubSetSyncStatus('done', 'Cloud同期済み');
       return { ok: true, status: 'synced', message: successMessage };
     });
   }).catch(function () {
@@ -1526,6 +1566,8 @@ if (typeof window !== 'undefined') {
   window.hubPullCloudData = hubPullCloudData;
   window.hubPullCloudDataIfStale = hubPullCloudDataIfStale;
   window.hubSaveRevenueWithCloudConfirm = hubSaveRevenueWithCloudConfirm;
+  window.hubRunRevenueCloudSaveOnce = hubRunRevenueCloudSaveOnce;
+  window.hubCloudHasRevenueDay = hubCloudHasRevenueDay;
   window.hubMarkPendingCloudWrite = hubMarkPendingCloudWrite;
   window.hubClearPendingCloudWrite = hubClearPendingCloudWrite;
   window.hubFetchCloudDoc = hubFetchCloudDoc;

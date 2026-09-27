@@ -1933,7 +1933,8 @@ function hubFinishRevenueInputSave(toastMessage, verifyFn) {
   if (typeof hubSaveRevenueWithCloudConfirm === 'function') {
     return hubSaveRevenueWithCloudConfirm({
       successMessage: toastMessage || '✅ 保存しました',
-      verifyFn: verifyFn
+      verifyFn: verifyFn,
+      cloudVerifyDateKey: typeof todayKey === 'function' ? todayKey() : ''
     }).then(function (result) {
       finishUi(result.message);
       return result;

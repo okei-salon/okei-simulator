@@ -421,5 +421,212 @@ assert('CASE L: iPhone pull gets 9/27 without WRITE', stormResult.localHas927 ==
 assert('CASE L: iPhone pull → 0 additional ref.set', stormResult.afterIphonePullWrites === stormResult.afterIdle);
 assert('CASE M: pull/merge does not mark dirty', stormResult.dirtyAfterPull === false);
 
+async function browserExplicitRevenueSaveGateTests() {
+  const browser = await chromium.launch({ headless: true });
+  const page = await browser.newPage();
+  await page.goto(BASE_URL + '/', { waitUntil: 'domcontentloaded', timeout: 60000 });
+  await page.waitForFunction(
+    () => typeof hubSaveRevenueWithCloudConfirm === 'function' &&
+      typeof hubRunExplicitCloudSaveOnce === 'function',
+    null,
+    { timeout: 60000 }
+  );
+
+  const result = await page.evaluate(async () => {
+    let cloudPayload;
+    function setupMocks() {
+      window.__REV_SAVE_REFSETS__ = [];
+      hubIsCloudWriteEnabled = function () { return true; };
+      hubIsLocalDevMode = function () { return false; };
+      hubIsCloudReadEnabled = function () { return true; };
+      try { hubFirebaseReady = true; hubFirebaseUid = 'rev-save-test'; } catch (e) {}
+      hubCloudWriteSuspendDepth = 0;
+      hubCloudSaveInFlight = false;
+      hubPullInFlight = false;
+      hubAllowAutomaticCloudWrites('rev-save-test-reset');
+      hubClearLocalDirtyForCloud('rev-save-test-reset');
+      hubClearCloudSaveTimerAndQueue('rev-save-test-reset');
+
+      cloudPayload = {
+        schemaVersion: 2,
+        updatedAt: 8000,
+        orgChart: { members: [{ id: 'r1', parent: null, name: 'R1' }], currentData: [], scenarios: [], rootId: 'r1', rootAccountIds: ['r1'] },
+        orcaOrgChart: { members: [{ id: 'o1', parent: null, name: 'O1' }], currentData: [], scenarios: [], rootId: 'o1', rootAccountIds: ['o1'], zoom: 1 },
+        eniOrgChart: { members: [], currentData: [], scenarios: [], rootId: '', rootAccountIds: [], zoom: 1 },
+        revenue: {
+          revenueLog: {
+            '2026-09-26': {
+              ramAccounts: { r1: { todayRevenue: 40, revision: 8000 } },
+              ram: 40,
+              total: 40
+            }
+          },
+          salesLog: {}
+        },
+        settings: { revenueLog: {}, salesLog: {} }
+      };
+
+      window.hubFetchCloudWriteGate = function () {
+        return Promise.resolve({ suspended: false });
+      };
+      window.hubFetchCloudDoc = function () {
+        return Promise.resolve(cloudPayload);
+      };
+      window.hubFirestoreDocRef = function () {
+        return {
+          set: function (payload) {
+            window.__REV_SAVE_REFSETS__.push(Date.now());
+            if (payload && payload.revenue && payload.revenue.revenueLog) {
+              cloudPayload.revenue.revenueLog = JSON.parse(JSON.stringify(payload.revenue.revenueLog));
+            }
+            cloudPayload.updatedAt = (payload && payload.updatedAt) || Date.now();
+            return Promise.resolve();
+          },
+          get: function () {
+            return Promise.resolve({ exists: true, data: function () { return cloudPayload; } });
+          }
+        };
+      };
+
+      if (!settings.revenueLog) settings.revenueLog = {};
+      settings.revenueLog['2026-09-27'] = {
+        ramAccounts: { r1: { todayRevenue: 55, revision: 9000 } },
+        orcaAccounts: { o1: { dailyProfit: 12, revision: 9000 } },
+        ram: 55,
+        orca: 12,
+        total: 67
+      };
+      return cloudPayload;
+    }
+
+    function refCount() { return (window.__REV_SAVE_REFSETS__ || []).length; }
+
+    const out = {};
+
+    // A: automatic gate open + manual save → 1 ref.set
+    setupMocks();
+    hubAllowAutomaticCloudWrites('case-a');
+    let baseA = refCount();
+    let saveA = await hubSaveRevenueWithCloudConfirm({
+      successMessage: '✅ 保存しました',
+      cloudVerifyDateKey: '2026-09-27',
+      verifyFn: function () { return true; }
+    });
+    out.caseA = { refSets: refCount() - baseA, ok: saveA.ok, status: saveA.status };
+
+    // B: explicitOnly + manual save → explicit path, 1 ref.set
+    setupMocks();
+    hubArmCloudWriteExplicitOnly('case-b');
+    let baseB = refCount();
+    let saveB = await hubSaveRevenueWithCloudConfirm({
+      successMessage: '✅ 保存しました',
+      cloudVerifyDateKey: '2026-09-27',
+      verifyFn: function () { return true; }
+    });
+    out.caseB = {
+      refSets: refCount() - baseB,
+      ok: saveB.ok,
+      explicitOnlyAfter: hubIsCloudWriteExplicitOnly()
+    };
+
+    // C: hard suspend + manual save → 0 ref.set, pending
+    setupMocks();
+    hubSuspendCloudWrites('case-c');
+    let baseC = refCount();
+    let saveC = await hubSaveRevenueWithCloudConfirm({
+      pendingMessage: '端末に保存済み・Cloud同期待ち',
+      cloudVerifyDateKey: '2026-09-27',
+      verifyFn: function () { return true; }
+    });
+    out.caseC = { refSets: refCount() - baseC, ok: saveC.ok, message: saveC.message };
+
+    // H/I: 9/27 on cloud after save; second device pull
+    setupMocks();
+    hubAllowAutomaticCloudWrites('case-h');
+    await hubSaveRevenueWithCloudConfirm({
+      successMessage: '✅ 保存しました',
+      cloudVerifyDateKey: '2026-09-27',
+      verifyFn: function () { return true; }
+    });
+    let cloudHas927 = !!(cloudPayload.revenue &&
+      cloudPayload.revenue.revenueLog &&
+      cloudPayload.revenue.revenueLog['2026-09-27']);
+    hubClearLocalDirtyForCloud('case-i-device-b');
+    delete settings.revenueLog['2026-09-27'];
+    if (typeof hubSaveToStorage === 'function') hubSaveToStorage({ skipCloud: true });
+    let pullWritesBefore = refCount();
+    await hubPullCloudData('case-i-pull');
+    out.caseHI = {
+      cloudHas927: cloudHas927,
+      local927AfterPull: !!(settings.revenueLog && settings.revenueLog['2026-09-27']),
+      pullExtraWrites: refCount() - pullWritesBefore
+    };
+
+    // J: same-day re-save → no double-count on total
+    setupMocks();
+    hubAllowAutomaticCloudWrites('case-j');
+    let saveJ1 = await hubSaveRevenueWithCloudConfirm({
+      cloudVerifyDateKey: '2026-09-27',
+      verifyFn: function () { return true; }
+    });
+    let totalAfterFirst = (settings.revenueLog['2026-09-27'] || {}).total;
+    let writesBeforeResave = refCount();
+    let saveJ2 = await hubSaveRevenueWithCloudConfirm({
+      cloudVerifyDateKey: '2026-09-27',
+      verifyFn: function () { return true; }
+    });
+    out.caseJ = {
+      firstOk: saveJ1.ok,
+      secondOk: saveJ2.ok,
+      totalAfterFirst: totalAfterFirst,
+      totalAfterResave: (settings.revenueLog['2026-09-27'] || {}).total,
+      resaveRefSets: refCount() - writesBeforeResave
+    };
+
+    // K: destructive guard blocks naked wipe payload (unit-style in browser)
+    setupMocks();
+    hubAllowAutomaticCloudWrites('case-k');
+    cloudPayload.revenue.revenueLog['2026-08-01'] = {
+      ramAccounts: { orphan_cloud_only: { todayRevenue: 99, revision: 7000 } },
+      ram: 99,
+      total: 99
+    };
+    let wipePayload = hubPackFirestorePayload(Date.now());
+    wipePayload.revenue = { revenueLog: {}, salesLog: {} };
+    let guardK = hubGuardDestructiveHubPayloadBeforePush(wipePayload, cloudPayload, 'case-k');
+    let baseK = refCount();
+    let pushedK = guardK.blocked ? false : await hubRunCloudSave(true);
+    out.caseK = {
+      refSets: refCount() - baseK,
+      pushed: !!pushedK,
+      guardBlocked: !!(guardK && guardK.blocked)
+    };
+
+    return out;
+  });
+
+  await browser.close();
+  return result;
+}
+
+const revGateResult = await browserExplicitRevenueSaveGateTests();
+assert('CASE N-A: gate open + revenue save → 1 ref.set', revGateResult.caseA.refSets === 1);
+assert('CASE N-A: gate open + revenue save → synced ok', revGateResult.caseA.ok === true);
+assert('CASE N-B: explicitOnly + revenue save → 1 ref.set', revGateResult.caseB.refSets === 1);
+assert('CASE N-B: explicitOnly + revenue save → ok', revGateResult.caseB.ok === true);
+assert('CASE N-B: explicitOnly remains after explicit save', revGateResult.caseB.explicitOnlyAfter === true);
+assert('CASE N-C: hard suspend + revenue save → 0 ref.set', revGateResult.caseC.refSets === 0);
+assert('CASE N-C: hard suspend + revenue save → pending', revGateResult.caseC.ok === false);
+assert('CASE N-C: hard suspend pending message', (revGateResult.caseC.message || '').indexOf('Cloud同期待ち') >= 0);
+assert('CASE N-H: revenue save creates Cloud 9/27', revGateResult.caseHI.cloudHas927 === true);
+assert('CASE N-I: other device pull gets 9/27', revGateResult.caseHI.local927AfterPull === true);
+assert('CASE N-I: pull after save → 0 extra ref.set', revGateResult.caseHI.pullExtraWrites === 0);
+assert('CASE N-J: first save ok', revGateResult.caseJ.firstOk === true);
+assert('CASE N-J: same-day re-save no double total', revGateResult.caseJ.totalAfterFirst === revGateResult.caseJ.totalAfterResave);
+assert('CASE N-J: re-save still 1 ref.set', revGateResult.caseJ.resaveRefSets === 1);
+assert('CASE N-J: second save ok', revGateResult.caseJ.secondOk === true);
+assert('CASE N-K: destructive guard blocks wipe payload', revGateResult.caseK.guardBlocked === true);
+assert('CASE N-K: destructive guard returns false', revGateResult.caseK.pushed === false);
+
 console.log('\n' + passed + '/' + (passed + failed) + ' PASS');
 process.exit(failed ? 1 : 0);
