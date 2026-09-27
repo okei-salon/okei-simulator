@@ -352,18 +352,31 @@ function saveBitsyncRevenueInput() {
       alert('保存する内容がありません。【実績入力】または【追加投資】のいずれかを入力してください。');
       return;
     }
-    if (hasRevenue) persistBitsyncRevenueEntry(revenueCollected.bitsyncAccounts);
-    if (hasInvestment) persistBitsyncInvestmentEntry(investmentCollected.investments);
-    bitsyncRefreshAfterSave();
     let toastMsg = bitsyncBuildSaveToast(hasRevenue, hasInvestment);
     let dateKey = typeof todayKey === 'function' ? todayKey() : '';
-    if (typeof hubFinishRevenueInputSave === 'function') {
+    if (typeof hubPersistThenCloudConfirm === 'function') {
+      hubPersistThenCloudConfirm(function () {
+        if (hasRevenue) persistBitsyncRevenueEntry(revenueCollected.bitsyncAccounts);
+        if (hasInvestment) persistBitsyncInvestmentEntry(investmentCollected.investments);
+        bitsyncRefreshAfterSave();
+      }, toastMsg, function () {
+        if (!hasRevenue) return true;
+        let entry = typeof getRevenueEntry === 'function' ? getRevenueEntry(dateKey) : null;
+        return !!(entry && entry.bitsyncAccounts && Object.keys(entry.bitsyncAccounts).length);
+      });
+    } else if (typeof hubFinishRevenueInputSave === 'function') {
+      if (hasRevenue) persistBitsyncRevenueEntry(revenueCollected.bitsyncAccounts);
+      if (hasInvestment) persistBitsyncInvestmentEntry(investmentCollected.investments);
+      bitsyncRefreshAfterSave();
       hubFinishRevenueInputSave(toastMsg, function () {
         if (!hasRevenue) return true;
         let entry = typeof getRevenueEntry === 'function' ? getRevenueEntry(dateKey) : null;
         return !!(entry && entry.bitsyncAccounts && Object.keys(entry.bitsyncAccounts).length);
       });
     } else {
+      if (hasRevenue) persistBitsyncRevenueEntry(revenueCollected.bitsyncAccounts);
+      if (hasInvestment) persistBitsyncInvestmentEntry(investmentCollected.investments);
+      bitsyncRefreshAfterSave();
       if (typeof persistHubSettings === 'function') persistHubSettings({ immediate: true });
       if (typeof refreshHomeAfterRevenueSave === 'function') refreshHomeAfterRevenueSave();
       if (typeof showPage === 'function') showPage('home');
@@ -383,11 +396,18 @@ function saveBitsyncInvestmentInput() {
       alert('追加投資の内容がありません。NFT購入または運用額追加を入力してください。');
       return;
     }
-    persistBitsyncInvestmentEntry(collected.investments);
-    bitsyncRefreshAfterSave();
-    if (typeof hubFinishRevenueInputSave === 'function') {
+    if (typeof hubPersistThenCloudConfirm === 'function') {
+      hubPersistThenCloudConfirm(function () {
+        persistBitsyncInvestmentEntry(collected.investments);
+        bitsyncRefreshAfterSave();
+      }, '✅ BITSYNC追加投資を保存しました', function () { return true; });
+    } else if (typeof hubFinishRevenueInputSave === 'function') {
+      persistBitsyncInvestmentEntry(collected.investments);
+      bitsyncRefreshAfterSave();
       hubFinishRevenueInputSave('✅ BITSYNC追加投資を保存しました', function () { return true; });
     } else {
+      persistBitsyncInvestmentEntry(collected.investments);
+      bitsyncRefreshAfterSave();
       if (typeof persistHubSettings === 'function') persistHubSettings({ immediate: true });
       if (typeof refreshHomeAfterRevenueSave === 'function') refreshHomeAfterRevenueSave();
       if (typeof showPage === 'function') showPage('home');

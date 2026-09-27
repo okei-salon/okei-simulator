@@ -641,6 +641,52 @@ async function browserExplicitRevenueSaveGateTests() {
       resaveRefSets: refCount() - writesBeforeResave
     };
 
+    // P: revenue save flow — local persist must not schedule auto Cloud save; confirm writes once
+    setupMocks();
+    hubAllowAutomaticCloudWrites('case-p');
+    window.__CASE_P_SCHEDULE__ = 0;
+    const origScheduleP = hubScheduleCloudSave;
+    window.hubScheduleCloudSave = function () {
+      window.__CASE_P_SCHEDULE__ += 1;
+      return origScheduleP.apply(this, arguments);
+    };
+    settings.revenueLog['2026-09-27'] = {
+      ramAccounts: { r1: { todayRevenue: 55, revision: 9000 } },
+      ram: 55,
+      total: 55
+    };
+    hubBeginRevenueInputSaveFlow();
+    hubMarkLocalDirtyForCloud('case-p');
+    hubSaveToStorage({ immediate: true });
+    const afterPersist = {
+      scheduleCalls: window.__CASE_P_SCHEDULE__ || 0,
+      inFlight: !!hubCloudSaveInFlight,
+      refSets: refCount()
+    };
+    let baseP = refCount();
+    let saveP = await hubSaveRevenueWithCloudConfirm({
+      successMessage: '✅ 保存しました',
+      cloudVerifyDateKey: '2026-09-27',
+      verifyFn: function () { return true; }
+    });
+    const afterConfirm = refCount() - baseP;
+    await new Promise(function (r) { setTimeout(r, 1800); });
+    const afterIdle = refCount();
+    hubEndRevenueInputSaveFlow();
+    window.hubScheduleCloudSave = origScheduleP;
+    out.caseP = {
+      scheduleCalls: afterPersist.scheduleCalls,
+      inFlightAfterPersist: afterPersist.inFlight,
+      refSetsAfterPersist: afterPersist.refSets,
+      refSetsAfterConfirm: afterConfirm,
+      afterIdleRefSets: afterIdle,
+      ok: saveP.ok,
+      status: saveP.status,
+      cloudHas927: !!(cloudPayload.revenue &&
+        cloudPayload.revenue.revenueLog &&
+        cloudPayload.revenue.revenueLog['2026-09-27'])
+    };
+
     // K: destructive guard blocks naked wipe payload (unit-style in browser)
     setupMocks();
     hubAllowAutomaticCloudWrites('case-k');
@@ -696,6 +742,13 @@ assert('CASE N-J: re-save still 1 ref.set', revGateResult.caseJ.resaveRefSets ==
 assert('CASE N-J: second save ok', revGateResult.caseJ.secondOk === true);
 assert('CASE N-K: destructive guard blocks wipe payload', revGateResult.caseK.guardBlocked === true);
 assert('CASE N-K: destructive guard returns false', revGateResult.caseK.pushed === false);
+assert('CASE N-P: local persist does not schedule auto Cloud save', revGateResult.caseP.scheduleCalls === 0);
+assert('CASE N-P: local persist does not ref.set', revGateResult.caseP.refSetsAfterPersist === 0);
+assert('CASE N-P: no inFlight race after local persist', revGateResult.caseP.inFlightAfterPersist === false);
+assert('CASE N-P: cloud confirm writes exactly once', revGateResult.caseP.refSetsAfterConfirm === 1);
+assert('CASE N-P: revenue save synced ok', revGateResult.caseP.ok === true);
+assert('CASE N-P: idle after save → no extra ref.set', revGateResult.caseP.afterIdleRefSets === 1);
+assert('CASE N-P: Cloud gets new day 9/27', revGateResult.caseP.cloudHas927 === true);
 
 console.log('\n' + passed + '/' + (passed + failed) + ' PASS');
 process.exit(failed ? 1 : 0);

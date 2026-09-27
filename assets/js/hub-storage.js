@@ -1,5 +1,5 @@
 /* OUKEI HUB Local Storage + Cloud Save Hooks — Ver2.0.8 */
-var HUB_STORAGE_JS_BUILD = 'Ver2.0.54/Build20260927-v006';
+var HUB_STORAGE_JS_BUILD = 'Ver2.0.55/Build20260927-v007';
 
 var HUB_STORAGE_KEY = 'oukei_hub_v15_data';
 var HUB_STORAGE_LEGACY_KEY = 'okei_v14_data';
@@ -1879,17 +1879,20 @@ function hubSaveToStorage(options) {
     }
     // シミュレーション中はクラウドへ書かない（push→enrich→apply で sim が落ちる経路を遮断）
     // cloud-write suspend / explicit-only / not-dirty 中も自動クラウド予約しない
+    let revenueSaveFlow = options.deferCloudSchedule === true ||
+      (typeof hubIsRevenueInputSaveFlowActive === 'function' && hubIsRevenueInputSaveFlowActive());
     let cloudBlocked = typeof hubAreAutomaticCloudWritesBlocked === 'function'
       ? hubAreAutomaticCloudWritesBlocked()
       : (typeof hubIsCloudWriteSuspended === 'function' && hubIsCloudWriteSuspended());
     let scheduleAllowed = typeof hubIsCloudWriteScheduleAllowed === 'function'
       ? hubIsCloudWriteScheduleAllowed()
       : (typeof hubHasLocalDirtyChanges === 'function' ? hubHasLocalDirtyChanges() : true);
-    let cloudWriteOk = !options.localOnly && !simActive && !cloudBlocked && scheduleAllowed &&
+    let cloudWriteOk = !options.localOnly && !simActive && !revenueSaveFlow && !cloudBlocked &&
+      scheduleAllowed &&
       (typeof hubIsCloudWriteEnabled !== 'function' || hubIsCloudWriteEnabled());
     if (cloudWriteOk && typeof hubScheduleCloudSave === 'function') {
       hubScheduleCloudSave(options.immediate === true);
-    } else if (!options.localOnly && !simActive &&
+    } else if (!options.localOnly && !simActive && !revenueSaveFlow &&
         typeof hubMarkPendingCloudWrite === 'function' &&
         (typeof hubIsCloudWriteEnabled !== 'function' || hubIsCloudWriteEnabled())) {
       hubMarkPendingCloudWrite();

@@ -1,5 +1,5 @@
 {
-  "minPassed": 667,
-  "note": "Baseline after restore-in-progress hard suspend + leaked operator depth fix (4 new sync checks). verify:release Passed 667.",
+  "minPassed": 674,
+  "note": "Baseline after revenue-input save defers auto Cloud schedule (7 new sync checks). verify:release Passed 674.",
   "updatedAt": "2026-09-27"
 }

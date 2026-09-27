@@ -204,26 +204,60 @@ function matrixSaveRevenueEntry() {
       return;
     }
     let dateKey = typeof todayKey === 'function' ? todayKey() : '';
-    Object.keys(collected.matrixAccounts).forEach(function (accountId) {
-      let vals = collected.matrixAccounts[accountId];
-      pdSaveMatrixPerformanceEntry(
-        dateKey,
-        accountId,
-        vals.accountName,
-        vals.revenueBonus,
-        vals.matrixBonus
-      );
-    });
-    if (typeof markActivity === 'function') markActivity();
-    if (typeof pdNotifyPerformanceChanged === 'function') {
-      pdNotifyPerformanceChanged({ type: 'save', projectKey: 'matrix', dateKey: dateKey });
-    }
-    if (typeof hubFinishRevenueInputSave === 'function') {
+    if (typeof hubPersistThenCloudConfirm === 'function') {
+      hubPersistThenCloudConfirm(function () {
+        Object.keys(collected.matrixAccounts).forEach(function (accountId) {
+          let vals = collected.matrixAccounts[accountId];
+          pdSaveMatrixPerformanceEntry(
+            dateKey,
+            accountId,
+            vals.accountName,
+            vals.revenueBonus,
+            vals.matrixBonus
+          );
+        });
+        if (typeof markActivity === 'function') markActivity();
+        if (typeof pdNotifyPerformanceChanged === 'function') {
+          pdNotifyPerformanceChanged({ type: 'save', projectKey: 'matrix', dateKey: dateKey });
+        }
+      }, '✅ MATRIX収益を保存しました', function () {
+        let entry = typeof getRevenueEntry === 'function' ? getRevenueEntry(dateKey) : null;
+        return !!(entry && entry.matrixAccounts && Object.keys(entry.matrixAccounts).length);
+      });
+    } else if (typeof hubFinishRevenueInputSave === 'function') {
+      Object.keys(collected.matrixAccounts).forEach(function (accountId) {
+        let vals = collected.matrixAccounts[accountId];
+        pdSaveMatrixPerformanceEntry(
+          dateKey,
+          accountId,
+          vals.accountName,
+          vals.revenueBonus,
+          vals.matrixBonus
+        );
+      });
+      if (typeof markActivity === 'function') markActivity();
+      if (typeof pdNotifyPerformanceChanged === 'function') {
+        pdNotifyPerformanceChanged({ type: 'save', projectKey: 'matrix', dateKey: dateKey });
+      }
       hubFinishRevenueInputSave('✅ MATRIX収益を保存しました', function () {
         let entry = typeof getRevenueEntry === 'function' ? getRevenueEntry(dateKey) : null;
         return !!(entry && entry.matrixAccounts && Object.keys(entry.matrixAccounts).length);
       });
     } else {
+      Object.keys(collected.matrixAccounts).forEach(function (accountId) {
+        let vals = collected.matrixAccounts[accountId];
+        pdSaveMatrixPerformanceEntry(
+          dateKey,
+          accountId,
+          vals.accountName,
+          vals.revenueBonus,
+          vals.matrixBonus
+        );
+      });
+      if (typeof markActivity === 'function') markActivity();
+      if (typeof pdNotifyPerformanceChanged === 'function') {
+        pdNotifyPerformanceChanged({ type: 'save', projectKey: 'matrix', dateKey: dateKey });
+      }
       if (typeof persistHubSettings === 'function') persistHubSettings({ immediate: true });
       if (typeof render === 'function') render();
       if (typeof refreshHomeAfterRevenueSave === 'function') refreshHomeAfterRevenueSave();

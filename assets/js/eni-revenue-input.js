@@ -434,17 +434,31 @@ function saveEniRevenueInput() {
       if (!confirm(msg)) return;
     }
 
-    if (typeof aimPersistInputAccountMetaFromForm === 'function') {
-      aimPersistInputAccountMetaFromForm('eni');
-    }
-    persistEniRevenueEntry(collected.eniAccounts);
     let dateKey = getEniEntryDateKey();
-    if (typeof hubFinishRevenueInputSave === 'function') {
+    if (typeof hubPersistThenCloudConfirm === 'function') {
+      hubPersistThenCloudConfirm(function () {
+        if (typeof aimPersistInputAccountMetaFromForm === 'function') {
+          aimPersistInputAccountMetaFromForm('eni');
+        }
+        persistEniRevenueEntry(collected.eniAccounts);
+      }, '✅ 保存しました', function () {
+        let entry = typeof getRevenueEntry === 'function' ? getRevenueEntry(dateKey) : null;
+        return !!(entry && entry.eniAccounts && Object.keys(entry.eniAccounts).length);
+      });
+    } else if (typeof hubFinishRevenueInputSave === 'function') {
+      if (typeof aimPersistInputAccountMetaFromForm === 'function') {
+        aimPersistInputAccountMetaFromForm('eni');
+      }
+      persistEniRevenueEntry(collected.eniAccounts);
       hubFinishRevenueInputSave('✅ 保存しました', function () {
         let entry = typeof getRevenueEntry === 'function' ? getRevenueEntry(dateKey) : null;
         return !!(entry && entry.eniAccounts && Object.keys(entry.eniAccounts).length);
       });
     } else {
+      if (typeof aimPersistInputAccountMetaFromForm === 'function') {
+        aimPersistInputAccountMetaFromForm('eni');
+      }
+      persistEniRevenueEntry(collected.eniAccounts);
       if (typeof persistHubSettings === 'function') persistHubSettings({ immediate: true });
       if (typeof render === 'function') render();
       if (typeof refreshHomeAfterRevenueSave === 'function') refreshHomeAfterRevenueSave();

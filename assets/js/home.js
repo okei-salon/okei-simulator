@@ -1,5 +1,5 @@
 /* OUKEI HUB Home UI — Ver2.0.7 */
-var HUB_HOME_JS_BUILD = 'Ver2.0.54/Build20260927-v006';
+var HUB_HOME_JS_BUILD = 'Ver2.0.55/Build20260927-v007';
 let homeCalView = { y: new Date().getFullYear(), m: new Date().getMonth() };
 let ramSavePending = null;
 let ramSalesDecreasePending = null;
@@ -1922,6 +1922,20 @@ function refreshHomeAfterRevenueSave() {
   }
 }
 
+/**
+ * Revenue-input save: local persist first (no automatic Cloud schedule), then cloud confirm once.
+ */
+function hubPersistThenCloudConfirm(localPersistFn, toastMessage, verifyFn) {
+  if (typeof hubBeginRevenueInputSaveFlow === 'function') hubBeginRevenueInputSaveFlow();
+  try {
+    if (typeof localPersistFn === 'function') localPersistFn();
+  } catch (err) {
+    if (typeof hubEndRevenueInputSaveFlow === 'function') hubEndRevenueInputSaveFlow();
+    throw err;
+  }
+  return hubFinishRevenueInputSave(toastMessage, verifyFn);
+}
+
 /** 実績入力保存成功後: Cloud確認 → 再描画 → モーダル閉じる → ホームへ */
 function hubFinishRevenueInputSave(toastMessage, verifyFn) {
   function finishUi(message) {
@@ -1939,8 +1953,11 @@ function hubFinishRevenueInputSave(toastMessage, verifyFn) {
     }).then(function (result) {
       finishUi(result.message);
       return result;
+    }).finally(function () {
+      if (typeof hubEndRevenueInputSaveFlow === 'function') hubEndRevenueInputSaveFlow();
     });
   }
+  if (typeof hubEndRevenueInputSaveFlow === 'function') hubEndRevenueInputSaveFlow();
   persistHubSettings({ immediate: true });
   finishUi(toastMessage || '✅ 保存しました');
   return Promise.resolve({ ok: true, status: 'fallback', message: toastMessage });
@@ -1951,17 +1968,18 @@ function hubFinishRevenueSaveAfterLocal(toastMessage, verifyFn) {
 }
 
 function executeRamSave(collected) {
-  if (typeof aimPersistInputAccountMetaFromForm === 'function') {
-    aimPersistInputAccountMetaFromForm('ram');
-  }
-  if (collected.ramAccounts || collected.ramOperating) {
-    persistRamRevenueEntry(collected.ramAccounts || {}, collected.totalRam || 0, collected.ramOperating);
-  }
-  if (collected.ramSales && Object.keys(collected.ramSales).length) {
-    persistRamSalesFromTotals(collected.ramSales, todayKey());
-  }
   let dateKey = todayKey();
-  hubFinishRevenueInputSave('✅ 保存しました', function () {
+  hubPersistThenCloudConfirm(function () {
+    if (typeof aimPersistInputAccountMetaFromForm === 'function') {
+      aimPersistInputAccountMetaFromForm('ram');
+    }
+    if (collected.ramAccounts || collected.ramOperating) {
+      persistRamRevenueEntry(collected.ramAccounts || {}, collected.totalRam || 0, collected.ramOperating);
+    }
+    if (collected.ramSales && Object.keys(collected.ramSales).length) {
+      persistRamSalesFromTotals(collected.ramSales, dateKey);
+    }
+  }, '✅ 保存しました', function () {
     let entry = typeof getRevenueEntry === 'function' ? getRevenueEntry(dateKey) : null;
     return !!(entry && entry.ramAccounts && Object.keys(entry.ramAccounts).length);
   });
@@ -2568,17 +2586,18 @@ function openOrcaRevenueInput() {
 }
 
 function executeOrcaSave(collected) {
-  if (typeof aimPersistInputAccountMetaFromForm === 'function') {
-    aimPersistInputAccountMetaFromForm('orca');
-  }
-  if (collected.orcaSales && Object.keys(collected.orcaSales).length) {
-    persistOrcaSalesFromTotals(collected.orcaSales, todayKey());
-  }
-  if (collected.orcaAccounts && Object.keys(collected.orcaAccounts).length) {
-    persistOrcaRevenueEntry(collected.orcaAccounts, collected.totalOrca);
-  }
   let dateKey = todayKey();
-  hubFinishRevenueInputSave('✅ 保存しました', function () {
+  hubPersistThenCloudConfirm(function () {
+    if (typeof aimPersistInputAccountMetaFromForm === 'function') {
+      aimPersistInputAccountMetaFromForm('orca');
+    }
+    if (collected.orcaSales && Object.keys(collected.orcaSales).length) {
+      persistOrcaSalesFromTotals(collected.orcaSales, dateKey);
+    }
+    if (collected.orcaAccounts && Object.keys(collected.orcaAccounts).length) {
+      persistOrcaRevenueEntry(collected.orcaAccounts, collected.totalOrca);
+    }
+  }, '✅ 保存しました', function () {
     let entry = typeof getRevenueEntry === 'function' ? getRevenueEntry(dateKey) : null;
     return !!(entry && entry.orcaAccounts && Object.keys(entry.orcaAccounts).length);
   });

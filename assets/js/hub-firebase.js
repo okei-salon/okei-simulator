@@ -2,7 +2,7 @@
  * Google 認証後に LocalStorage / Firestore を同期
  * 組織図・ポートフォリオはフィールド単位でマージして端末間の上書きを防ぐ
  */
-var HUB_FIREBASE_JS_BUILD = 'Ver2.0.54/Build20260927-v006';
+var HUB_FIREBASE_JS_BUILD = 'Ver2.0.55/Build20260927-v007';
 
 var hubFirebaseApp = null;
 var hubFirebaseAuth = null;
@@ -40,6 +40,8 @@ var hubCloudWriteExplicitBypass = false;
 var hubLocalDirtyForCloud = false;
 /** While > 0: sync/merge/render must not schedule Cloud WRITE or mark dirty. */
 var hubCloudWriteSuppressDepth = 0;
+/** While > 0: revenue-input save button flow — local persist only; cloud confirm writes once. */
+var hubRevenueInputSaveDepth = 0;
 
 function hubHasLocalDirtyChanges() {
   return !!hubLocalDirtyForCloud;
@@ -82,10 +84,37 @@ function hubEndCloudWriteSuppress(reason) {
 
 function hubIsCloudWriteScheduleAllowed() {
   if (hubCloudWriteSuppressDepth > 0) return false;
+  if (hubIsRevenueInputSaveFlowActive()) return false;
   if (typeof hubAreAutomaticCloudWritesBlocked === 'function' && hubAreAutomaticCloudWritesBlocked()) {
     return false;
   }
   return hubHasLocalDirtyChanges();
+}
+
+function hubIsRevenueInputSaveFlowActive() {
+  return hubRevenueInputSaveDepth > 0;
+}
+
+/** Begin revenue-input save: defer automatic Cloud schedule until cloud confirm finishes. */
+function hubBeginRevenueInputSaveFlow() {
+  hubRevenueInputSaveDepth += 1;
+  hubClearCloudSaveTimerAndQueue('revenue-input-save-begin');
+  try {
+    console.log('[hubRevenueSave] begin local-only persist phase', {
+      depth: hubRevenueInputSaveDepth
+    });
+  } catch (e) {}
+  return hubRevenueInputSaveDepth;
+}
+
+function hubEndRevenueInputSaveFlow() {
+  if (hubRevenueInputSaveDepth > 0) hubRevenueInputSaveDepth -= 1;
+  try {
+    console.log('[hubRevenueSave] end revenue-input save flow', {
+      depth: hubRevenueInputSaveDepth
+    });
+  } catch (e) {}
+  return hubRevenueInputSaveDepth;
 }
 
 function hubIsCloudWriteSuspended() {
@@ -1776,6 +1805,9 @@ if (typeof window !== 'undefined') {
   window.hubBeginCloudWriteSuppress = hubBeginCloudWriteSuppress;
   window.hubEndCloudWriteSuppress = hubEndCloudWriteSuppress;
   window.hubIsCloudWriteScheduleAllowed = hubIsCloudWriteScheduleAllowed;
+  window.hubIsRevenueInputSaveFlowActive = hubIsRevenueInputSaveFlowActive;
+  window.hubBeginRevenueInputSaveFlow = hubBeginRevenueInputSaveFlow;
+  window.hubEndRevenueInputSaveFlow = hubEndRevenueInputSaveFlow;
   window.hubIsCloudWriteSuspended = hubIsCloudWriteSuspended;
   window.hubIsCloudWriteHardSuspended = hubIsCloudWriteHardSuspended;
   window.hubIsCloudWriteExplicitOnly = hubIsCloudWriteExplicitOnly;
