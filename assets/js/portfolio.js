@@ -52,10 +52,10 @@ var PF_MOCK_STACKED = [
   { label: '6月', total: 12840, ram: 5800, orca: 2900, cary: 2410, genesis: 1220, eni: 0, other: 510 }
 ];
 
-var PF_STACK_ORDER = ['ram', 'orca', 'cary', 'genesis', 'eni', 'other'];
+var PF_STACK_ORDER = ['ram', 'orca', 'cary', 'genesis', 'eni', 'matrix', 'bitsync', 'other'];
 
-/** Portfolio project cards: row1 RAM|ORCA, row2 ENI|MATRIX (mobile: single column same order). */
-var PF_PROJECT_CARD_ORDER = ['ram', 'orca', 'eni', 'matrix'];
+/** Portfolio project cards: row1 RAM|ORCA, row2 ENI|MATRIX, row3 BITSYNC (mobile: single column same order). */
+var PF_PROJECT_CARD_ORDER = ['ram', 'orca', 'eni', 'matrix', 'bitsync'];
 
 function pfSortPortfolioProjectRows(rows) {
   let orderMap = {};
@@ -293,6 +293,11 @@ function pfGetProjectAccounts(projectKey) {
       return { id: a.id, name: (a.username || a.id).replace(/^@/, '') };
     });
   }
+  if (projectKey === 'bitsync' && typeof getBitsyncInputAccounts === 'function') {
+    return getBitsyncInputAccounts().map(function (a) {
+      return { id: a.id, name: (a.username || a.id).replace(/^@/, '') };
+    });
+  }
   return [];
 }
 
@@ -492,6 +497,9 @@ function pfGetLegacyAccountOperatingUsd(accountId, projectKey, dateKey) {
 
 function pfResolvePortfolioOperatingUsd(projectKey, dateKey) {
   if (pfIsDemoMode()) return pfGetProjectMock(projectKey).operatingUsd;
+  if (projectKey === 'bitsync' && typeof bitsyncGetProjectTotalInvestment === 'function') {
+    return bitsyncGetProjectTotalInvestment();
+  }
   dateKey = dateKey || pfGetOperatingAsOfDateKey();
   pfEnsurePortfolioOperating();
   let mode = settings.portfolioOperating.displayMode || 'project';
@@ -594,15 +602,44 @@ function pfGetEnabledProjectRows() {
         }
       }
     }
-    let recovery = operatingUsd > 0
-      ? Math.round((profitUsd / operatingUsd) * 1000) / 10
-      : (pfIsDemoMode() ? mock.recovery : 0);
+    let bitsyncNftUsd = 0;
+    let bitsyncOperatingUsd = 0;
+    let bitsyncTotalInvestment = 0;
+    let bitsyncNftSaleProfitUsd = 0;
+    let bitsyncOperationProfitUsd = 0;
+    if (p.key === 'bitsync' && !pfIsDemoMode()) {
+      bitsyncNftUsd = typeof bitsyncGetProjectNftPurchaseTotal === 'function'
+        ? bitsyncGetProjectNftPurchaseTotal() : 0;
+      bitsyncOperatingUsd = typeof bitsyncGetProjectOperatingPrincipalTotal === 'function'
+        ? bitsyncGetProjectOperatingPrincipalTotal() : 0;
+      bitsyncTotalInvestment = bitsyncNftUsd + bitsyncOperatingUsd;
+      operatingUsd = bitsyncTotalInvestment;
+      if (typeof bitsyncSumAllTimeProfitBreakdown === 'function') {
+        let bitsyncBd = bitsyncSumAllTimeProfitBreakdown();
+        bitsyncNftSaleProfitUsd = bitsyncBd.nftSaleProfit;
+        bitsyncOperationProfitUsd = bitsyncBd.operationProfit;
+        profitUsd = bitsyncBd.totalProfit;
+      }
+    }
+    let recoveryBase = p.key === 'bitsync' ? bitsyncTotalInvestment : operatingUsd;
+    let recovery = recoveryBase > 0
+      ? Math.round((profitUsd / recoveryBase) * 1000) / 10
+      : (pfIsDemoMode() ? mock.recovery : null);
+    if (p.key === 'bitsync' && recoveryBase <= 0 && !pfIsDemoMode()) recovery = null;
     return {
       key: p.key,
       name: p.name,
       start: typeof pmGetStartDate === 'function' ? pmGetStartDate(p.key) : mock.start,
       operatingUsd: operatingUsd,
       operating: pfDisplayUsd(operatingUsd, operatingUsd > 0),
+      bitsyncNftUsd: bitsyncNftUsd,
+      bitsyncOperatingUsd: bitsyncOperatingUsd,
+      bitsyncNftDisplay: pfDisplayUsd(bitsyncNftUsd, bitsyncNftUsd > 0),
+      bitsyncOperatingDisplay: pfDisplayUsd(bitsyncOperatingUsd, bitsyncOperatingUsd > 0),
+      bitsyncNftSaleProfitUsd: bitsyncNftSaleProfitUsd,
+      bitsyncOperationProfitUsd: bitsyncOperationProfitUsd,
+      bitsyncNftSaleProfitDisplay: pfDisplayUsd(bitsyncNftSaleProfitUsd, bitsyncNftSaleProfitUsd > 0),
+      bitsyncOperationProfitDisplay: pfDisplayUsd(bitsyncOperationProfitUsd, bitsyncOperationProfitUsd > 0),
       profit: pfDisplayUsd(profitUsd, profitUsd > 0 || hasRevenueLog),
       profitUsd: profitUsd,
       monthProfitUsd: monthProfitUsd,
@@ -613,8 +650,10 @@ function pfGetEnabledProjectRows() {
       eniCycleTargetDateStr: eniCycleTargetDateStr,
       eniCycleAchieved: eniCycleAchieved,
       recovery: recovery,
-      recoveryDisplay: pfDisplayPct(recovery, operatingUsd > 0 && profitUsd > 0),
-      fill: pfRecoveryFillPct(recovery),
+      recoveryDisplay: p.key === 'bitsync'
+        ? (recoveryBase > 0 ? pfDisplayPct(recovery, true) : pfEmptyMark())
+        : pfDisplayPct(recovery, operatingUsd > 0 && profitUsd > 0),
+      fill: pfRecoveryFillPct(recovery || 0),
       recoveryDate: pfIsDemoMode() ? mock.recoveryDate : pfEmptyMark(),
       status: mock.status,
       statusCls: mock.statusCls
@@ -1061,7 +1100,122 @@ function pfGetProjectProfitBreakdown(projectKey, operatingUsd) {
     };
   }
 
+  if (projectKey === 'bitsync') {
+    return pfGetBitsyncProfitBreakdown(viewMonth.y, viewMonth.m);
+  }
+
   return null;
+}
+
+function pfGetBitsyncProfitBreakdown(viewY, viewM) {
+  let allTime = typeof bitsyncSumAllTimeProfitBreakdown === 'function'
+    ? bitsyncSumAllTimeProfitBreakdown()
+    : { nftSaleProfit: 0, personalOperationProfit: 0, groupOperationProfit: 0, totalProfit: 0, hasData: false };
+  let month = typeof bitsyncSumMonthProfitBreakdown === 'function'
+    ? bitsyncSumMonthProfitBreakdown(viewY, viewM)
+    : { nftSaleProfit: 0, personalOperationProfit: 0, groupOperationProfit: 0, totalProfit: 0, hasData: false };
+  let nftPurchaseUsd = typeof bitsyncGetProjectNftPurchaseTotal === 'function'
+    ? bitsyncGetProjectNftPurchaseTotal() : 0;
+  let personalOperatingUsd = typeof bitsyncGetProjectOperatingPrincipalTotal === 'function'
+    ? bitsyncGetProjectOperatingPrincipalTotal() : 0;
+  let personalMonthlyYield = typeof bitsyncCalcPersonalMonthlyYield === 'function'
+    ? bitsyncCalcPersonalMonthlyYield(viewY, viewM) : null;
+  let bitsyncTheme = typeof pjGetTheme === 'function' ? pjGetTheme('bitsync') : {};
+  let chartSegments = [
+    { key: 'nftSale', label: 'NFT販売利益', amount: month.nftSaleProfit, color: bitsyncTheme.accentLight || '#e9d5ff' },
+    { key: 'personalOp', label: '個人運用利益', amount: month.personalOperationProfit, color: bitsyncTheme.accent || '#a855f7' },
+    { key: 'groupOp', label: 'グループ運用利益', amount: month.groupOperationProfit, color: bitsyncTheme.accentDeep || '#7e22ce' }
+  ];
+  return {
+    projectKey: 'bitsync',
+    theme: 'bitsync',
+    nftPurchaseUsd: nftPurchaseUsd,
+    nftSaleProfit: allTime.nftSaleProfit,
+    personalOperatingUsd: personalOperatingUsd,
+    personalOperationProfit: allTime.personalOperationProfit,
+    personalMonthlyYield: personalMonthlyYield,
+    hasPersonalOperating: personalOperatingUsd > 0,
+    groupOperationProfit: allTime.groupOperationProfit,
+    monthTotal: month.totalProfit,
+    monthHasData: month.hasData,
+    chartSegments: chartSegments
+  };
+}
+
+function pfRenderBitsyncMonthPieChart(segments, theme, monthTotal) {
+  let positive = (segments || []).filter(function (s) { return (Number(s.amount) || 0) > 0; });
+  let total = Math.max(0, Number(monthTotal) || 0);
+  if (total <= 0) {
+    return '<div class="pfProfitPieEmpty">今月収益なし</div>';
+  }
+  let start = 0;
+  let stops = positive.map(function (s) {
+    let amt = Number(s.amount) || 0;
+    let pct = (amt / total) * 100;
+    let end = start + pct;
+    let stop = s.color + ' ' + start + '% ' + end + '%';
+    start = end;
+    return stop;
+  });
+  let legend = positive.map(function (s) {
+    let amt = Number(s.amount) || 0;
+    let share = Math.round((amt / total) * 1000) / 10;
+    return '<div class="pfProfitPieLegendItem">' +
+      '<i class="pfProfitPieSwatch" style="background:' + s.color + '"></i>' +
+      '<span class="pfProfitPieLegendLabel">' + pfEscape(s.label) + '</span>' +
+      '<div class="pfProfitPieLegendValues">' +
+      '<span class="pfProfitPieLegendAmt">' + pfFormatMonthlyUsd(amt) + '</span>' +
+      '<span class="pfProfitPieLegendPct">' + share + '%</span>' +
+      '</div></div>';
+  }).join('');
+  return '<div class="pfProfitPieBlock pfProfitPieBlock--' + theme + '">' +
+    '<div class="pfProfitPieChartWrap">' +
+    '<div class="pfProfitPieChart" style="background:conic-gradient(' + stops.join(', ') + ')" aria-hidden="true">' +
+    '<div class="pfProfitPieHole">' +
+    '<span class="pfProfitPieCenterSub pfProfitPieCenterSub--label">今月収益</span>' +
+    '<span class="pfProfitPieCenterMain">' + pfMoneyUsd(total) + '</span>' +
+    '</div></div></div>' +
+    '<div class="pfProfitPieLegend">' + legend + '</div></div>';
+}
+
+function pfRenderBitsyncProfitDetailBody(breakdown) {
+  if (!breakdown) {
+    return '<div class="explain">集計データを取得できませんでした。</div>';
+  }
+  let divider = '<div class="pfProfitDetailDivider"></div>';
+  let personalYieldDisplay = breakdown.personalMonthlyYield != null
+    ? (Math.round(breakdown.personalMonthlyYield * 10) / 10) + '%'
+    : pfEmptyMark();
+  let pie = '<section class="pfProfitDetailSection pfProfitDetailSection--chart">' +
+    '<div class="pfProfitDetailSectionTitle">今月の収益構成</div>' +
+    pfRenderBitsyncMonthPieChart(breakdown.chartSegments, breakdown.theme, breakdown.monthTotal) +
+    '<div class="pfProfitDetailRow pfProfitDetailRow--emph pfProfitDetailRow--monthTotal">' +
+    '<span class="pfProfitDetailLabel">今月収益合計</span>' +
+    '<b class="pfProfitDetailVal pfProfitDetailVal--emph">' +
+    (breakdown.monthTotal > 0 ? pfMoneyUsd(breakdown.monthTotal) : pfEmptyMark()) +
+    '</b></div></section>';
+  return '<div class="pfProfitDetail pfProfitDetail--bitsync">' +
+    '<section class="pfProfitDetailSection">' +
+    '<div class="pfProfitDetailSectionTitle">NFT</div>' +
+    '<div class="pfProfitDetailRow"><span class="pfProfitDetailLabel">NFT購入金額</span>' +
+    '<b class="pfProfitDetailVal">' + pfDisplayUsd(breakdown.nftPurchaseUsd, breakdown.nftPurchaseUsd > 0) + '</b></div>' +
+    '<div class="pfProfitDetailRow"><span class="pfProfitDetailLabel">NFT販売利益</span>' +
+    '<b class="pfProfitDetailVal">' + pfDisplayUsd(breakdown.nftSaleProfit, breakdown.nftSaleProfit > 0) + '</b></div>' +
+    '</section>' + divider +
+    '<section class="pfProfitDetailSection">' +
+    '<div class="pfProfitDetailSectionTitle">個人運用</div>' +
+    '<div class="pfProfitDetailRow"><span class="pfProfitDetailLabel">個人運用額</span>' +
+    '<b class="pfProfitDetailVal">' + pfDisplayUsd(breakdown.personalOperatingUsd, breakdown.personalOperatingUsd > 0) + '</b></div>' +
+    '<div class="pfProfitDetailRow"><span class="pfProfitDetailLabel">個人運用利益</span>' +
+    '<b class="pfProfitDetailVal">' + pfDisplayUsd(breakdown.personalOperationProfit, breakdown.personalOperationProfit > 0) + '</b></div>' +
+    '<div class="pfProfitDetailRow"><span class="pfProfitDetailLabel">個人運用月利</span>' +
+    '<b class="pfProfitDetailVal">' + personalYieldDisplay + '</b></div>' +
+    '</section>' + divider +
+    '<section class="pfProfitDetailSection">' +
+    '<div class="pfProfitDetailSectionTitle">グループ運用</div>' +
+    '<div class="pfProfitDetailRow"><span class="pfProfitDetailLabel">グループ運用利益</span>' +
+    '<b class="pfProfitDetailVal">' + pfDisplayUsd(breakdown.groupOperationProfit, breakdown.groupOperationProfit > 0) + '</b></div>' +
+    '</section>' + divider + pie + '</div>';
 }
 
 function pfRenderProfitPieChart(segments, theme, predicted, predictedYield, hasOperating) {
@@ -1471,15 +1625,19 @@ function pfRenderEniCycleBlockHtml(row) {
 }
 
 function pfOpenProjectProfitDetail(projectKey) {
-  if (projectKey !== 'ram' && projectKey !== 'orca') return;
+  if (projectKey !== 'ram' && projectKey !== 'orca' && projectKey !== 'bitsync') return;
   if (typeof modalTitle === 'undefined' || typeof modalContent === 'undefined' || typeof modalBg === 'undefined') return;
   let rows = pfGetEnabledProjectRows();
   let row = rows.find(function (r) { return r.key === projectKey; });
   let operatingUsd = row ? row.operatingUsd : pfGetLiveOperatingUsd(projectKey);
-  let breakdown = pfGetProjectProfitBreakdown(projectKey, operatingUsd);
-  let projectName = row ? row.name : (projectKey === 'ram' ? 'RAM' : 'ORCA');
-  modalTitle.textContent = projectName + ' — 利益構成・月利詳細';
-  modalContent.innerHTML = pfRenderProjectProfitDetailBody(breakdown);
+  let breakdown = projectKey === 'bitsync'
+    ? pfGetBitsyncProfitBreakdown(pfGetPortfolioViewMonth().y, pfGetPortfolioViewMonth().m)
+    : pfGetProjectProfitBreakdown(projectKey, operatingUsd);
+  let projectName = row ? row.name : (projectKey === 'ram' ? 'RAM' : (projectKey === 'orca' ? 'ORCA' : 'BITSYNC'));
+  modalTitle.textContent = projectName + (projectKey === 'bitsync' ? ' — 詳細' : ' — 利益構成・月利詳細');
+  modalContent.innerHTML = projectKey === 'bitsync'
+    ? pfRenderBitsyncProfitDetailBody(breakdown)
+    : pfRenderProjectProfitDetailBody(breakdown);
   modalBg.style.display = 'flex';
 }
 
@@ -1487,7 +1645,44 @@ var PF_MOCK_SUMMARY_DATA = {
   monthly: { value: '$12,840', sub: '(¥1,999,200)', trend: '+8.2%' }
 };
 
+function pfRenderBitsyncProjectCard(row) {
+  let icon = typeof pjRenderProjectIcon === 'function'
+    ? pjRenderProjectIcon(row.key, 'pfProjectCardIcon')
+    : '<span class="pfProjectCardIcon"></span>';
+  let recoveryMarkLeft = pfRecoveryMarkLeft(row.recovery);
+  let recoveryLabel = row.recovery != null
+    ? (row.recoveryDisplay || row.recovery + '%')
+    : pfEmptyMark();
+  return '<article class="pfProjectCard pfProjectCard--bitsync isClickable" data-pj-icon-key="' + pfEscape(row.key) + '" ' +
+    'role="button" tabindex="0" onclick="pfOpenProjectProfitDetail(\'bitsync\')" ' +
+    'onkeydown="if(event.key===\'Enter\'||event.key===\' \'){pfOpenProjectProfitDetail(\'bitsync\');event.preventDefault()}">' +
+    '<div class="pfProjectCardGlow"></div>' +
+    '<div class="pfProjectCardTop">' +
+    '<div class="pfProjectCardBrand">' + icon +
+    '<div><h3 class="pfProjectCardName">' + pfEscape(row.name) + '</h3>' +
+    '<p class="pfProjectStart">開始日 ' + pfEscape(row.start) + '</p></div></div>' +
+    '<span class="pfStatusBadge pfStatusBadge--' + row.statusCls + '">' + pfEscape(row.status) + '</span></div>' +
+    '<div class="pfProjectMetrics pfProjectMetrics--bitsync">' +
+    '<div class="pfProjectMetric"><span class="pfProjectMetricLabel">NFT購入</span><span class="pfProjectMetricVal">' + row.bitsyncNftDisplay + '</span></div>' +
+    '<div class="pfProjectMetric"><span class="pfProjectMetricLabel">NFT販売利益</span><span class="pfProjectMetricVal isProfit">' + row.bitsyncNftSaleProfitDisplay + '</span></div>' +
+    '<div class="pfProjectMetric"><span class="pfProjectMetricLabel">運用額</span><span class="pfProjectMetricVal">' + row.bitsyncOperatingDisplay + '</span></div>' +
+    '<div class="pfProjectMetric"><span class="pfProjectMetricLabel">運用利益</span><span class="pfProjectMetricVal isProfit">' + row.bitsyncOperationProfitDisplay + '</span></div>' +
+    '<div class="pfProjectMetric"><span class="pfProjectMetricLabel">累計利益</span><span class="pfProjectMetricVal isProfit">' + row.profit + '</span></div>' +
+    '</div>' +
+    '<div class="pfRecoveryBlock">' +
+    '<div class="pfRecoveryLabel"><span>回収率</span><b>' + recoveryLabel + '</b></div>' +
+    '<div class="pfRecoveryTrack"><div class="pfRecoveryFill" style="width:' + row.fill + '%"></div>' +
+    (recoveryMarkLeft != null
+      ? '<i class="pfRecoveryMark" style="left:' + recoveryMarkLeft + '%"></i>'
+      : '') +
+    '</div>' +
+    '<div class="pfRecoveryScale">' + pfRecoveryScaleHtml(row.recovery || 0) + '</div></div>' +
+    '<div class="pfProjectCardHint">タップで利益構成・月利詳細</div>' +
+    '</article>';
+}
+
 function pfRenderProjectCard(row) {
+  if (row.key === 'bitsync') return pfRenderBitsyncProjectCard(row);
   let isDetailCard = row.key === 'ram' || row.key === 'orca';
   let isUnifiedMetrics = isDetailCard || row.key === 'eni';
   let cardClass = 'pfProjectCard pfProjectCard--' + row.key + (isDetailCard ? ' isClickable' : '');
@@ -2612,5 +2807,6 @@ function renderPortfolio() {
 
 window.pfOpenProjectProfitDetail = pfOpenProjectProfitDetail;
 window.pfGetProjectProfitBreakdown = pfGetProjectProfitBreakdown;
+window.pfGetBitsyncProfitBreakdown = pfGetBitsyncProfitBreakdown;
 window.pfGetProjectRevenueLogComposition = pfGetProjectRevenueLogComposition;
 window.pfGetProjectSharedPaceMetrics = pfGetProjectSharedPaceMetrics;

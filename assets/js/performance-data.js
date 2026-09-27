@@ -228,6 +228,12 @@ function pdHasAccountRevenueInEntry(entry, projectKey, accountId) {
   if (projectKey === 'eni' && entry.eniAccounts && entry.eniAccounts[accountId]) {
     return pdIsEniAccountEntryPresent(entry.eniAccounts[accountId]);
   }
+  if (projectKey === 'matrix' && entry.matrixAccounts && entry.matrixAccounts[accountId]) {
+    return pdIsMatrixAccountEntryPresent(entry.matrixAccounts[accountId]);
+  }
+  if (projectKey === 'bitsync' && entry.bitsyncAccounts && entry.bitsyncAccounts[accountId]) {
+    return pdIsBitsyncAccountEntryPresent(entry.bitsyncAccounts[accountId]);
+  }
   if (projectKey === 'cary' && entry.caryAccounts && entry.caryAccounts[accountId]) {
     return entry.caryAccounts[accountId].todayReward != null;
   }
@@ -265,6 +271,16 @@ function pdCollectRevenueAccountIds(projectKey) {
         if (pdHasAccountRevenueInEntry(entry, projectKey, id)) ids[id] = true;
       });
     }
+    if (projectKey === 'matrix' && entry.matrixAccounts) {
+      Object.keys(entry.matrixAccounts).forEach(function (id) {
+        if (pdHasAccountRevenueInEntry(entry, projectKey, id)) ids[id] = true;
+      });
+    }
+    if (projectKey === 'bitsync' && entry.bitsyncAccounts) {
+      Object.keys(entry.bitsyncAccounts).forEach(function (id) {
+        if (pdHasAccountRevenueInEntry(entry, projectKey, id)) ids[id] = true;
+      });
+    }
     if (entry.accounts) {
       Object.keys(entry.accounts).forEach(function (id) {
         let ae = entry.accounts[id];
@@ -292,7 +308,7 @@ function pdCollectSalesAccountIds(projectKey) {
   return Object.keys(ids);
 }
 
-var PD_PROJECT_KEYS = ['ram', 'orca', 'cary', 'genesis', 'eni', 'other'];
+var PD_PROJECT_KEYS = ['ram', 'orca', 'cary', 'genesis', 'eni', 'matrix', 'bitsync', 'other'];
 var PD_RAM_EXCEL_KEYS = ['kai1', 'kai2'];
 var PD_SCHEMA_VERSION = 1;
 
@@ -624,11 +640,22 @@ function pdGetProjectAccountIds(projectKey) {
   if (projectKey === 'eni' && typeof getEniInputAccounts === 'function') {
     return getEniInputAccounts().map(function (a) { return a.id; });
   }
+  if (projectKey === 'bitsync' && typeof getBitsyncInputAccounts === 'function') {
+    return getBitsyncInputAccounts().map(function (a) { return a.id; });
+  }
   return [];
+}
+
+function pdGetBitsyncProjectOperatingUsd(dateKey) {
+  if (typeof bitsyncGetProjectTotalInvestment === 'function') {
+    return bitsyncGetProjectTotalInvestment();
+  }
+  return 0;
 }
 
 function pdGetProjectOperatingUsd(projectKey, dateKey) {
   dateKey = dateKey || (typeof todayKey === 'function' ? todayKey() : '');
+  if (projectKey === 'bitsync') return pdGetBitsyncProjectOperatingUsd(dateKey);
   let total = 0;
   pdGetProjectAccountIds(projectKey).forEach(function (id) {
     total += pdGetOperatingUsdAsOf(id, projectKey, dateKey);
@@ -943,7 +970,7 @@ function pdRestorePerformanceSnapshot(snapshot) {
 function pdSumProjectDayRevenue(entry, projectKey, dateKey) {
   if (!entry) return 0;
   if (projectKey === 'other') {
-    let known = ['ram', 'orca', 'cary', 'genesis', 'eni'];
+    let known = ['ram', 'orca', 'cary', 'genesis', 'eni', 'matrix', 'bitsync'];
     let sumKnown = known.reduce(function (s, k) { return s + (Number(entry[k]) || 0); }, 0);
     let total = Number(entry.total) || 0;
     return pdRound(Math.max(0, total - sumKnown));
@@ -1004,6 +1031,28 @@ function pdSumProjectDayRevenue(entry, projectKey, dateKey) {
     });
     if (hasAny) return pdRound(sum);
   }
+  if (projectKey === 'matrix' && entry.matrixAccounts) {
+    let sum = 0;
+    let hasAny = false;
+    Object.keys(entry.matrixAccounts).forEach(function (id) {
+      let ae = entry.matrixAccounts[id];
+      if (!ae || !pdIsMatrixAccountEntryPresent(ae)) return;
+      hasAny = true;
+      sum += pdMatrixAccountRevenueTotal(ae);
+    });
+    if (hasAny) return pdRound(sum);
+  }
+  if (projectKey === 'bitsync' && entry.bitsyncAccounts) {
+    let sum = 0;
+    let hasAny = false;
+    Object.keys(entry.bitsyncAccounts).forEach(function (id) {
+      let ae = entry.bitsyncAccounts[id];
+      if (!ae || !pdIsBitsyncAccountEntryPresent(ae)) return;
+      hasAny = true;
+      sum += pdBitsyncAccountRevenueTotal(ae);
+    });
+    if (hasAny) return pdRound(sum);
+  }
   return pdRound(Number(entry[projectKey]) || 0);
 }
 
@@ -1029,6 +1078,16 @@ function pdProjectDayHasRevenue(entry, projectKey, dateKey) {
   }
   if (projectKey === 'eni' && entry.eniAccounts) {
     return Object.keys(entry.eniAccounts).some(function (id) {
+      return pdHasAccountRevenueInEntry(entry, projectKey, id);
+    });
+  }
+  if (projectKey === 'matrix' && entry.matrixAccounts) {
+    return Object.keys(entry.matrixAccounts).some(function (id) {
+      return pdHasAccountRevenueInEntry(entry, projectKey, id);
+    });
+  }
+  if (projectKey === 'bitsync' && entry.bitsyncAccounts) {
+    return Object.keys(entry.bitsyncAccounts).some(function (id) {
       return pdHasAccountRevenueInEntry(entry, projectKey, id);
     });
   }
@@ -1609,6 +1668,91 @@ function pdOrcaAccountTotal(a) {
   return pdOrcaAccountRevenueTotal(a);
 }
 
+function pdNormalizeMatrixBonusValue(value) {
+  if (value == null || value === '') return 0;
+  let n = Number(value);
+  if (isNaN(n)) return 0;
+  return pdRound(n);
+}
+
+function pdIsMatrixAccountEntryPresent(ae) {
+  if (!ae || typeof ae !== 'object') return false;
+  return ae.savedAt != null || ae.revenueBonus != null || ae.matrixBonus != null;
+}
+
+function pdMatrixAccountRevenueTotal(ae) {
+  if (!ae) return 0;
+  if (ae.total != null && ae.total !== '') return pdRound(Number(ae.total) || 0);
+  return pdRound(
+    pdNormalizeMatrixBonusValue(ae.revenueBonus) + pdNormalizeMatrixBonusValue(ae.matrixBonus)
+  );
+}
+
+function pdSaveMatrixPerformanceEntry(dateKey, accountId, accountName, revenueBonus, matrixBonus) {
+  if (!dateKey || !accountId) return null;
+  ensurePerformanceLogs();
+  let rb = pdNormalizeMatrixBonusValue(revenueBonus);
+  let mb = pdNormalizeMatrixBonusValue(matrixBonus);
+  let entry = pdGetRevenueEntryRaw(dateKey) || {};
+  entry.matrixAccounts = entry.matrixAccounts || {};
+  entry.matrixAccounts[accountId] = {
+    accountId: accountId,
+    accountName: accountName || accountId,
+    revenueBonus: rb,
+    matrixBonus: mb,
+    total: pdRound(rb + mb),
+    savedAt: new Date().toLocaleString()
+  };
+  entry = pdRecalculateRevenueEntry(entry, dateKey);
+  pdWriteRevenueEntry(dateKey, entry);
+  return entry.matrixAccounts[accountId];
+}
+
+function pdNormalizeBitsyncValue(value) {
+  if (value == null || value === '') return 0;
+  let n = Number(value);
+  if (isNaN(n)) return 0;
+  return pdRound(n);
+}
+
+function pdIsBitsyncAccountEntryPresent(ae) {
+  if (!ae || typeof ae !== 'object') return false;
+  return ae.savedAt != null || ae.nftSaleReward != null ||
+    ae.operationReward != null || ae.profitBonus != null;
+}
+
+function pdBitsyncAccountRevenueTotal(ae) {
+  if (!ae) return 0;
+  if (ae.total != null && ae.total !== '') return pdRound(Number(ae.total) || 0);
+  return pdRound(
+    pdNormalizeBitsyncValue(ae.nftSaleReward) +
+    pdNormalizeBitsyncValue(ae.operationReward) +
+    pdNormalizeBitsyncValue(ae.profitBonus)
+  );
+}
+
+function pdSaveBitsyncPerformanceEntry(dateKey, accountId, accountName, nftSaleReward, operationReward, profitBonus) {
+  if (!dateKey || !accountId) return null;
+  ensurePerformanceLogs();
+  let nft = pdNormalizeBitsyncValue(nftSaleReward);
+  let op = pdNormalizeBitsyncValue(operationReward);
+  let bonus = pdNormalizeBitsyncValue(profitBonus);
+  let entry = pdGetRevenueEntryRaw(dateKey) || {};
+  entry.bitsyncAccounts = entry.bitsyncAccounts || {};
+  entry.bitsyncAccounts[accountId] = {
+    accountId: accountId,
+    accountName: accountName || accountId,
+    nftSaleReward: nft,
+    operationReward: op,
+    profitBonus: bonus,
+    total: pdRound(nft + op + bonus),
+    savedAt: new Date().toLocaleString()
+  };
+  entry = pdRecalculateRevenueEntry(entry, dateKey);
+  pdWriteRevenueEntry(dateKey, entry);
+  return entry.bitsyncAccounts[accountId];
+}
+
 function pdRecalculateRevenueEntry(entry, dateKey) {
   entry = entry || {};
   dateKey = dateKey || (typeof todayKey === 'function' ? todayKey() : '');
@@ -1633,6 +1777,16 @@ function pdRecalculateRevenueEntry(entry, dateKey) {
       entry.eni += pdEniAccountRevenueTotal(entry.eniAccounts[id]);
     });
   }
+  if (entry.matrixAccounts) {
+    Object.keys(entry.matrixAccounts).forEach(function (id) {
+      entry.matrix += pdMatrixAccountRevenueTotal(entry.matrixAccounts[id]);
+    });
+  }
+  if (entry.bitsyncAccounts) {
+    Object.keys(entry.bitsyncAccounts).forEach(function (id) {
+      entry.bitsync += pdBitsyncAccountRevenueTotal(entry.bitsyncAccounts[id]);
+    });
+  }
   if (entry.caryAccounts) {
     Object.keys(entry.caryAccounts).forEach(function (id) {
       let ae = entry.caryAccounts[id];
@@ -1645,7 +1799,7 @@ function pdRecalculateRevenueEntry(entry, dateKey) {
     Object.keys(entry.accounts).forEach(function (id) {
       let a = entry.accounts[id];
       let pk = a.projectKey;
-      if (!pk || pk === 'ram' || pk === 'orca' || pk === 'cary' || pk === 'eni') return;
+      if (!pk || pk === 'ram' || pk === 'orca' || pk === 'cary' || pk === 'eni' || pk === 'matrix' || pk === 'bitsync') return;
       if (PD_PROJECT_KEYS.indexOf(pk) >= 0) {
         let rev = Number(a.todayRevenue) || 0;
         let op = Number(a.operationRevenue) || 0;
@@ -2276,6 +2430,9 @@ function pdRevenueEntryHasData(entry) {
   if (entry.total > 0) return true;
   return !!(entry.ramAccounts && Object.keys(entry.ramAccounts).length) ||
     !!(entry.orcaAccounts && Object.keys(entry.orcaAccounts).length) ||
+    !!(entry.eniAccounts && Object.keys(entry.eniAccounts).length) ||
+    !!(entry.matrixAccounts && Object.keys(entry.matrixAccounts).length) ||
+    !!(entry.bitsyncAccounts && Object.keys(entry.bitsyncAccounts).length) ||
     !!(entry.caryAccounts && Object.keys(entry.caryAccounts).length) ||
     !!(entry.accounts && Object.keys(entry.accounts).length);
 }
@@ -2555,6 +2712,14 @@ function pdDeleteAccountPerformanceData(projectKey, accountId, opts) {
       delete entry.eniAccounts[accountId];
       touched = true;
     }
+    if (projectKey === 'matrix' && entry.matrixAccounts && entry.matrixAccounts[accountId]) {
+      delete entry.matrixAccounts[accountId];
+      touched = true;
+    }
+    if (projectKey === 'bitsync' && entry.bitsyncAccounts && entry.bitsyncAccounts[accountId]) {
+      delete entry.bitsyncAccounts[accountId];
+      touched = true;
+    }
     if (projectKey === 'cary' && entry.caryAccounts && entry.caryAccounts[accountId]) {
       delete entry.caryAccounts[accountId];
       touched = true;
@@ -2703,6 +2868,12 @@ if (typeof window !== 'undefined') {
   window.pdGetEniPreviousAccountEntry = pdGetEniPreviousAccountEntry;
   window.pdCalcEniDailyMetrics = pdCalcEniDailyMetrics;
   window.pdSaveEniPerformanceEntry = pdSaveEniPerformanceEntry;
+  window.pdSaveMatrixPerformanceEntry = pdSaveMatrixPerformanceEntry;
+  window.pdMatrixAccountRevenueTotal = pdMatrixAccountRevenueTotal;
+  window.pdIsMatrixAccountEntryPresent = pdIsMatrixAccountEntryPresent;
+  window.pdSaveBitsyncPerformanceEntry = pdSaveBitsyncPerformanceEntry;
+  window.pdBitsyncAccountRevenueTotal = pdBitsyncAccountRevenueTotal;
+  window.pdIsBitsyncAccountEntryPresent = pdIsBitsyncAccountEntryPresent;
   window.pdRecalculateEniAccountFrom = pdRecalculateEniAccountFrom;
   window.pdPreviewRamAccountRevenueTotal = pdPreviewRamAccountRevenueTotal;
   window.pdGetRamOperationRevenue = pdGetRamOperationRevenue;

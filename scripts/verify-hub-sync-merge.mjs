@@ -258,5 +258,41 @@ assert(
   !!(tombMerged.settings.revenueLog['2026-03-01'].ramAccounts || {}).m1
 );
 
+// MATRIX: preferLocal must keep cloud-only matrixAccounts
+const matrixLocal = hubCreateEmptyData();
+matrixLocal.updatedAt = 9000;
+matrixLocal.settings = hubCreateDefaultSettings();
+matrixLocal.settings.revenueLog = {
+  '2026-09-22': { ramAccounts: { m1: { todayRevenue: 5 } }, ram: 5, total: 5 }
+};
+const matrixCloud = hubCreateEmptyData();
+matrixCloud.updatedAt = 1000;
+matrixCloud.settings = hubCreateDefaultSettings();
+matrixCloud.settings.revenueLog = {
+  '2026-09-22': {
+    ramAccounts: { m1: { todayRevenue: 5 } },
+    matrixAccounts: { mx1: { revenueBonus: 40, matrixBonus: 10, total: 50 } },
+    ram: 5,
+    matrix: 50,
+    total: 55
+  }
+};
+matrixCloud.settings.matrixInputAccounts = [{ id: 'mx1', username: 'mx1', name: 'mx1' }];
+const matrixMerged = hubMergeHubDocuments(matrixLocal, matrixCloud);
+const matrixDay = matrixMerged.settings.revenueLog['2026-09-22'] || {};
+assert(
+  'preferLocal keeps cloud-only matrixAccounts',
+  !!(matrixDay.matrixAccounts && matrixDay.matrixAccounts.mx1)
+);
+assert(
+  'matrix merge keeps RAM alongside MATRIX',
+  !!(matrixDay.ramAccounts && matrixDay.ramAccounts.m1)
+);
+assert(
+  'matrixInputAccounts merged from cloud',
+  Array.isArray(matrixMerged.settings.matrixInputAccounts) &&
+    matrixMerged.settings.matrixInputAccounts.some((a) => a.id === 'mx1')
+);
+
 console.log(`\n${passed}/${passed + failed} PASS`);
 process.exit(failed ? 1 : 0);

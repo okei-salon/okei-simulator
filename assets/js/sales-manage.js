@@ -28,18 +28,34 @@ var SM_PROJECTS = [
   { key: 'other', name: 'その他' }
 ];
 
+/** salesLog 対応プロジェクトのみ（MATRIX / BITSYNC は収益管理のみ） */
+var SM_SALES_UNSUPPORTED_KEYS = { matrix: 1, bitsync: 1 };
+
+function smIsSalesSupportedProject(projectKey) {
+  return !SM_SALES_UNSUPPORTED_KEYS[projectKey];
+}
+
+function smFilterSalesProjects(list) {
+  return (list || []).filter(function (p) {
+    return p && p.key && smIsSalesSupportedProject(p.key);
+  });
+}
+
 function smGetManageProjectSource() {
+  let list = [];
   if (typeof pmGetManageProjectList === 'function') {
-    let list = pmGetManageProjectList();
-    if (list.length) return list;
+    list = pmGetManageProjectList();
   }
-  return SM_PROJECTS.filter(function (p) { return p.key !== 'other'; });
+  if (!list.length) {
+    list = SM_PROJECTS.filter(function (p) { return p.key !== 'other'; });
+  }
+  return smFilterSalesProjects(list);
 }
 
 function smGetActiveProjects() {
   let list = smGetManageProjectSource();
   if (typeof pdFilterProjectsWithData === 'function') {
-    return pdFilterProjectsWithData(list);
+    return smFilterSalesProjects(pdFilterProjectsWithData(list));
   }
   return list;
 }

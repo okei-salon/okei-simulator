@@ -19,6 +19,17 @@ var RM_ACCOUNT_DETAIL_DEFS = {
     // 収益管理は日付ごとの利益推移をシンプルに確認する画面。
     // 運用額・USDT残高・出金額・総実績・本日売上は実績入力側の項目のためここでは出さない。
     { key: 'dailyProfit', label: '本日の利益' }
+  ],
+  matrix: [
+    { key: 'revenueBonus', label: '収益ボーナス' },
+    { key: 'matrixBonus', label: 'MATRIXボーナス' },
+    { key: 'total', label: '合計' }
+  ],
+  bitsync: [
+    { key: 'nftSaleReward', label: 'NFT販売報酬' },
+    { key: 'operationReward', label: '運用報酬' },
+    { key: 'profitBonus', label: '運用益ボーナス' },
+    { key: 'total', label: '合計' }
   ]
 };
 
@@ -215,6 +226,18 @@ function rmGetProjectAccountRows(projectKey) {
         return { id: acc.id, name: acc.username, parentId: null, depth: 0 };
       });
     }
+  } else if (projectKey === 'matrix') {
+    if (typeof getMatrixInputAccounts === 'function') {
+      live = getMatrixInputAccounts().map(function (acc) {
+        return { id: acc.id, name: acc.username, parentId: null, depth: 0 };
+      });
+    }
+  } else if (projectKey === 'bitsync') {
+    if (typeof getBitsyncInputAccounts === 'function') {
+      live = getBitsyncInputAccounts().map(function (acc) {
+        return { id: acc.id, name: acc.username, parentId: null, depth: 0 };
+      });
+    }
   } else if (projectKey === 'cary') {
     if (typeof getCaryInputAccounts === 'function') {
       live = getCaryInputAccounts().map(function (acc) {
@@ -306,6 +329,25 @@ function rmReadStoredEntryValues(projectKey, accountId, dateKey) {
       note: ae.note || '',
       total: typeof pdEniAccountRevenueTotal === 'function' ? pdEniAccountRevenueTotal(ae) : 0
     };
+  } else if (projectKey === 'matrix' && entry.matrixAccounts && entry.matrixAccounts[accountId]) {
+    let ae = entry.matrixAccounts[accountId];
+    return {
+      revenueBonus: ae.revenueBonus != null ? Number(ae.revenueBonus) : 0,
+      matrixBonus: ae.matrixBonus != null ? Number(ae.matrixBonus) : 0,
+      total: typeof pdMatrixAccountRevenueTotal === 'function'
+        ? pdMatrixAccountRevenueTotal(ae)
+        : ((Number(ae.revenueBonus) || 0) + (Number(ae.matrixBonus) || 0))
+    };
+  } else if (projectKey === 'bitsync' && entry.bitsyncAccounts && entry.bitsyncAccounts[accountId]) {
+    let ae = entry.bitsyncAccounts[accountId];
+    return {
+      nftSaleReward: ae.nftSaleReward != null ? Number(ae.nftSaleReward) : 0,
+      operationReward: ae.operationReward != null ? Number(ae.operationReward) : 0,
+      profitBonus: ae.profitBonus != null ? Number(ae.profitBonus) : 0,
+      total: typeof pdBitsyncAccountRevenueTotal === 'function'
+        ? pdBitsyncAccountRevenueTotal(ae)
+        : ((Number(ae.nftSaleReward) || 0) + (Number(ae.operationReward) || 0) + (Number(ae.profitBonus) || 0))
+    };
   } else if (entry.accounts && entry.accounts[accountId]) {
     let ae = entry.accounts[accountId];
     if (!ae.projectKey || ae.projectKey === projectKey) {
@@ -325,6 +367,14 @@ function rmOpenRevenueEntryModal(projectKey, accountId, accountName, dateKey, am
   }
   if (projectKey === 'eni') {
     rmOpenEniRevenueEntryModal(accountId, accountName, dateVal);
+    return;
+  }
+  if (projectKey === 'matrix') {
+    rmOpenMatrixRevenueEntryModal(accountId, accountName, dateVal);
+    return;
+  }
+  if (projectKey === 'bitsync') {
+    rmOpenBitsyncRevenueEntryModal(accountId, accountName, dateVal);
     return;
   }
   let projLabel = pfGetProjectLabel(projectKey, RM_PROJECTS);
@@ -502,6 +552,112 @@ function rmUpdateEniEntryModalDerived() {
   });
   profitEl.value = String(calc.dailyProfit) + ' USDT';
   salesEl.value = String(calc.dailySales);
+}
+
+function rmOpenMatrixRevenueEntryModal(accountId, accountName, dateVal) {
+  let stored = rmReadStoredEntryValues('matrix', accountId, dateVal);
+  let revVal = stored.revenueBonus != null ? stored.revenueBonus : '';
+  let matVal = stored.matrixBonus != null ? stored.matrixBonus : '';
+  let body =
+    '<input type="hidden" id="rmEntryProjectKey" value="matrix">' +
+    '<input type="hidden" id="rmEntryAccountId" value="' + pfEscapeAttr(accountId) + '">' +
+    pfEntryDateField('日付', 'rmEntryDate', dateVal) +
+    pfEntryReadonlyField('プロジェクト', 'MATRIX') +
+    pfEntryReadonlyField('アカウント', accountName || accountId) +
+    pfEntryNumberField('収益ボーナス', 'rmEntryMatrixRevenueBonus', revVal,
+      '1:1レベルマッチ・3:3バイナリー・達成ボーナス等の単発報酬合計') +
+    pfEntryNumberField('MATRIXボーナス', 'rmEntryMatrixBonus', matVal,
+      '毎月ボーナス用（未入力・0でも保存可）');
+  pfOpenEntryModal('実績入力', body, 'rmSaveMatrixRevenueEntry');
+}
+
+function rmSaveMatrixRevenueEntry() {
+  let dateEl = document.getElementById('rmEntryDate');
+  let accountIdEl = document.getElementById('rmEntryAccountId');
+  let revEl = document.getElementById('rmEntryMatrixRevenueBonus');
+  let matEl = document.getElementById('rmEntryMatrixBonus');
+  if (!accountIdEl) return;
+
+  let accountId = accountIdEl.value;
+  let dateKey = dateEl && dateEl.value
+    ? dateEl.value
+    : (typeof todayKey === 'function' ? todayKey() : '');
+  let accountName = accountId;
+  if (typeof getMatrixInputAccounts === 'function') {
+    let acc = getMatrixInputAccounts().find(function (a) { return a.id === accountId; });
+    if (acc) accountName = acc.username || acc.name || accountId;
+  }
+
+  pfRegisterManageDisplayFromEntry('matrix', accountId);
+
+  if (typeof pdSaveMatrixPerformanceEntry === 'function') {
+    pdSaveMatrixPerformanceEntry(
+      dateKey,
+      accountId,
+      accountName,
+      revEl ? revEl.value : '',
+      matEl ? matEl.value : ''
+    );
+  }
+
+  pfCloseEntryModal();
+  if (typeof showToast === 'function') {
+    showToast('✅ 実績を保存しました');
+  }
+}
+
+function rmOpenBitsyncRevenueEntryModal(accountId, accountName, dateVal) {
+  let stored = rmReadStoredEntryValues('bitsync', accountId, dateVal);
+  let nftVal = stored.nftSaleReward != null ? stored.nftSaleReward : '';
+  let opVal = stored.operationReward != null ? stored.operationReward : '';
+  let bonusVal = stored.profitBonus != null ? stored.profitBonus : '';
+  let body =
+    '<input type="hidden" id="rmEntryProjectKey" value="bitsync">' +
+    '<input type="hidden" id="rmEntryAccountId" value="' + pfEscapeAttr(accountId) + '">' +
+    pfEntryDateField('日付', 'rmEntryDate', dateVal) +
+    pfEntryReadonlyField('プロジェクト', 'BITSYNC') +
+    pfEntryReadonlyField('アカウント', accountName || accountId) +
+    pfEntryNumberField('NFT販売報酬', 'rmEntryBitsyncNft', nftVal, 'NFT販売報酬（0でも保存可）') +
+    pfEntryNumberField('運用報酬', 'rmEntryBitsyncOp', opVal, '運用額に対する日次報酬') +
+    pfEntryNumberField('運用益ボーナス', 'rmEntryBitsyncBonus', bonusVal, 'グループ運用等のボーナス（0でも保存可）');
+  pfOpenEntryModal('実績入力', body, 'rmSaveBitsyncRevenueEntry');
+}
+
+function rmSaveBitsyncRevenueEntry() {
+  let dateEl = document.getElementById('rmEntryDate');
+  let accountIdEl = document.getElementById('rmEntryAccountId');
+  let nftEl = document.getElementById('rmEntryBitsyncNft');
+  let opEl = document.getElementById('rmEntryBitsyncOp');
+  let bonusEl = document.getElementById('rmEntryBitsyncBonus');
+  if (!accountIdEl) return;
+
+  let accountId = accountIdEl.value;
+  let dateKey = dateEl && dateEl.value
+    ? dateEl.value
+    : (typeof todayKey === 'function' ? todayKey() : '');
+  let accountName = accountId;
+  if (typeof getBitsyncInputAccounts === 'function') {
+    let acc = getBitsyncInputAccounts().find(function (a) { return a.id === accountId; });
+    if (acc) accountName = acc.username || acc.name || accountId;
+  }
+
+  pfRegisterManageDisplayFromEntry('bitsync', accountId);
+
+  if (typeof pdSaveBitsyncPerformanceEntry === 'function') {
+    pdSaveBitsyncPerformanceEntry(
+      dateKey,
+      accountId,
+      accountName,
+      nftEl ? nftEl.value : '',
+      opEl ? opEl.value : '',
+      bonusEl ? bonusEl.value : ''
+    );
+  }
+
+  pfCloseEntryModal();
+  if (typeof showToast === 'function') {
+    showToast('✅ 実績を保存しました');
+  }
 }
 
 function rmSaveEniRevenueEntry() {
@@ -832,6 +988,8 @@ function rmGetAccountsForProject(projectKey) {
   if (projectKey === 'ram' && typeof getRamInputAccounts === 'function') return getRamInputAccounts();
   if (projectKey === 'orca' && typeof getOrcaInputAccounts === 'function') return getOrcaInputAccounts();
   if (projectKey === 'eni' && typeof getEniInputAccounts === 'function') return getEniInputAccounts();
+  if (projectKey === 'matrix' && typeof getMatrixInputAccounts === 'function') return getMatrixInputAccounts();
+  if (projectKey === 'bitsync' && typeof getBitsyncInputAccounts === 'function') return getBitsyncInputAccounts();
   if (projectKey === 'cary' && typeof getCaryInputAccounts === 'function') return getCaryInputAccounts();
   if (projectKey === 'genesis' || projectKey === 'other') return [];
   return [];
@@ -890,6 +1048,21 @@ function rmGetAccountDirectAmount(entry, projectKey, accountId, dateKey) {
       (Number(ae.referralProfit) || 0) +
       (Number(ae.titleProfit) || 0)
     ) * 100) / 100;
+  }
+  if (projectKey === 'matrix' && entry.matrixAccounts && entry.matrixAccounts[accountId]) {
+    let ae = entry.matrixAccounts[accountId];
+    if (typeof pdIsMatrixAccountEntryPresent === 'function' &&
+        !pdIsMatrixAccountEntryPresent(ae)) return null;
+    if (typeof pdMatrixAccountRevenueTotal === 'function') return pdMatrixAccountRevenueTotal(ae);
+    return Math.round(((Number(ae.revenueBonus) || 0) + (Number(ae.matrixBonus) || 0)) * 100) / 100;
+  }
+  if (projectKey === 'bitsync' && entry.bitsyncAccounts && entry.bitsyncAccounts[accountId]) {
+    let ae = entry.bitsyncAccounts[accountId];
+    if (typeof pdIsBitsyncAccountEntryPresent === 'function' &&
+        !pdIsBitsyncAccountEntryPresent(ae)) return null;
+    if (typeof pdBitsyncAccountRevenueTotal === 'function') return pdBitsyncAccountRevenueTotal(ae);
+    return Math.round(((Number(ae.nftSaleReward) || 0) + (Number(ae.operationReward) || 0) +
+      (Number(ae.profitBonus) || 0)) * 100) / 100;
   }
   if (projectKey === 'cary' && typeof getCaryAccountEntry === 'function') {
     let ae = getCaryAccountEntry(entry, accountId);
@@ -973,7 +1146,8 @@ function rmGetTableRows() {
 }
 
 function rmSupportsAccountDetail(projectKey) {
-  return projectKey === 'ram' || projectKey === 'orca' || projectKey === 'eni';
+  return projectKey === 'ram' || projectKey === 'orca' || projectKey === 'eni' ||
+    projectKey === 'matrix' || projectKey === 'bitsync';
 }
 
 function rmAccountExpandKey(projectKey, accountId) {
@@ -1019,7 +1193,8 @@ function rmCanEditAmountCell(dr, row) {
   if (rmFilter === 'all' || row.isEmpty || row.isTotal) return false;
   if (dr.type === 'accountHead' || dr.type === 'accountFlat') return true;
   if (dr.type === 'accountDetail') {
-    if ((row.projectKey === 'orca') && dr.detailKey === 'total') return false;
+    if ((row.projectKey === 'orca' || row.projectKey === 'matrix' || row.projectKey === 'bitsync') &&
+        dr.detailKey === 'total') return false;
     return true;
   }
   return false;
@@ -1102,6 +1277,33 @@ function rmGetAccountBreakdown(projectKey, accountId, y, m, d) {
             dailyProfit: ae.dailyProfit != null ? Number(ae.dailyProfit)
               : (typeof pdEniAccountRevenueTotal === 'function' ? pdEniAccountRevenueTotal(ae) : null),
             dailySales: ae.dailySales != null ? Number(ae.dailySales) : null
+          };
+        }
+      }
+      if (projectKey === 'matrix' && entry && entry.matrixAccounts && entry.matrixAccounts[accountId]) {
+        let ae = entry.matrixAccounts[accountId];
+        if (ae && (!pdIsMatrixAccountEntryPresent || pdIsMatrixAccountEntryPresent(ae))) {
+          let total = typeof pdMatrixAccountRevenueTotal === 'function'
+            ? pdMatrixAccountRevenueTotal(ae)
+            : ((Number(ae.revenueBonus) || 0) + (Number(ae.matrixBonus) || 0));
+          return {
+            revenueBonus: ae.revenueBonus != null ? Number(ae.revenueBonus) : 0,
+            matrixBonus: ae.matrixBonus != null ? Number(ae.matrixBonus) : 0,
+            total: total
+          };
+        }
+      }
+      if (projectKey === 'bitsync' && entry && entry.bitsyncAccounts && entry.bitsyncAccounts[accountId]) {
+        let ae = entry.bitsyncAccounts[accountId];
+        if (ae && (!pdIsBitsyncAccountEntryPresent || pdIsBitsyncAccountEntryPresent(ae))) {
+          let total = typeof pdBitsyncAccountRevenueTotal === 'function'
+            ? pdBitsyncAccountRevenueTotal(ae)
+            : ((Number(ae.nftSaleReward) || 0) + (Number(ae.operationReward) || 0) + (Number(ae.profitBonus) || 0));
+          return {
+            nftSaleReward: ae.nftSaleReward != null ? Number(ae.nftSaleReward) : 0,
+            operationReward: ae.operationReward != null ? Number(ae.operationReward) : 0,
+            profitBonus: ae.profitBonus != null ? Number(ae.profitBonus) : 0,
+            total: total
           };
         }
       }

@@ -10,6 +10,8 @@ var PM_BUILTIN = {
 var PM_VALID_CODES = {
   RAM: 'ram',
   ENI: 'eni',
+  MATRIX: 'matrix',
+  BITSYNC: 'bitsync',
   ORCA: 'orca',
   GENESIS: 'genesis',
   OUKEI2026: 'demo2026'
@@ -24,12 +26,14 @@ var PM_DISABLED_CODES = {
 var PM_CODE_META = {
   ram: { name: 'RAM', startDate: '2024/01/20' },
   eni: { name: 'ENI', startDate: '2026/07/11' },
+  matrix: { name: 'MATRIX', startDate: '2026/09/22' },
+  bitsync: { name: 'BITSYNC', startDate: '2026/09/27' },
   orca: { name: 'ORCA', startDate: '2024/04/15' },
   genesis: { name: 'Genesis', startDate: '2023/11/20' },
   demo2026: { name: 'OUKEI 2026', startDate: '2026/01/01' }
 };
 
-var PM_OFFICIAL_ICON_KEYS = { ram: 1, orca: 1, genesis: 1, cary: 1, eni: 1 };
+var PM_OFFICIAL_ICON_KEYS = { ram: 1, orca: 1, genesis: 1, cary: 1, eni: 1, matrix: 1, bitsync: 1 };
 
 function pmIsOfficialProjectName(name) {
   return typeof pjIsOfficialProjectName === 'function' && pjIsOfficialProjectName(name);
@@ -144,7 +148,7 @@ function pmNormalizeProjects() {
     p.registered = !!p.registered;
     if (!p.startDate) p.startDate = PM_BUILTIN[key] ? PM_BUILTIN[key].startDate : '—';
     if (!p.name) p.name = PM_BUILTIN[key] ? PM_BUILTIN[key].name : key;
-    if (!PM_BUILTIN[key] && key !== 'demo2026' && key !== 'eni' && !p.kind) p.kind = 'other';
+    if (!PM_BUILTIN[key] && key !== 'demo2026' && key !== 'eni' && key !== 'matrix' && key !== 'bitsync' && !p.kind) p.kind = 'other';
     if (typeof pjGetOfficialIconKeyByName === 'function') {
       let official = pjGetOfficialIconKeyByName(p.name);
       p.iconKey = official || 'custom';

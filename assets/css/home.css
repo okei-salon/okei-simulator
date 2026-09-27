@@ -1258,8 +1258,40 @@
 
 .homeTodayCard .homeTodayProjGrid {
   display: grid;
-  grid-template-columns: repeat(var(--today-proj-cols, 1), minmax(0, 1fr));
-  gap: 8px;
+  gap: 10px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.homeTodayCard .homeTodayProjGrid[data-count="0"],
+.homeTodayCard .homeTodayProjGrid:not([data-count]) {
+  display: none;
+}
+
+.homeTodayCard .homeTodayProjGrid[data-count="1"] {
+  grid-template-columns: minmax(0, 1fr);
+  max-width: 420px;
+}
+
+.homeTodayCard .homeTodayProjGrid[data-count="2"] {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.homeTodayCard .homeTodayProjGrid[data-count="3"] {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.homeTodayCard .homeTodayProjGrid[data-count="4"] {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.homeTodayCard .homeTodayProjGrid[data-count="5"] {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.homeTodayCard .homeTodayProjGrid[data-count="6"],
+.homeTodayCard .homeTodayProjGrid[data-count="7"],
+.homeTodayCard .homeTodayProjGrid[data-count="8"] {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .homeTodayCard .homeTodayProjCard {
@@ -1567,6 +1599,19 @@
 .homeProjCard--orca { border-color: rgba(20, 184, 166, .28); }
 .homeProjCard--cary { border-color: rgba(168, 85, 247, .28); }
 .homeProjCard--eni { border-color: rgba(163, 230, 53, .34); }
+.homeProjCard--matrix { border-color: rgba(45, 212, 191, .34); }
+.homeProjCard--bitsync { border-color: rgba(168, 85, 247, .34); }
+.homeProjCard--bitsync .homeProjCardDot { background: #a855f7; }
+.homeProjCard--bitsync .homeProjCardBarFill {
+  background: linear-gradient(90deg, #7e22ce, #a855f7, #c084fc);
+}
+
+.ramInputAccountName {
+  margin-left: 8px;
+  font-size: 14px;
+  font-weight: 800;
+  color: #dbeafe;
+}
 
 .homeProjCardName {
   font-size: 11px;
@@ -2703,9 +2748,8 @@
     gap: 8px;
   }
 
-  .homeProjGrid,
-  .homeTodayCard .homeTodayProjGrid {
-    grid-template-columns: repeat(var(--proj-cols, var(--today-proj-cols, 1)), minmax(0, 1fr));
+  .homeProjGrid {
+    grid-template-columns: repeat(var(--proj-cols, 1), minmax(0, 1fr));
   }
 
   .homeTodayCard .homeTodaySummaryHead {
@@ -2760,9 +2804,18 @@
     font-size: 22px;
   }
 
-  .homeTodayCard .homeTodayProjGrid {
-    grid-template-columns: 1fr;
-    gap: 8px;
+  .homeTodayCard .homeTodayProjGrid[data-count="3"],
+  .homeTodayCard .homeTodayProjGrid[data-count="4"],
+  .homeTodayCard .homeTodayProjGrid[data-count="5"],
+  .homeTodayCard .homeTodayProjGrid[data-count="6"],
+  .homeTodayCard .homeTodayProjGrid[data-count="7"],
+  .homeTodayCard .homeTodayProjGrid[data-count="8"] {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    max-width: none;
+  }
+
+  .homeTodayCard .homeTodayProjGrid[data-count="1"] {
+    max-width: none;
   }
 
   .homeTodayCard .homeTodayProjCard {
@@ -2848,6 +2901,11 @@
 
   .homeMonthlyCard .homeMonthlyProjGrid[data-count="1"] {
     grid-template-columns: 1fr;
+  }
+
+  .homeTodayCard .homeTodayProjGrid {
+    grid-template-columns: 1fr !important;
+    max-width: none;
   }
 
   .settingsHubShell,
@@ -3026,6 +3084,14 @@
   border-color: rgba(163, 230, 53, .46);
 }
 
+.revenueProjectCard--matrix:hover {
+  border-color: rgba(45, 212, 191, .46);
+}
+
+.revenueProjectCard--bitsync:hover {
+  border-color: rgba(168, 85, 247, .46);
+}
+
 .revenueProjectCardBody {
   display: flex;
   flex-direction: column;
@@ -3162,6 +3228,51 @@
 
 .ramInputAccountActions .btnDanger {
   margin-left: auto;
+}
+
+.bitsyncSectionTitle {
+  margin: 12px 0 8px;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: .04em;
+  color: #c084fc;
+  text-transform: none;
+}
+
+.bitsyncInvestmentBlock {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px dashed rgba(168, 85, 247, .35);
+}
+
+.bitsyncInvestmentHint {
+  margin: 0 0 10px;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.bitsyncInvestmentSummary {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 10px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(59, 7, 100, .32);
+  border: 1px solid rgba(168, 85, 247, .22);
+}
+
+.bitsyncInvestmentSummaryRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.bitsyncInvestmentSummaryRow b {
+  color: #e9d5ff;
+  font-weight: 800;
 }
 
 .aimPlaceModeBox {

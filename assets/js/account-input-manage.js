@@ -15,6 +15,14 @@ function aimEnsureRamInputAccounts() {
   if (!Array.isArray(settings.ramInputAccounts)) settings.ramInputAccounts = [];
 }
 
+/** True when the project's organization simulation is active. */
+function aimIsOrgSimActive(projectKey) {
+  var pk = String(projectKey || 'ram');
+  if (pk === 'orca') return !!(typeof orcaSimMode !== 'undefined' && orcaSimMode);
+  if (pk === 'eni') return !!(typeof eniSimMode !== 'undefined' && eniSimMode);
+  return !!(typeof simMode !== 'undefined' && simMode);
+}
+
 function aimMigrateRamInputAccountsFromMembers() {
   if (typeof settings === 'undefined') return;
   aimEnsureRamInputAccounts();
@@ -44,6 +52,8 @@ function aimGetInputAccountList(projectKey) {
   }
   if (projectKey === 'orca') return Array.isArray(settings.orcaInputAccounts) ? settings.orcaInputAccounts : [];
   if (projectKey === 'eni') return Array.isArray(settings.eniInputAccounts) ? settings.eniInputAccounts : [];
+  if (projectKey === 'matrix') return Array.isArray(settings.matrixInputAccounts) ? settings.matrixInputAccounts : [];
+  if (projectKey === 'bitsync') return Array.isArray(settings.bitsyncInputAccounts) ? settings.bitsyncInputAccounts : [];
   return [];
 }
 
@@ -487,6 +497,8 @@ function aimPlaceInputAccountInOrg(projectKey, accountId, parentId) {
 
 function aimRecordRemovedOrgAccountIds(projectKey, ids) {
   if (!ids || !ids.length || typeof settings === 'undefined') return;
+  // シミュレーション中の削除を本番 tombstone に書いてはいけない
+  if (aimIsOrgSimActive(projectKey)) return;
   if (projectKey === 'orca') {
     if (typeof hubRecordRemovedOrcaOrgAccountIds === 'function') {
       hubRecordRemovedOrcaOrgAccountIds(settings, ids);
@@ -517,6 +529,7 @@ function aimRemoveOrgMembersOnly(projectKey, ids) {
   if (!ids || !ids.length) return;
   let rm = {};
   ids.forEach(function (id) { rm[id] = true; });
+  // sim 中は作業用 members のみ削除。本番 tombstone / 入力アカウントは触らない
   aimRecordRemovedOrgAccountIds(projectKey, ids);
   if (projectKey === 'ram' && typeof members !== 'undefined') {
     members = members.filter(function (m) { return !rm[m.id]; });
@@ -554,6 +567,13 @@ function aimRemoveOrgMembersOnly(projectKey, ids) {
 
 function aimRemoveInputAccountRecord(projectKey, accountId) {
   if (!accountId) return;
+  // シミュレーション中は本番入力アカウント一覧を消さない
+  if (aimIsOrgSimActive(projectKey)) {
+    if (projectKey === 'ram' && typeof rootAccountIds !== 'undefined' && aimIsOrgSimActive('ram')) {
+      rootAccountIds = rootAccountIds.filter(function (id) { return id !== accountId; });
+    }
+    return;
+  }
   if (projectKey === 'ram') {
     aimEnsureRamInputAccounts();
     settings.ramInputAccounts = settings.ramInputAccounts.filter(function (a) { return a.id !== accountId; });
@@ -568,6 +588,14 @@ function aimRemoveInputAccountRecord(projectKey, accountId) {
   }
   if (projectKey === 'eni' && Array.isArray(settings.eniInputAccounts)) {
     settings.eniInputAccounts = settings.eniInputAccounts.filter(function (a) { return a.id !== accountId; });
+    return;
+  }
+  if (projectKey === 'matrix' && Array.isArray(settings.matrixInputAccounts)) {
+    settings.matrixInputAccounts = settings.matrixInputAccounts.filter(function (a) { return a.id !== accountId; });
+    return;
+  }
+  if (projectKey === 'bitsync' && Array.isArray(settings.bitsyncInputAccounts)) {
+    settings.bitsyncInputAccounts = settings.bitsyncInputAccounts.filter(function (a) { return a.id !== accountId; });
   }
 }
 
@@ -786,6 +814,17 @@ function aimPromoteChildrenThenRemoveSelf(projectKey, accountId) {
 function aimDeleteInputAccountFully(projectKey, accountId, opts) {
   opts = opts || {};
   if (!projectKey || !accountId) return 0;
+  // シミュレーション中の「完全削除」は作業ツリーのみ。収益・入力アカウント・tombstone は本番のまま
+  if (aimIsOrgSimActive(projectKey)) {
+    let simPreview = aimDescribeDeletePreview(projectKey, accountId);
+    let simModeDel = opts.mode || null;
+    if (simPreview.hasChildren && simModeDel !== 'subtree' && simModeDel !== 'promote') return 0;
+    if (!simPreview.hasChildren) simModeDel = 'subtree';
+    if (simModeDel === 'promote') aimPromoteChildrenThenRemoveSelf(projectKey, accountId);
+    else aimRemoveOrgMembersOnly(projectKey, simPreview.subtreeIds.slice());
+    aimAssertNoOrphansAfterDelete(projectKey);
+    return 0;
+  }
   let preview = aimDescribeDeletePreview(projectKey, accountId);
   let mode = opts.mode || null;
   if (preview.hasChildren && mode !== 'subtree' && mode !== 'promote') {
@@ -857,7 +896,10 @@ function aimDeleteOrgMemberOnly(projectKey, accountId, opts) {
     return false;
   }
 
-  aimAutoBackupBeforeDelete(projectKey + ':org:' + accountId + ':' + mode);
+  // sim 中は本番バックアップ/永続化を走らせない（作業ツリーのみ変更）
+  if (!aimIsOrgSimActive(projectKey)) {
+    aimAutoBackupBeforeDelete(projectKey + ':org:' + accountId + ':' + mode);
+  }
 
   let parentId = preview.parentId;
   let affectedIds = mode === 'promote' ? [accountId] : preview.subtreeIds.slice();
@@ -904,8 +946,10 @@ function aimDeleteOrgMemberOnly(projectKey, accountId, opts) {
   }
 
   if (typeof markActivity === 'function') markActivity();
-  if (typeof persistHubSettings === 'function') persistHubSettings();
-  else if (typeof hubSaveToStorage === 'function') hubSaveToStorage();
+  if (!aimIsOrgSimActive(projectKey)) {
+    if (typeof persistHubSettings === 'function') persistHubSettings();
+    else if (typeof hubSaveToStorage === 'function') hubSaveToStorage();
+  }
   aimAssertNoOrphansAfterDelete(projectKey);
   return true;
 }

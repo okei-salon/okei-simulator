@@ -37,6 +37,30 @@ var PJ_THEME_REGISTRY = {
     dot: '#a3e635',
     orgImplemented: false
   },
+  matrix: {
+    accent: '#22d3ee',
+    accentMid: '#4ade80',
+    accentDeep: '#059669',
+    accentLight: '#67e8f9',
+    accentSoft: 'rgba(34, 211, 238, .34)',
+    accentBorder: 'rgba(74, 222, 128, .32)',
+    accentGlow: 'rgba(34, 211, 238, .42)',
+    chart: '#2dd4bf',
+    dot: '#22d3ee',
+    orgImplemented: false
+  },
+  bitsync: {
+    accent: '#a855f7',
+    accentMid: '#c084fc',
+    accentDeep: '#7e22ce',
+    accentLight: '#e9d5ff',
+    accentSoft: 'rgba(168, 85, 247, .38)',
+    accentBorder: 'rgba(168, 85, 247, .34)',
+    accentGlow: 'rgba(168, 85, 247, .42)',
+    chart: '#a855f7',
+    dot: '#a855f7',
+    orgImplemented: false
+  },
   cary: {
     accent: '#a855f7',
     accentMid: '#c084fc',
@@ -152,6 +176,15 @@ function pjBuildDynamicThemeCss() {
     css.push('.pfProfitDetail--' + key + ' .pfProfitDetailSectionTitle{color:' + emph + '}');
     css.push('.pfStackSeg--' + key + '{background:' + chart + ' !important}');
     css.push('.pfProfitPieBlock--' + key + ' .pfProfitPieHole{border-color:#0d1b30}');
+
+    if (key === 'bitsync') {
+      css.push('.pfProjectCard--bitsync .pfRecoveryFill{background:' + grad + ';box-shadow:0 0 16px ' + t.accentGlow + '}');
+      css.push('.pfProjectCard--bitsync .pfRecoveryLabel b{color:' + emph + '}');
+      css.push('.bitsyncSectionTitle{color:' + emph + '}');
+      css.push('.bitsyncInvestmentBlock{border-top-color:' + t.accentBorder + '}');
+      css.push('.bitsyncInvestmentSummary{border-color:' + t.accentBorder + ';background:rgba(59,7,100,.32)}');
+      css.push('.bitsyncInvestmentSummaryRow b{color:' + (t.accentLight || emph) + '}');
+    }
 
     css.push('.ramInputBadge--' + key + '{background:' + t.accentSoft + ';border-color:' + t.accentBorder + ';color:' + emph + '}');
 

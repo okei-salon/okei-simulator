@@ -102,6 +102,13 @@ const SUITES = [
     cmd: ['node', 'scripts/verify-eni-revenue-account-ui.mjs']
   },
   {
+    id: 'bitsync-performance',
+    label: 'BITSYNC revenue + principal input',
+    category: 'Revenue Input',
+    needsServer: true,
+    cmd: ['node', 'scripts/verify-bitsync-performance-input.mjs']
+  },
+  {
     id: 'portfolio-calc',
     label: 'Portfolio calculation exact values',
     category: 'Portfolio',

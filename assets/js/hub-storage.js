@@ -316,6 +316,8 @@ function hubStripRemovedAccountsFromSettings(settings) {
   settings.orcaInputAccounts = hubFilterInputAccountsByRemoved(settings.orcaInputAccounts, removed);
   settings.ramInputAccounts = hubFilterInputAccountsByRemoved(settings.ramInputAccounts, removed);
   settings.eniInputAccounts = hubFilterInputAccountsByRemoved(settings.eniInputAccounts, removed);
+  settings.matrixInputAccounts = hubFilterInputAccountsByRemoved(settings.matrixInputAccounts, removed);
+  settings.bitsyncInputAccounts = hubFilterInputAccountsByRemoved(settings.bitsyncInputAccounts, removed);
   settings.caryInputAccounts = hubFilterInputAccountsByRemoved(settings.caryInputAccounts, removed);
 
   if (settings.investmentHistory && typeof settings.investmentHistory === 'object') {
@@ -326,7 +328,7 @@ function hubStripRemovedAccountsFromSettings(settings) {
 
   function stripRevenueEntry(entry) {
     if (!entry || typeof entry !== 'object') return entry;
-    ['ramAccounts', 'orcaAccounts', 'eniAccounts', 'caryAccounts', 'accounts'].forEach(function (key) {
+    ['ramAccounts', 'orcaAccounts', 'eniAccounts', 'matrixAccounts', 'bitsyncAccounts', 'caryAccounts', 'accounts'].forEach(function (key) {
       if (!entry[key] || typeof entry[key] !== 'object') return;
       Object.keys(entry[key]).forEach(function (id) {
         if (removed[id]) delete entry[key][id];
@@ -345,6 +347,8 @@ function hubStripRemovedAccountsFromSettings(settings) {
         (entry.ramAccounts && Object.keys(entry.ramAccounts).length) ||
         (entry.orcaAccounts && Object.keys(entry.orcaAccounts).length) ||
         (entry.eniAccounts && Object.keys(entry.eniAccounts).length) ||
+        (entry.matrixAccounts && Object.keys(entry.matrixAccounts).length) ||
+        (entry.bitsyncAccounts && Object.keys(entry.bitsyncAccounts).length) ||
         (entry.caryAccounts && Object.keys(entry.caryAccounts).length) ||
         (entry.accounts && Object.keys(entry.accounts).length);
       if (!has) delete settings.revenueLog[dateKey];
@@ -711,6 +715,8 @@ var HUB_REVENUE_ACCOUNT_MAP_KEYS = [
   'ramAccounts',
   'orcaAccounts',
   'eniAccounts',
+  'matrixAccounts',
+  'bitsyncAccounts',
   'caryAccounts',
   'accounts'
 ];
@@ -741,7 +747,7 @@ function hubMergeRevenueDayEntry(cloudEntry, localEntry, preferLocal, removedSet
         return;
       }
       // Project totals are recomputed from maps; do not let a stale local 0 wipe cloud.
-      if ((k === 'ram' || k === 'orca' || k === 'eni' || k === 'cary' ||
+      if ((k === 'ram' || k === 'orca' || k === 'eni' || k === 'matrix' || k === 'bitsync' || k === 'cary' ||
            k === 'total' || k === 'other' || k === 'genesis') &&
           typeof lv === 'number' && lv === 0 &&
           typeof cv === 'number' && cv !== 0) {
@@ -758,6 +764,8 @@ function hubMergeRevenueDayEntry(cloudEntry, localEntry, preferLocal, removedSet
   base.ramAccounts = hubMergeAccountMapById(c.ramAccounts, l.ramAccounts, preferLocal, removed.ram);
   base.orcaAccounts = hubMergeAccountMapById(c.orcaAccounts, l.orcaAccounts, preferLocal, removed.orca);
   base.eniAccounts = hubMergeAccountMapById(c.eniAccounts, l.eniAccounts, preferLocal, removed.eni);
+  base.matrixAccounts = hubMergeAccountMapById(c.matrixAccounts, l.matrixAccounts, preferLocal, null);
+  base.bitsyncAccounts = hubMergeAccountMapById(c.bitsyncAccounts, l.bitsyncAccounts, preferLocal, null);
   base.caryAccounts = hubMergeAccountMapById(c.caryAccounts, l.caryAccounts, preferLocal, null);
   // Generic accounts map: union all IDs; only drop explicit tombstones.
   base.accounts = hubMergeAccountMapById(c.accounts, l.accounts, preferLocal, removed.all);
@@ -978,6 +986,12 @@ function hubMergeHubSettings(localSettings, cloudSettings, localUpdatedAt, cloud
   merged.eniInputAccounts = hubFilterInputAccountsByRemoved(
     hubMergeArrayEntriesById(cloud.eniInputAccounts, local.eniInputAccounts, preferLocal),
     removedEniMap
+  );
+  merged.matrixInputAccounts = hubMergeArrayEntriesById(
+    cloud.matrixInputAccounts, local.matrixInputAccounts, preferLocal
+  );
+  merged.bitsyncInputAccounts = hubMergeArrayEntriesById(
+    cloud.bitsyncInputAccounts, local.bitsyncInputAccounts, preferLocal
   );
   merged.caryInputAccounts = hubMergeArrayEntriesById(cloud.caryInputAccounts, local.caryInputAccounts, preferLocal);
   return hubStripRemovedAccountsFromSettings(merged);
@@ -1233,6 +1247,14 @@ function hubNormalizeLoadedData(raw) {
   }
   if (!Array.isArray(settings.orcaInputAccounts)) settings.orcaInputAccounts = [];
   if (!Array.isArray(settings.eniInputAccounts)) settings.eniInputAccounts = [];
+  if (!Array.isArray(settings.matrixInputAccounts)) settings.matrixInputAccounts = [];
+  if (!Array.isArray(settings.bitsyncInputAccounts)) settings.bitsyncInputAccounts = [];
+  settings.bitsyncInputAccounts.forEach(function (acc) {
+    if (!acc || typeof acc !== 'object') return;
+    if (!Array.isArray(acc.nftPurchaseRecords)) acc.nftPurchaseRecords = [];
+    if (!Array.isArray(acc.operatingRecords)) acc.operatingRecords = [];
+    if (acc.startDate == null) acc.startDate = '';
+  });
   if (!Array.isArray(settings.ramInputAccounts)) settings.ramInputAccounts = [];
   if (!settings.removedOrcaOrgAccountIdTimes || typeof settings.removedOrcaOrgAccountIdTimes !== 'object') {
     settings.removedOrcaOrgAccountIdTimes = {};

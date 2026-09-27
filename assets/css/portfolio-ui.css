@@ -401,6 +401,17 @@
 .pfProjectCard--orca { border-color: rgba(59, 130, 246, .32); }
 .pfProjectCard--eni { border-color: rgba(163, 230, 53, .34); }
 .pfProjectCard--matrix { border-color: rgba(45, 212, 191, .34); }
+.pfProjectCard--bitsync { border-color: rgba(168, 85, 247, .34); }
+.pfProjectCard--bitsync.isClickable:hover { border-color: rgba(168, 85, 247, .56); }
+.pfProjectCard--bitsync .pfRecoveryFill {
+  background: linear-gradient(90deg, #7e22ce, #a855f7 65%, #c084fc);
+  box-shadow: 0 0 16px rgba(168, 85, 247, .35);
+}
+.pfProjectCard--bitsync .pfRecoveryLabel b { color: #c084fc; }
+
+.pfProjectMetrics--bitsync {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
 .pfProjectCard--cary { border-color: rgba(168, 85, 247, .32); }
 
 .pfProjectCard.isClickable {
@@ -576,6 +587,8 @@
 
 .pfProfitDetail--ram .pfProfitDetailSectionTitle { color: #fdba74; }
 .pfProfitDetail--orca .pfProfitDetailSectionTitle { color: #93c5fd; }
+.pfProfitDetail--bitsync .pfProfitDetailSectionTitle { color: #c084fc; }
+.pfProfitDetail--bitsync .pfProfitDetailVal--emph { color: #c084fc; }
 
 .pfProfitDetailRow {
   display: flex;
@@ -627,6 +640,17 @@
 
 .pfProfitPieBlock--ram .pfProfitPieHole { border-color: #0d1b30; }
 .pfProfitPieBlock--orca .pfProfitPieHole { border-color: #0d1b30; }
+.pfProfitPieBlock--bitsync .pfProfitPieHole { border-color: #0d1b30; }
+.pfProfitPieCenterSub--label {
+  font-size: 11px;
+  letter-spacing: .04em;
+  opacity: .82;
+}
+.pfProfitDetailRow--monthTotal {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(148, 163, 184, .18);
+}
 
 .pfProfitPieChart {
   width: 132px;

@@ -500,6 +500,20 @@ function pfLookupManageAccountName(projectKey, accountId) {
       if (un) return un;
     }
   }
+  if (projectKey === 'matrix' && typeof getMatrixInputAccounts === 'function') {
+    let acc = getMatrixInputAccounts().find(function (x) { return x.id === accountId; });
+    if (acc) {
+      let un = (acc.username || acc.name || '').replace(/^@/, '').trim();
+      if (un) return un;
+    }
+  }
+  if (projectKey === 'bitsync' && typeof getBitsyncInputAccounts === 'function') {
+    let acc = getBitsyncInputAccounts().find(function (x) { return x.id === accountId; });
+    if (acc) {
+      let un = (acc.username || acc.name || '').replace(/^@/, '').trim();
+      if (un) return un;
+    }
+  }
   return '';
 }
 

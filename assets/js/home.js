@@ -149,7 +149,7 @@ function getHomeActionProjects() {
   });
 }
 
-var HOME_BUILTIN_PROJECT_KEYS = { ram: 1, orca: 1, cary: 1, genesis: 1, eni: 1 };
+var HOME_BUILTIN_PROJECT_KEYS = { ram: 1, orca: 1, cary: 1, genesis: 1, eni: 1, matrix: 1, bitsync: 1 };
 
 function homeProjectCls(key) {
   return HOME_BUILTIN_PROJECT_KEYS[key] ? key : 'custom';
@@ -159,14 +159,24 @@ function homeProjectEntryFromMaster(p) {
   return { key: p.key, name: p.name, cls: homeProjectCls(p.key) };
 }
 
+/** PC: 表示カード数に応じた列数（1→1, 2→2, 3→3, 4→2, 5+→3） */
+function homeProjectGridColsByCount(count) {
+  count = Math.max(0, Number(count) || 0);
+  if (count <= 1) return 1;
+  if (count === 2) return 2;
+  if (count === 3) return 3;
+  if (count === 4) return 2;
+  return 3;
+}
+
 function homeResponsiveGridCols(count) {
-  count = Math.max(1, count || 1);
-  if (typeof window === 'undefined' || !window.matchMedia) return Math.min(count, 5);
+  count = Math.max(1, Number(count) || 1);
+  let base = homeProjectGridColsByCount(count);
+  if (typeof window === 'undefined' || !window.matchMedia) return base;
   let w = window.innerWidth || 0;
-  if (w <= 480) return count <= 1 ? 1 : Math.min(count, 2);
-  if (w <= 768) return Math.min(count, 3);
-  if (w <= 1024) return Math.min(count, 4);
-  return Math.min(count, 5);
+  if (w <= 480) return 1;
+  if (w <= 900) return Math.min(base, 2);
+  return base;
 }
 
 function isHomeProjectEnteredToday(entry, projectKey) {
@@ -174,6 +184,8 @@ function isHomeProjectEnteredToday(entry, projectKey) {
   if (projectKey === 'ram') return isRamFullyEntered(entry);
   if (projectKey === 'orca') return isOrcaFullyEntered(entry);
   if (projectKey === 'eni' && typeof isEniFullyEntered === 'function') return isEniFullyEntered(entry);
+  if (projectKey === 'matrix' && typeof isMatrixFullyEntered === 'function') return isMatrixFullyEntered(entry);
+  if (projectKey === 'bitsync' && typeof isBitsyncFullyEntered === 'function') return isBitsyncFullyEntered(entry);
   if (projectKey === 'cary') return isCaryFullyEntered(entry);
   return Number(entry[projectKey] || 0) > 0;
 }
@@ -186,6 +198,8 @@ var REVENUE_PROJECT_META = {
   ram: { desc: '銅鉱山／本日の収益', ready: true },
   orca: { desc: '昨日AI利益＋本日AF収益', ready: true },
   eni: { desc: 'USDT残高と総実績から自動計算', ready: true },
+  matrix: { desc: '収益ボーナス・MATRIXボーナス', ready: true },
+  bitsync: { desc: 'NFT販売報酬・運用報酬・運用益ボーナス', ready: true },
   cary: { desc: 'ブロックチェーン／報酬入力', ready: false }
 };
 
@@ -205,6 +219,16 @@ function countProjectEnteredAccounts(projectKey, entry) {
       return typeof isEniAccountEntered === 'function' ? isEniAccountEntered(entry, a.id) : false;
     }).length;
   }
+  if (projectKey === 'matrix' && typeof getMatrixInputAccounts === 'function') {
+    return getMatrixInputAccounts().filter(function (a) {
+      return typeof isMatrixAccountEntered === 'function' ? isMatrixAccountEntered(entry, a.id) : false;
+    }).length;
+  }
+  if (projectKey === 'bitsync' && typeof getBitsyncInputAccounts === 'function') {
+    return getBitsyncInputAccounts().filter(function (a) {
+      return typeof isBitsyncAccountEntered === 'function' ? isBitsyncAccountEntered(entry, a.id) : false;
+    }).length;
+  }
   if (projectKey === 'cary') {
     return getCaryInputAccounts().filter(function (a) { return isCaryAccountEntered(entry, a.id); }).length;
   }
@@ -215,6 +239,8 @@ function countProjectInputAccounts(projectKey) {
   if (projectKey === 'ram') return getRamInputAccounts().length;
   if (projectKey === 'orca') return getOrcaInputAccounts().length;
   if (projectKey === 'eni' && typeof getEniInputAccounts === 'function') return getEniInputAccounts().length;
+  if (projectKey === 'matrix' && typeof getMatrixInputAccounts === 'function') return getMatrixInputAccounts().length;
+  if (projectKey === 'bitsync' && typeof getBitsyncInputAccounts === 'function') return getBitsyncInputAccounts().length;
   if (projectKey === 'cary') return getCaryInputAccounts().length;
   return 0;
 }
@@ -251,6 +277,22 @@ function getProjectInputSavedTotal(projectKey, entry) {
       if (typeof pdEniAccountRevenueTotal === 'function') return sum + pdEniAccountRevenueTotal(ae);
       if (typeof eniAccountRevenueTotal === 'function') return sum + eniAccountRevenueTotal(ae);
       return sum + (Number(ae.todayRevenue) || 0) + (Number(ae.referralProfit) || 0) + (Number(ae.titleProfit) || 0);
+    }, 0);
+  }
+  if (projectKey === 'matrix' && entry.matrixAccounts && typeof getMatrixInputAccounts === 'function') {
+    return getMatrixInputAccounts().reduce(function (sum, acc) {
+      let ae = entry.matrixAccounts[acc.id];
+      if (!ae) return sum;
+      if (typeof pdMatrixAccountRevenueTotal === 'function') return sum + pdMatrixAccountRevenueTotal(ae);
+      return sum + (Number(ae.revenueBonus) || 0) + (Number(ae.matrixBonus) || 0);
+    }, 0);
+  }
+  if (projectKey === 'bitsync' && entry.bitsyncAccounts && typeof getBitsyncInputAccounts === 'function') {
+    return getBitsyncInputAccounts().reduce(function (sum, acc) {
+      let ae = entry.bitsyncAccounts[acc.id];
+      if (!ae) return sum;
+      if (typeof pdBitsyncAccountRevenueTotal === 'function') return sum + pdBitsyncAccountRevenueTotal(ae);
+      return sum + (Number(ae.nftSaleReward) || 0) + (Number(ae.operationReward) || 0) + (Number(ae.profitBonus) || 0);
     }, 0);
   }
   if (projectKey === 'cary') {
@@ -888,6 +930,8 @@ function getHomeActionPendingText(projectKey, projectName) {
   if (projectKey === 'ram') return projectName + 'の本日収益を入力してください';
   if (projectKey === 'orca') return projectName + 'の昨日AI利益・本日AF収益を入力してください';
   if (projectKey === 'eni') return projectName + 'の収益を入力してください';
+  if (projectKey === 'matrix') return projectName + 'の収益ボーナス・MATRIXボーナスを入力してください';
+  if (projectKey === 'bitsync') return projectName + 'のNFT販売報酬・運用報酬・運用益ボーナスを入力してください';
   if (projectKey === 'cary') return projectName + 'の報酬を入力してください';
   return projectName + 'の収益を入力してください';
 }
@@ -1648,9 +1692,9 @@ function bindHomeTodayDonutHover(wrap, rows) {
 function renderHomeTodayProjGrid(rows) {
   let el = document.getElementById('homeDailyProjGrid');
   if (!el) return;
-  let cols = homeResponsiveGridCols(rows.length);
-  el.style.setProperty('--today-proj-cols', cols);
-  el.setAttribute('data-count', rows.length);
+  let count = rows.length;
+  el.style.setProperty('--today-proj-cols', homeResponsiveGridCols(count));
+  el.setAttribute('data-count', String(count));
 
   if (!rows.length) {
     if (typeof pjClearHtmlKeepIconsCache === 'function') pjClearHtmlKeepIconsCache(el);
@@ -1815,6 +1859,14 @@ function selectRevenueProject(projectKey) {
     openEniRevenueInput();
     return;
   }
+  if (projectKey === 'matrix' && typeof openMatrixRevenueInput === 'function') {
+    openMatrixRevenueInput();
+    return;
+  }
+  if (projectKey === 'bitsync' && typeof openBitsyncRevenueInput === 'function') {
+    openBitsyncRevenueInput();
+    return;
+  }
   alert('このプロジェクトの実績入力は準備中です。');
 }
 
@@ -1866,6 +1918,14 @@ function refreshHomeAfterRevenueSave() {
   } else {
     updateHomeActionCard();
   }
+}
+
+/** 実績入力保存成功後: 再描画 → モーダル閉じる → ホームへ（RAM/ORCA/ENI と同じ） */
+function hubFinishRevenueInputSave(toastMessage) {
+  if (typeof refreshHomeAfterRevenueSave === 'function') refreshHomeAfterRevenueSave();
+  if (typeof showPage === 'function') showPage('home');
+  if (typeof closeModal === 'function') closeModal();
+  if (toastMessage && typeof showToast === 'function') showToast(toastMessage);
 }
 
 function executeRamSave(collected) {

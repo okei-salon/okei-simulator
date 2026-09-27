@@ -88,6 +88,9 @@ function orgSimSaveWorkingScenario(projectKey, nameOpt) {
 
   // localOnly: scenarios のみ更新。sim 中でも pack は本番スナップショットを使う
   if (typeof hubSaveToStorage === 'function') hubSaveToStorage({ localOnly: true });
+  if (key === 'ram' && typeof hubPersistRamSimulationSideStore === 'function') {
+    hubPersistRamSimulationSideStore(scenarios);
+  }
   return true;
 }
 

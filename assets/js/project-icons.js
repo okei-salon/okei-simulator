@@ -3,7 +3,7 @@
  * PNG icons loaded from assets/projects/
  */
 
-var PJ_ICON_VERSION = '20260712-v310';
+var PJ_ICON_VERSION = '20260927-bitsync-v002';
 var PJ_ICON_BASE = 'assets/projects/';
 
 /** プロジェクト名の完全一致 → 公式アイコン key */
@@ -11,6 +11,8 @@ var PJ_OFFICIAL_PROJECT_NAMES = {
   'RAM': 'ram',
   'ORCA': 'orca',
   'ENI': 'eni',
+  'MATRIX': 'matrix',
+  'BITSYNC': 'bitsync',
   'Genesis': 'genesis',
   'Cary Pact': 'cary'
 };
@@ -19,6 +21,8 @@ var PJ_ICON_REGISTRY = {
   ram: { file: 'ram.png', alt: 'RAM' },
   orca: { file: 'orca.png', alt: 'ORCA' },
   eni: { file: 'eni.png', alt: 'ENI' },
+  matrix: { file: 'matrix.png', alt: 'MATRIX' },
+  bitsync: { file: 'bitsync.png', alt: 'BITSYNC' },
   cary: { file: 'cary.png', alt: 'CarryPact' },
   genesis: { alt: 'GENESIS' },
   other: { alt: 'その他' },

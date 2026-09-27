@@ -440,6 +440,71 @@ try {
     `${mix.ramCount}/${mix.orcaCount}/${mix.eniCount}`);
   assert('Saved sims do not mix across projects', mix.isolated);
 
+  // I: RAM delete-during-sim must NOT tombstone production / wipe input accounts / change PF source
+  await seedProjects(page);
+  const delIso = await page.evaluate(() => {
+    // seed production roots + input accounts
+    settings.ramInputAccounts = [
+      { id: 'ram_a', username: 'RAM-A', name: 'RAM-A', investment: 1000 },
+      { id: 'ram_b', username: 'RAM-B', name: 'RAM-B', investment: 500 }
+    ];
+    settings.removedRamOrgAccountIds = [];
+    settings.revenueLog = settings.revenueLog || {};
+    settings.revenueLog['2099-01-01'] = { ram: { ram_a: 10, ram_b: 5 } };
+    currentData = JSON.parse(JSON.stringify(members));
+    if (typeof hubSaveToStorage === 'function') hubSaveToStorage({ localOnly: true });
+
+    const beforeLive = JSON.parse(JSON.stringify(currentData));
+    const beforeInput = JSON.parse(JSON.stringify(settings.ramInputAccounts));
+    const beforeRev = JSON.parse(JSON.stringify(settings.revenueLog));
+    const beforeRemoved = JSON.parse(JSON.stringify(settings.removedRamOrgAccountIds || []));
+
+    startSimulationCopy();
+    // delete child in sim workspace
+    if (typeof aimDeleteOrgMemberOnly === 'function') {
+      aimDeleteOrgMemberOnly('ram', 'ram_b', { mode: 'subtree' });
+    } else {
+      members = members.filter((m) => m.id !== 'ram_b');
+    }
+    // save simulation scenario
+    if (typeof orgSimSaveWorkingScenario === 'function') {
+      orgSimSaveWorkingScenario('ram', 'iso-delete-test');
+    } else if (typeof saveScenario === 'function') {
+      // fallback: push manually
+      scenarios.push({ project: 'ram', name: 'iso-delete-test', data: JSON.parse(JSON.stringify(members)) });
+      hubSaveToStorage({ localOnly: true });
+    }
+
+    const packed = typeof hubPackLocalData === 'function' ? hubPackLocalData() : null;
+    const packedIds = (packed && packed.members || []).map((m) => m.id).sort();
+    const packedRemoved = packed && packed.settings ? (packed.settings.removedRamOrgAccountIds || []) : [];
+    const packedInputs = packed && packed.settings ? (packed.settings.ramInputAccounts || []).map((a) => a.id).sort() : [];
+
+    endSimulationDiscard();
+
+    const afterLive = JSON.parse(JSON.stringify(members));
+    return {
+      simHadOne: true,
+      packKeptBoth: packedIds.join(',') === 'ram_a,ram_b',
+      packNoTombstone: packedRemoved.indexOf('ram_b') < 0 && (settings.removedRamOrgAccountIds || []).indexOf('ram_b') < 0,
+      inputUntouched: JSON.stringify(settings.ramInputAccounts) === JSON.stringify(beforeInput),
+      revUntouched: JSON.stringify(settings.revenueLog) === JSON.stringify(beforeRev),
+      liveRestored: afterLive.length === beforeLive.length && afterLive.some((m) => m.id === 'ram_b'),
+      removedUntouched: JSON.stringify(settings.removedRamOrgAccountIds || []) === JSON.stringify(beforeRemoved),
+      packedInputsOk: packedInputs.join(',') === 'ram_a,ram_b',
+      sideKey: typeof hubRamSimulationStorageKey === 'function' ? hubRamSimulationStorageKey() : null,
+      sideExists: typeof hubRamSimulationStorageKey === 'function'
+        ? !!localStorage.getItem(hubRamSimulationStorageKey())
+        : false
+    };
+  });
+  assert('RAM sim delete pack keeps production members', delIso.packKeptBoth, JSON.stringify(delIso));
+  assert('RAM sim delete does not tombstone production', delIso.packNoTombstone && delIso.removedUntouched);
+  assert('RAM sim delete does not wipe input accounts', delIso.inputUntouched && delIso.packedInputsOk);
+  assert('RAM sim delete does not touch revenueLog', delIso.revUntouched);
+  assert('RAM live restored after sim delete+save', delIso.liveRestored);
+  assert('RAM simulation side store written', delIso.sideExists, String(delIso.sideKey));
+
   const failed = checks.filter((c) => !c.ok);
   console.log(`\n${checks.length - failed.length}/${checks.length} PASS`);
   if (failed.length) process.exitCode = 1;
