@@ -20,8 +20,10 @@ var hubLastPullAt = 0;
 var hubPullMinIntervalMs = 2500;
 var hubSyncPendingWrites = 0;
 var hubLastCloudUpdatedAt = 0;
-/** Nested suspend depth: while > 0, no Firestore push / sync write paths run. */
+/** Nested suspend depth: while > 0, automatic Firestore push / sync write paths run blocked. */
 var hubCloudWriteSuspendDepth = 0;
+/** Active operator restore session depth: while > 0, even user explicit saves are blocked. */
+var hubCloudWriteOperatorActiveDepth = 0;
 /**
  * When true (typically after resume from a restore session), automatic
  * schedule/sync/save paths must not write. Only hubRunExplicitCloudSaveOnce() may write.
@@ -85,6 +87,10 @@ function hubIsCloudWriteSuspended() {
   return hubCloudWriteSuspendDepth > 0;
 }
 
+function hubIsCloudWriteHardSuspended() {
+  return hubCloudWriteOperatorActiveDepth > 0;
+}
+
 function hubIsCloudWriteExplicitOnly() {
   return !!hubCloudWriteExplicitOnly;
 }
@@ -93,6 +99,90 @@ function hubIsCloudWriteExplicitOnly() {
 function hubAreAutomaticCloudWritesBlocked() {
   if (hubCloudWriteExplicitBypass) return false;
   return hubIsCloudWriteSuspended() || hubIsCloudWriteExplicitOnly();
+}
+
+/**
+ * Clear leaked suspend depth from finished restore/console sessions.
+ * Does not run while an operator restore session is active.
+ */
+function hubReleaseStaleCloudWriteSuspendForExplicitSave(reason) {
+  if (hubCloudWriteOperatorActiveDepth > 0) return false;
+  if (hubCloudWriteSuspendDepth <= 0) return false;
+  try {
+    console.log('[hubCloudWriteGate] clear stale suspend for explicit user save', {
+      reason: reason || '',
+      wasDepth: hubCloudWriteSuspendDepth,
+      explicitOnly: hubCloudWriteExplicitOnly
+    });
+  } catch (e) {}
+  hubCloudWriteSuspendDepth = 0;
+  return true;
+}
+
+function hubBeginOperatorCloudWriteSession(reason) {
+  hubCloudWriteOperatorActiveDepth += 1;
+  hubSuspendCloudWrites(reason || 'operator-session');
+  try {
+    console.log('[hubCloudWriteGate] operator session begin', {
+      reason: reason || '',
+      operatorDepth: hubCloudWriteOperatorActiveDepth,
+      suspendDepth: hubCloudWriteSuspendDepth
+    });
+  } catch (e) {}
+  return hubCloudWriteOperatorActiveDepth;
+}
+
+function hubEndOperatorCloudWriteSession(reason, opts) {
+  opts = opts || {};
+  if (hubCloudWriteOperatorActiveDepth > 0) hubCloudWriteOperatorActiveDepth -= 1;
+  hubResumeCloudWrites(reason || 'operator-session-end', opts);
+  if (hubCloudWriteOperatorActiveDepth === 0 && hubCloudWriteSuspendDepth > 0) {
+    try {
+      console.log('[hubCloudWriteGate] force-clear leaked suspend after operator session', {
+        reason: reason || '',
+        wasDepth: hubCloudWriteSuspendDepth
+      });
+    } catch (e) {}
+    hubCloudWriteSuspendDepth = 0;
+  }
+  try {
+    console.log('[hubCloudWriteGate] operator session end', {
+      reason: reason || '',
+      operatorDepth: hubCloudWriteOperatorActiveDepth,
+      suspendDepth: hubCloudWriteSuspendDepth,
+      explicitOnly: hubCloudWriteExplicitOnly
+    });
+  } catch (e) {}
+  return hubCloudWriteOperatorActiveDepth;
+}
+
+function hubCollectRevenueSaveDiagnostics(savePath) {
+  return {
+    explicitOnly: hubIsCloudWriteExplicitOnly(),
+    suspendDepth: hubCloudWriteSuspendDepth,
+    operatorActiveDepth: hubCloudWriteOperatorActiveDepth,
+    automaticBlocked: hubAreAutomaticCloudWritesBlocked(),
+    hardSuspended: hubIsCloudWriteHardSuspended(),
+    firebaseReady: !!hubFirebaseReady,
+    firebaseUid: hubFirebaseUid || '',
+    versionWriteAllowed: typeof hubIsVersionWriteAllowed === 'function'
+      ? hubIsVersionWriteAllowed()
+      : null,
+    cloudWriteEnabled: typeof hubIsCloudWriteEnabled === 'function'
+      ? hubIsCloudWriteEnabled()
+      : null,
+    dirty: hubHasLocalDirtyChanges(),
+    savePath: savePath || ''
+  };
+}
+
+function hubLogRevenueSaveDiagnostics(phase, savePath, extra) {
+  try {
+    console.log('[hubRevenueSave]', phase, Object.assign(
+      hubCollectRevenueSaveDiagnostics(savePath),
+      extra || {}
+    ));
+  } catch (e) {}
 }
 
 function hubClearCloudSaveTimerAndQueue(reason) {
@@ -178,9 +268,10 @@ function hubArmCloudWriteExplicitOnly(reason) {
  * Does not leave queued/timer saves behind.
  */
 function hubRunExplicitCloudSaveOnce(reason) {
-  if (hubIsCloudWriteSuspended()) {
+  hubReleaseStaleCloudWriteSuspendForExplicitSave('explicit-once:' + (reason || ''));
+  if (hubIsCloudWriteHardSuspended()) {
     try {
-      console.log('[hubCloudWriteGate] explicit save blocked while suspended', reason || '');
+      console.log('[hubCloudWriteGate] explicit save blocked during operator session', reason || '');
     } catch (e) {}
     return Promise.resolve(false);
   }
@@ -1427,10 +1518,11 @@ function hubSyncHubData() {
  * Uses explicit-once path when automatic gate (explicitOnly) is armed; still blocked on hard suspend.
  */
 function hubRunRevenueCloudSaveOnce() {
-  if (hubIsCloudWriteSuspended()) {
+  hubReleaseStaleCloudWriteSuspendForExplicitSave('revenue-save');
+  if (hubIsCloudWriteHardSuspended()) {
     return Promise.resolve(false);
   }
-  if (hubAreAutomaticCloudWritesBlocked()) {
+  if (hubIsCloudWriteExplicitOnly()) {
     return hubRunExplicitCloudSaveOnce('revenue-save');
   }
   return hubRunCloudSave(true);
@@ -1456,6 +1548,16 @@ function hubSaveRevenueWithCloudConfirm(opts) {
   opts = opts || {};
   let successMessage = opts.successMessage || '✅ 保存しました';
   let pendingMessage = opts.pendingMessage || '端末に保存済み・Cloud同期待ち';
+  let savePath = 'revenue-save';
+  let staleCleared = hubReleaseStaleCloudWriteSuspendForExplicitSave(savePath + ':pre');
+  hubLogRevenueSaveDiagnostics('start', savePath, { staleSuspendCleared: staleCleared });
+
+  function fail(status, message) {
+    let diag = hubCollectRevenueSaveDiagnostics(savePath);
+    hubLogRevenueSaveDiagnostics('fail:' + status, savePath, diag);
+    hubMarkPendingCloudWrite();
+    return { ok: false, status: status, message: message, diagnostics: diag };
+  }
 
   if (typeof hubIsLocalDevMode === 'function' && hubIsLocalDevMode()) {
     return Promise.resolve({ ok: true, status: 'local-dev', message: successMessage });
@@ -1465,50 +1567,48 @@ function hubSaveRevenueWithCloudConfirm(opts) {
   }
 
   if (typeof hubIsCloudWriteEnabled === 'function' && !hubIsCloudWriteEnabled()) {
-    hubMarkPendingCloudWrite();
-    return Promise.resolve({ ok: false, status: 'local-only', message: pendingMessage });
+    return Promise.resolve(fail('local-only', pendingMessage));
   }
-  // Hard suspend (restore depth): block even user explicit saves.
-  if (hubIsCloudWriteSuspended()) {
-    hubMarkPendingCloudWrite();
-    return Promise.resolve({ ok: false, status: 'write-gate', message: pendingMessage });
+  // True operator restore session: block even user explicit saves.
+  if (hubIsCloudWriteHardSuspended()) {
+    return Promise.resolve(fail('write-gate', pendingMessage));
   }
   if (!hubFirebaseReady || !hubFirebaseUid) {
-    hubMarkPendingCloudWrite();
-    return Promise.resolve({ ok: false, status: 'offline', message: pendingMessage });
+    return Promise.resolve(fail('offline', pendingMessage));
   }
 
   hubMarkLocalDirtyForCloud('revenue-save');
   hubSetSyncStatus('syncing', 'Cloud保存中…');
+  let runPath = hubIsCloudWriteExplicitOnly() ? 'explicit-once' : 'automatic-open';
+  hubLogRevenueSaveDiagnostics('run', savePath, { runPath: runPath });
   return hubRunRevenueCloudSaveOnce().then(function (written) {
     if (!written) {
-      hubMarkPendingCloudWrite();
-      return { ok: false, status: 'cloud-write-failed', message: pendingMessage };
+      return fail('cloud-write-failed', pendingMessage);
     }
     return hubPullCloudData('post-save-verify').then(function () {
       if (typeof opts.verifyFn === 'function' && !opts.verifyFn()) {
-        hubMarkPendingCloudWrite();
-        return { ok: false, status: 'verify-failed', message: pendingMessage };
+        return fail('verify-failed', pendingMessage);
       }
       let cloudDateKey = opts.cloudVerifyDateKey || '';
       if (cloudDateKey && typeof hubFetchCloudDoc === 'function') {
         return hubFetchCloudDoc().then(function (doc) {
           if (!hubCloudHasRevenueDay(doc, cloudDateKey)) {
-            hubMarkPendingCloudWrite();
-            return { ok: false, status: 'verify-failed', message: pendingMessage };
+            return fail('verify-failed', pendingMessage);
           }
           hubClearPendingCloudWrite();
           hubSetSyncStatus('done', 'Cloud同期済み');
+          hubLogRevenueSaveDiagnostics('success', savePath, { runPath: runPath, cloudDateKey: cloudDateKey });
           return { ok: true, status: 'synced', message: successMessage };
         });
       }
       hubClearPendingCloudWrite();
       hubSetSyncStatus('done', 'Cloud同期済み');
+      hubLogRevenueSaveDiagnostics('success', savePath, { runPath: runPath });
       return { ok: true, status: 'synced', message: successMessage };
     });
-  }).catch(function () {
-    hubMarkPendingCloudWrite();
-    return { ok: false, status: 'error', message: pendingMessage };
+  }).catch(function (err) {
+    hubLogRevenueSaveDiagnostics('error', savePath, { err: String(err && err.message || err) });
+    return fail('error', pendingMessage);
   });
 }
 
@@ -1552,8 +1652,13 @@ if (typeof window !== 'undefined') {
   window.hubEndCloudWriteSuppress = hubEndCloudWriteSuppress;
   window.hubIsCloudWriteScheduleAllowed = hubIsCloudWriteScheduleAllowed;
   window.hubIsCloudWriteSuspended = hubIsCloudWriteSuspended;
+  window.hubIsCloudWriteHardSuspended = hubIsCloudWriteHardSuspended;
   window.hubIsCloudWriteExplicitOnly = hubIsCloudWriteExplicitOnly;
   window.hubAreAutomaticCloudWritesBlocked = hubAreAutomaticCloudWritesBlocked;
+  window.hubReleaseStaleCloudWriteSuspendForExplicitSave = hubReleaseStaleCloudWriteSuspendForExplicitSave;
+  window.hubBeginOperatorCloudWriteSession = hubBeginOperatorCloudWriteSession;
+  window.hubEndOperatorCloudWriteSession = hubEndOperatorCloudWriteSession;
+  window.hubCollectRevenueSaveDiagnostics = hubCollectRevenueSaveDiagnostics;
   window.hubSuspendCloudWrites = hubSuspendCloudWrites;
   window.hubResumeCloudWrites = hubResumeCloudWrites;
   window.hubAllowAutomaticCloudWrites = hubAllowAutomaticCloudWrites;

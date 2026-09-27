@@ -1451,7 +1451,12 @@ function hubRestoreRamOrgChartFromBackup(backup, opts) {
   var wantLocalOnly = opts.localOnly !== false && !opts.cloud;
   var keepSuspended = !!opts.keepCloudSuspended;
   var suspended = false;
-  if (wantLocalOnly && typeof hubSuspendCloudWrites === 'function') {
+  var operatorSession = false;
+  if (wantLocalOnly && typeof hubBeginOperatorCloudWriteSession === 'function') {
+    hubBeginOperatorCloudWriteSession('hubRestoreRamOrgChartFromBackup');
+    suspended = true;
+    operatorSession = true;
+  } else if (wantLocalOnly && typeof hubSuspendCloudWrites === 'function') {
     hubSuspendCloudWrites('hubRestoreRamOrgChartFromBackup');
     suspended = true;
   }
@@ -1523,7 +1528,9 @@ function hubRestoreRamOrgChartFromBackup(backup, opts) {
     keepCloudSuspended: keepSuspended
   };
   } finally {
-    if (suspended && !keepSuspended && typeof hubResumeCloudWrites === 'function') {
+    if (operatorSession && !keepSuspended && typeof hubEndOperatorCloudWriteSession === 'function') {
+      hubEndOperatorCloudWriteSession('hubRestoreRamOrgChartFromBackup');
+    } else if (suspended && !keepSuspended && typeof hubResumeCloudWrites === 'function') {
       hubResumeCloudWrites('hubRestoreRamOrgChartFromBackup');
     }
   }

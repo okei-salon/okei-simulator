@@ -441,6 +441,7 @@ async function browserExplicitRevenueSaveGateTests() {
       hubIsCloudReadEnabled = function () { return true; };
       try { hubFirebaseReady = true; hubFirebaseUid = 'rev-save-test'; } catch (e) {}
       hubCloudWriteSuspendDepth = 0;
+      hubCloudWriteOperatorActiveDepth = 0;
       hubCloudSaveInFlight = false;
       hubPullInFlight = false;
       hubAllowAutomaticCloudWrites('rev-save-test-reset');
@@ -529,16 +530,53 @@ async function browserExplicitRevenueSaveGateTests() {
       explicitOnlyAfter: hubIsCloudWriteExplicitOnly()
     };
 
-    // C: hard suspend + manual save → 0 ref.set, pending
+    // C: operator hard suspend + manual save → 0 ref.set, pending
     setupMocks();
-    hubSuspendCloudWrites('case-c');
+    hubBeginOperatorCloudWriteSession('case-c');
     let baseC = refCount();
     let saveC = await hubSaveRevenueWithCloudConfirm({
       pendingMessage: '端末に保存済み・Cloud同期待ち',
       cloudVerifyDateKey: '2026-09-27',
       verifyFn: function () { return true; }
     });
+    hubEndOperatorCloudWriteSession('case-c-cleanup');
     out.caseC = { refSets: refCount() - baseC, ok: saveC.ok, message: saveC.message };
+
+    // L: stale leaked suspendDepth (no operator session) + explicit save → success
+    setupMocks();
+    hubSuspendCloudWrites('case-l-stale');
+    hubArmCloudWriteExplicitOnly('case-l');
+    let baseL = refCount();
+    let saveL = await hubSaveRevenueWithCloudConfirm({
+      cloudVerifyDateKey: '2026-09-27',
+      verifyFn: function () { return true; }
+    });
+    out.caseL = {
+      refSets: refCount() - baseL,
+      ok: saveL.ok,
+      suspendDepthAfter: hubCloudWriteSuspendDepth,
+      explicitOnlyAfter: hubIsCloudWriteExplicitOnly()
+    };
+
+    // M: operator session active blocks explicit save
+    setupMocks();
+    hubBeginOperatorCloudWriteSession('case-m');
+    let baseM = refCount();
+    let saveM = await hubSaveRevenueWithCloudConfirm({
+      cloudVerifyDateKey: '2026-09-27',
+      verifyFn: function () { return true; }
+    });
+    out.caseM = { refSets: refCount() - baseM, ok: saveM.ok, status: saveM.status };
+    hubEndOperatorCloudWriteSession('case-m-cleanup');
+
+    // N: operator session end clears leaked suspend depth
+    setupMocks();
+    hubBeginOperatorCloudWriteSession('case-n');
+    hubEndOperatorCloudWriteSession('case-n-end');
+    out.caseN = {
+      suspendDepth: hubCloudWriteSuspendDepth,
+      operatorDepth: hubCloudWriteOperatorActiveDepth
+    };
 
     // H/I: 9/27 on cloud after save; second device pull
     setupMocks();
@@ -553,7 +591,7 @@ async function browserExplicitRevenueSaveGateTests() {
       cloudPayload.revenue.revenueLog['2026-09-27']);
     hubClearLocalDirtyForCloud('case-i-device-b');
     delete settings.revenueLog['2026-09-27'];
-    if (typeof hubSaveToStorage === 'function') hubSaveToStorage({ skipCloud: true });
+    if (typeof hubSaveToStorage === 'function') hubSaveToStorage({ localOnly: true });
     let pullWritesBefore = refCount();
     await hubPullCloudData('case-i-pull');
     out.caseHI = {
@@ -618,6 +656,13 @@ assert('CASE N-B: explicitOnly remains after explicit save', revGateResult.caseB
 assert('CASE N-C: hard suspend + revenue save → 0 ref.set', revGateResult.caseC.refSets === 0);
 assert('CASE N-C: hard suspend + revenue save → pending', revGateResult.caseC.ok === false);
 assert('CASE N-C: hard suspend pending message', (revGateResult.caseC.message || '').indexOf('Cloud同期待ち') >= 0);
+assert('CASE N-L: stale suspend + explicit save → 1 ref.set', revGateResult.caseL.refSets === 1);
+assert('CASE N-L: stale suspend + explicit save → ok', revGateResult.caseL.ok === true);
+assert('CASE N-L: stale suspend cleared after explicit save', revGateResult.caseL.suspendDepthAfter === 0);
+assert('CASE N-M: operator session blocks explicit save → 0 ref.set', revGateResult.caseM.refSets === 0);
+assert('CASE N-M: operator session blocks explicit save', revGateResult.caseM.ok === false);
+assert('CASE N-N: operator session end clears suspend depth', revGateResult.caseN.suspendDepth === 0);
+assert('CASE N-N: operator session end clears operator depth', revGateResult.caseN.operatorDepth === 0);
 assert('CASE N-H: revenue save creates Cloud 9/27', revGateResult.caseHI.cloudHas927 === true);
 assert('CASE N-I: other device pull gets 9/27', revGateResult.caseHI.local927AfterPull === true);
 assert('CASE N-I: pull after save → 0 extra ref.set', revGateResult.caseHI.pullExtraWrites === 0);

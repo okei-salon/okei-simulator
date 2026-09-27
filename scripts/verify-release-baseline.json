@@ -1,5 +1,5 @@
 {
-  "minPassed": 653,
-  "note": "Baseline after explicit revenue save through automatic gate (14 new sync checks). verify:release Passed 653.",
+  "minPassed": 663,
+  "note": "Baseline after stale suspend bypass for explicit revenue save (7 new sync checks). verify:release Passed 663.",
   "updatedAt": "2026-09-27"
 }
