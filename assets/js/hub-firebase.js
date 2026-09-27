@@ -2,7 +2,7 @@
  * Google 認証後に LocalStorage / Firestore を同期
  * 組織図・ポートフォリオはフィールド単位でマージして端末間の上書きを防ぐ
  */
-var HUB_FIREBASE_JS_BUILD = 'Ver2.0.55/Build20260927-v007';
+var HUB_FIREBASE_JS_BUILD = 'Ver2.0.56/Build20260927-v008';
 
 var hubFirebaseApp = null;
 var hubFirebaseAuth = null;
@@ -1748,6 +1748,7 @@ function hubSaveRevenueWithCloudConfirm(opts) {
           }
           hubRevenueSaveTrace('cloudDateVerify', 'SUCCESS', { attempt: verified.attempt });
           hubClearPendingCloudWrite();
+          hubClearLocalDirtyForCloud('revenue-save-success');
           hubSetSyncStatus('done', 'Cloud同期済み');
           hubLogRevenueSaveDiagnostics('success', savePath, { runPath: runPath, cloudDateKey: cloudDateKey });
           hubRevenueSaveTrace('hubSaveRevenueWithCloudConfirm', 'SUCCESS', { cloudDateKey: cloudDateKey });
@@ -1755,6 +1756,7 @@ function hubSaveRevenueWithCloudConfirm(opts) {
         });
       }
       hubClearPendingCloudWrite();
+      hubClearLocalDirtyForCloud('revenue-save-success');
       hubSetSyncStatus('done', 'Cloud同期済み');
       hubLogRevenueSaveDiagnostics('success', savePath, { runPath: runPath });
       hubRevenueSaveTrace('hubSaveRevenueWithCloudConfirm', 'SUCCESS', null);

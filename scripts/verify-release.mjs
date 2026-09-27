@@ -67,6 +67,13 @@ const SUITES = [
     needsServer: true
   },
   {
+    id: 'hub-revenue-save-inflight-race',
+    label: 'Revenue save vs automatic Cloud schedule race',
+    category: 'Firestore',
+    cmd: ['node', 'scripts/verify-revenue-save-inflight-race.mjs'],
+    needsServer: true
+  },
+  {
     id: 'hub-destructive-guard',
     label: 'Destructive cloud push guard (kai2 wipe block)',
     category: 'Firestore',

@@ -1,5 +1,5 @@
 /* OUKEI HUB Home UI — Ver2.0.7 */
-var HUB_HOME_JS_BUILD = 'Ver2.0.55/Build20260927-v007';
+var HUB_HOME_JS_BUILD = 'Ver2.0.56/Build20260927-v008';
 let homeCalView = { y: new Date().getFullYear(), m: new Date().getMonth() };
 let ramSavePending = null;
 let ramSalesDecreasePending = null;
@@ -1922,22 +1922,43 @@ function refreshHomeAfterRevenueSave() {
   }
 }
 
+/** In-flight revenue-input save (join duplicate button taps to one Cloud WRITE). */
+var hubRevenueInputSavePromise = null;
+
 /**
  * Revenue-input save: local persist first (no automatic Cloud schedule), then cloud confirm once.
  */
 function hubPersistThenCloudConfirm(localPersistFn, toastMessage, verifyFn) {
-  if (typeof hubBeginRevenueInputSaveFlow === 'function') hubBeginRevenueInputSaveFlow();
-  try {
-    if (typeof localPersistFn === 'function') localPersistFn();
-  } catch (err) {
-    if (typeof hubEndRevenueInputSaveFlow === 'function') hubEndRevenueInputSaveFlow();
-    throw err;
+  if (hubRevenueInputSavePromise) {
+    return hubRevenueInputSavePromise;
   }
-  return hubFinishRevenueInputSave(toastMessage, verifyFn);
+  hubRevenueInputSavePromise = Promise.resolve().then(function () {
+    if (typeof hubBeginRevenueInputSaveFlow === 'function') hubBeginRevenueInputSaveFlow();
+    try {
+      if (typeof localPersistFn === 'function') localPersistFn();
+    } catch (err) {
+      if (typeof hubEndRevenueInputSaveFlow === 'function') hubEndRevenueInputSaveFlow();
+      throw err;
+    }
+    return hubFinishRevenueInputSaveInner(toastMessage, verifyFn);
+  }).finally(function () {
+    hubRevenueInputSavePromise = null;
+  });
+  return hubRevenueInputSavePromise;
 }
 
 /** 実績入力保存成功後: Cloud確認 → 再描画 → モーダル閉じる → ホームへ */
 function hubFinishRevenueInputSave(toastMessage, verifyFn) {
+  if (hubRevenueInputSavePromise) {
+    return hubRevenueInputSavePromise;
+  }
+  hubRevenueInputSavePromise = hubFinishRevenueInputSaveInner(toastMessage, verifyFn).finally(function () {
+    hubRevenueInputSavePromise = null;
+  });
+  return hubRevenueInputSavePromise;
+}
+
+function hubFinishRevenueInputSaveInner(toastMessage, verifyFn) {
   function finishUi(message) {
     if (typeof refreshHomeAfterRevenueSave === 'function') refreshHomeAfterRevenueSave();
     if (typeof render === 'function') render();
@@ -1952,6 +1973,9 @@ function hubFinishRevenueInputSave(toastMessage, verifyFn) {
       cloudVerifyDateKey: typeof todayKey === 'function' ? todayKey() : ''
     }).then(function (result) {
       finishUi(result.message);
+      if (result.ok && typeof hubClearLocalDirtyForCloud === 'function') {
+        hubClearLocalDirtyForCloud('revenue-save-ui-done');
+      }
       return result;
     }).finally(function () {
       if (typeof hubEndRevenueInputSaveFlow === 'function') hubEndRevenueInputSaveFlow();
