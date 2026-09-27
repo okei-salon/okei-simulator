@@ -282,5 +282,144 @@ assert('CASE F: cloud write failure not reported as full success', gateResult.sa
 assert('CASE F: pending message shown on write failure', (gateResult.saveFailMessage || '').indexOf('Cloud同期待ち') >= 0);
 assert('CASE F: success toast not used on failure', gateResult.saveFailNotSuccessToast === true);
 
+async function browserReadWriteSeparationTests() {
+  const browser = await chromium.launch({ headless: true });
+  const page = await browser.newPage();
+  await page.goto(BASE_URL + '/', { waitUntil: 'domcontentloaded', timeout: 60000 });
+  await page.waitForFunction(
+    () => typeof hubPullCloudData === 'function' && typeof hubHasLocalDirtyChanges === 'function',
+    null,
+    { timeout: 60000 }
+  );
+
+  const result = await page.evaluate(async () => {
+    window.__STORM_REFSETS__ = [];
+    window.__STORM_SCHEDULE__ = 0;
+    window.__STORM_RUNSAVE__ = 0;
+
+    hubIsCloudWriteEnabled = function () { return true; };
+    hubIsLocalDevMode = function () { return false; };
+    hubIsCloudReadEnabled = function () { return true; };
+    try { hubFirebaseReady = true; hubFirebaseUid = 'storm-test-uid'; } catch (e) {}
+    hubAllowAutomaticCloudWrites('storm-test');
+    hubClearLocalDirtyForCloud('storm-reset');
+    hubClearCloudSaveTimerAndQueue('storm-reset');
+
+    const cloudPayload = {
+      schemaVersion: 2,
+      updatedAt: 8000,
+      orgChart: { members: [], currentData: [], scenarios: [], rootId: '', rootAccountIds: [] },
+      revenue: {
+        revenueLog: {
+          '2026-09-26': {
+            ramAccounts: { ram1: { todayRevenue: 50, revision: 8000 } },
+            ram: 50,
+            total: 50
+          }
+        },
+        salesLog: {}
+      },
+      settings: { revenueLog: {}, salesLog: {} }
+    };
+
+    window.hubFetchCloudWriteGate = function () {
+      return Promise.resolve({ suspended: false });
+    };
+    window.hubFetchCloudDoc = function () {
+      return Promise.resolve(cloudPayload);
+    };
+    window.hubFirestoreDocRef = function () {
+      return {
+        set: function () {
+          window.__STORM_REFSETS__.push(Date.now());
+          return Promise.resolve();
+        },
+        get: function () {
+          return Promise.resolve({ exists: true, data: function () { return cloudPayload; } });
+        }
+      };
+    };
+
+    const origSchedule = hubScheduleCloudSave;
+    window.hubScheduleCloudSave = function () {
+      window.__STORM_SCHEDULE__ += 1;
+      return origSchedule.apply(this, arguments);
+    };
+    const origRun = hubRunCloudSave;
+    window.hubRunCloudSave = function (force) {
+      window.__STORM_RUNSAVE__ += 1;
+      return origRun.call(this, force);
+    };
+
+    function refCount() { return (window.__STORM_REFSETS__ || []).length; }
+
+    await hubPullCloudData('storm-read-only');
+    const afterPull = refCount();
+
+    if (typeof hubRefreshViewsAfterSync === 'function') hubRefreshViewsAfterSync(null);
+    const afterRefresh = refCount();
+
+    await hubSyncHubData();
+    const afterSyncClean = refCount();
+
+    document.dispatchEvent(new Event('visibilitychange'));
+    await hubPullCloudDataIfStale('storm-visibility');
+    const afterVisibility = refCount();
+
+    window.dispatchEvent(new Event('online'));
+    await new Promise(function (r) { setTimeout(r, 100); });
+    const afterOnline = refCount();
+
+    hubMarkLocalDirtyForCloud('storm-user-save');
+    await hubRunCloudSave(true);
+    const afterOneSave = refCount();
+
+    await new Promise(function (r) { setTimeout(r, 1800); });
+    const afterIdle = refCount();
+
+    // Mac→Cloud→iPhone pull: cloud has 9/27, local stale
+    hubClearLocalDirtyForCloud('storm-device-b');
+    cloudPayload.revenue.revenueLog['2026-09-27'] = {
+      ramAccounts: { ram1: { todayRevenue: 77, revision: 9000 } },
+      ram: 77,
+      total: 77
+    };
+    cloudPayload.updatedAt = 9000;
+    await hubPullCloudData('storm-iphone-pull');
+    const localHas927 = !!(settings.revenueLog && settings.revenueLog['2026-09-27']);
+    const afterIphonePullWrites = refCount();
+
+    return {
+      afterPull,
+      afterRefresh,
+      afterSyncClean,
+      afterVisibility,
+      afterOnline,
+      afterOneSave,
+      afterIdle,
+      afterIphonePullWrites,
+      localHas927,
+      scheduleCalls: window.__STORM_SCHEDULE__ || 0,
+      runSaveCalls: window.__STORM_RUNSAVE__ || 0,
+      dirtyAfterPull: hubHasLocalDirtyChanges()
+    };
+  });
+
+  await browser.close();
+  return result;
+}
+
+const stormResult = await browserReadWriteSeparationTests();
+assert('CASE G: Cloud READ only → 0 ref.set', stormResult.afterPull === 0);
+assert('CASE G: sync refresh render → 0 ref.set', stormResult.afterRefresh === 0);
+assert('CASE H: hubSyncHubData while clean → 0 ref.set', stormResult.afterSyncClean === 0);
+assert('CASE I: visibility pull while clean → 0 ref.set', stormResult.afterVisibility === 0);
+assert('CASE I: online while clean → 0 ref.set', stormResult.afterOnline === 0);
+assert('CASE J: one dirty save → exactly 1 ref.set', stormResult.afterOneSave === 1);
+assert('CASE K: idle 1.8s → no extra ref.set', stormResult.afterIdle === stormResult.afterOneSave);
+assert('CASE L: iPhone pull gets 9/27 without WRITE', stormResult.localHas927 === true);
+assert('CASE L: iPhone pull → 0 additional ref.set', stormResult.afterIphonePullWrites === stormResult.afterIdle);
+assert('CASE M: pull/merge does not mark dirty', stormResult.dirtyAfterPull === false);
+
 console.log('\n' + passed + '/' + (passed + failed) + ' PASS');
 process.exit(failed ? 1 : 0);

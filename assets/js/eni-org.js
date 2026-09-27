@@ -618,7 +618,8 @@ function eniSubtreeIds(id) {
   return ids;
 }
 
-function eniRender() {
+function eniRender(opts) {
+  opts = opts || {};
   eniNormalizeMembers();
   eniClearAggCache();
   if (!eniSimMode) eniCurrentData = eniClone(eniMembers);
@@ -643,8 +644,10 @@ function eniRender() {
 
   if (typeof eniRenderAccountManage === 'function') eniRenderAccountManage();
 
-  // シミュレーション中は LocalStorage / Cloud へ書き込まない
-  if (!eniSimMode && typeof hubSaveToStorage === 'function') hubSaveToStorage();
+  // syncRefresh: Cloud READ 後の再描画のみ localOnly
+  if (!eniSimMode && typeof hubSaveToStorage === 'function') {
+    hubSaveToStorage({ localOnly: !!opts.syncRefresh });
+  }
 }
 
 function eniRenderStats() {

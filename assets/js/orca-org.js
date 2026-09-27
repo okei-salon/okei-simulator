@@ -475,7 +475,8 @@ function orcaShowCardHelp(type) {
   modalBg.style.display = 'flex';
 }
 
-function orcaRender() {
+function orcaRender(opts) {
+  opts = opts || {};
   orcaNormalizeVolumes();
   orcaSyncAllPersonalSales();
   orcaSyncAllHubGroupSales();
@@ -499,8 +500,10 @@ function orcaRender() {
   var canvas = document.getElementById('orcaCanvas');
   if (canvas) canvas.style.transform = 'scale(' + orcaZoom + ')';
   orcaRenderAccountManage();
-  // シミュレーション中は LocalStorage/Cloud へ仮組織を書かない（シナリオ保存等は個別に localOnly）
-  if (!orcaSimMode && typeof hubSaveToStorage === 'function') hubSaveToStorage();
+  // syncRefresh: Cloud READ 後の再描画のみ localOnly（Cloud WRITE 再予約しない）
+  if (!orcaSimMode && typeof hubSaveToStorage === 'function') {
+    hubSaveToStorage({ localOnly: !!opts.syncRefresh });
+  }
 }
 
 function orcaMemberStatsData(id) {

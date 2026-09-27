@@ -1855,12 +1855,21 @@ function hubSaveToStorage(options) {
         (typeof orcaSimMode !== 'undefined' && orcaSimMode) ||
         (typeof eniSimMode !== 'undefined' && eniSimMode)
       );
+    // ユーザー編集のみ dirty（Cloud READ / merge / render 中は suppress により dirty 化しない）
+    if (!options.localOnly &&
+        (typeof hubCloudWriteSuppressDepth === 'undefined' || hubCloudWriteSuppressDepth === 0) &&
+        typeof hubMarkLocalDirtyForCloud === 'function') {
+      hubMarkLocalDirtyForCloud('hubSaveToStorage');
+    }
     // シミュレーション中はクラウドへ書かない（push→enrich→apply で sim が落ちる経路を遮断）
-    // cloud-write suspend / explicit-only 中も自動クラウド予約しない
+    // cloud-write suspend / explicit-only / not-dirty 中も自動クラウド予約しない
     let cloudBlocked = typeof hubAreAutomaticCloudWritesBlocked === 'function'
       ? hubAreAutomaticCloudWritesBlocked()
       : (typeof hubIsCloudWriteSuspended === 'function' && hubIsCloudWriteSuspended());
-    let cloudWriteOk = !options.localOnly && !simActive && !cloudBlocked &&
+    let scheduleAllowed = typeof hubIsCloudWriteScheduleAllowed === 'function'
+      ? hubIsCloudWriteScheduleAllowed()
+      : (typeof hubHasLocalDirtyChanges === 'function' ? hubHasLocalDirtyChanges() : true);
+    let cloudWriteOk = !options.localOnly && !simActive && !cloudBlocked && scheduleAllowed &&
       (typeof hubIsCloudWriteEnabled !== 'function' || hubIsCloudWriteEnabled());
     if (cloudWriteOk && typeof hubScheduleCloudSave === 'function') {
       hubScheduleCloudSave(options.immediate === true);

@@ -29,6 +29,57 @@ var hubCloudWriteSuspendDepth = 0;
 var hubCloudWriteExplicitOnly = false;
 /** One-shot bypass for hubRunExplicitCloudSaveOnce while explicit-only is armed. */
 var hubCloudWriteExplicitBypass = false;
+/** True after explicit user edit; cleared only on successful Cloud WRITE. */
+var hubLocalDirtyForCloud = false;
+/** While > 0: sync/merge/render must not schedule Cloud WRITE or mark dirty. */
+var hubCloudWriteSuppressDepth = 0;
+
+function hubHasLocalDirtyChanges() {
+  return !!hubLocalDirtyForCloud;
+}
+
+function hubMarkLocalDirtyForCloud(reason) {
+  if (hubCloudWriteSuppressDepth > 0) return;
+  hubLocalDirtyForCloud = true;
+  try {
+    console.log('[hubCloudDirty] mark', { reason: reason || '' });
+  } catch (e) {}
+}
+
+function hubClearLocalDirtyForCloud(reason) {
+  hubLocalDirtyForCloud = false;
+  try {
+    console.log('[hubCloudDirty] clear', { reason: reason || '' });
+  } catch (e) {}
+}
+
+function hubBeginCloudWriteSuppress(reason) {
+  hubCloudWriteSuppressDepth += 1;
+  try {
+    console.log('[hubCloudWriteSuppress] begin', {
+      depth: hubCloudWriteSuppressDepth,
+      reason: reason || ''
+    });
+  } catch (e) {}
+}
+
+function hubEndCloudWriteSuppress(reason) {
+  if (hubCloudWriteSuppressDepth > 0) hubCloudWriteSuppressDepth -= 1;
+  try {
+    console.log('[hubCloudWriteSuppress] end', {
+      depth: hubCloudWriteSuppressDepth,
+      reason: reason || ''
+    });
+  } catch (e) {}
+}
+
+function hubIsCloudWriteScheduleAllowed() {
+  if (hubCloudWriteSuppressDepth > 0) return false;
+  if (typeof hubAreAutomaticCloudWritesBlocked === 'function' && hubAreAutomaticCloudWritesBlocked()) {
+    return false;
+  }
+  return hubHasLocalDirtyChanges();
+}
 
 function hubIsCloudWriteSuspended() {
   return hubCloudWriteSuspendDepth > 0;
@@ -179,6 +230,7 @@ function hubFormatSyncDebugTitle() {
   let parts = [
     'Cloud updatedAt: ' + (hubLastCloudUpdatedAt || '—'),
     'Local updatedAt: ' + (localUa || '—'),
+    'dirty: ' + (hubHasLocalDirtyChanges() ? 'yes' : 'no'),
     'pending writes: ' + (hubSyncPendingWrites || 0)
   ];
   return parts.join('\n');
@@ -898,7 +950,14 @@ function hubPushCloudDoc(force, _cloudDocOpt, callerHint) {
   let maxAttempts = 3;
 
   function buildGuardedPayload(cloudDoc) {
-    if (cloudDoc) hubEnrichLocalFromCloud(cloudDoc);
+    if (cloudDoc && typeof hubMergeHubDocuments === 'function') {
+      let localData = typeof hubPackLocalData === 'function'
+        ? hubPackLocalData()
+        : hubCreateEmptyData();
+      let cloudUnpacked = hubUnpackFirestorePayload(cloudDoc);
+      let merged = hubMergeHubDocuments(localData, cloudUnpacked);
+      hubApplyMergedHubData(merged, hubComputeContentHash(cloudUnpacked), { skipRefresh: true });
+    }
     let preferLocal =
       (typeof hubLocalUpdatedAt !== 'undefined' ? Number(hubLocalUpdatedAt) || 0 : 0) >=
       hubCloudUpdatedAt(cloudDoc);
@@ -950,15 +1009,17 @@ function hubPushCloudDoc(force, _cloudDocOpt, callerHint) {
             expiresAt: gate && gate.expiresAt
           });
         } catch (e) {}
-        hubSetSyncStatus('done');
+        hubSetSyncStatus('pending', 'Cloud同期待ち');
+        if (typeof hubMarkPendingCloudWrite === 'function') hubMarkPendingCloudWrite();
         return false;
       }
 
-      // Always fetch latest cloud, merge into local, then pack.
+      // Always fetch latest cloud, merge in-memory for pack (no render / no cloud reschedule).
       return hubFetchCloudDoc().then(function (cloudAtStart) {
         let built = buildGuardedPayload(cloudAtStart);
         if (built.destructive && built.destructive.blocked) {
-          hubSetSyncStatus('done');
+          hubSetSyncStatus('pending', 'Cloud同期待ち');
+          if (typeof hubMarkPendingCloudWrite === 'function') hubMarkPendingCloudWrite();
           return false;
         }
         let hash = hubComputeContentHash(hubUnpackFirestorePayload(built.payload));
@@ -992,10 +1053,17 @@ function hubPushCloudDoc(force, _cloudDocOpt, callerHint) {
             });
             built = buildGuardedPayload(cloudJustBeforeWrite);
             if (built.destructive && built.destructive.blocked) {
-              hubSetSyncStatus('done');
+              hubSetSyncStatus('pending', 'Cloud同期待ち');
+              if (typeof hubMarkPendingCloudWrite === 'function') hubMarkPendingCloudWrite();
               return false;
             }
             hash = hubComputeContentHash(hubUnpackFirestorePayload(built.payload));
+          }
+
+          if (built.destructive && built.destructive.blocked) {
+            hubSetSyncStatus('pending', 'Cloud同期待ち');
+            if (typeof hubMarkPendingCloudWrite === 'function') hubMarkPendingCloudWrite();
+            return false;
           }
 
           console.log('[hubOrcaPushGuard] ref.set about to write', {
@@ -1011,14 +1079,10 @@ function hubPushCloudDoc(force, _cloudDocOpt, callerHint) {
             caller: (built.guarded.log && built.guarded.log.caller) || callerHint || 'hubPushCloudDoc'
           });
 
-          if (built.destructive && built.destructive.blocked) {
-            hubSetSyncStatus('done');
-            return false;
-          }
-
           return ref.set(built.payload).then(function () {
             hubLastPushedHash = hash;
             hubLastSeenCloudUpdatedAt = Number(built.payload.updatedAt) || Date.now();
+            hubClearLocalDirtyForCloud('cloud-write-ok');
             if (built.guarded.action === 'allow_explicit_orca_delete') {
               hubClearExplicitOrcaDelete();
             }
@@ -1065,47 +1129,62 @@ function hubDeleteCloudData() {
 }
 
 function hubRefreshViewsAfterSync(viewState) {
-  // render() → renderHome() → updateHomeDashboard() already calls renderPortfolio()
-  // 組織図を開いているときは表示アカウント・ズームを再適用してから描画する
-  if (viewState && typeof hubRestoreOrgChartViewState === 'function') {
-    hubRestoreOrgChartViewState(viewState);
-  }
-  if (typeof render === 'function') render();
-  if (typeof orcaRender === 'function' &&
-      typeof orcaOrgPage !== 'undefined' &&
-      orcaOrgPage &&
-      !orcaOrgPage.classList.contains('hidden')) {
-    orcaRender();
-  }
-  if (viewState && typeof hubRestoreOrgChartScrollState === 'function') {
-    hubRestoreOrgChartScrollState(viewState);
+  hubBeginCloudWriteSuppress('refresh-after-sync');
+  try {
+    if (viewState && typeof hubRestoreOrgChartViewState === 'function') {
+      hubRestoreOrgChartViewState(viewState);
+    }
+    let onOrca = typeof orcaOrgPage !== 'undefined' &&
+      orcaOrgPage && !orcaOrgPage.classList.contains('hidden');
+    let onEni = typeof eniOrgPage !== 'undefined' &&
+      eniOrgPage && !eniOrgPage.classList.contains('hidden');
+    // index.html render() → orcaRender/eniRender は syncRefresh なしで Cloud 予約するため、
+    // 組織図表示中は syncRefresh 付きの専用 render のみ呼ぶ
+    if (onOrca && typeof orcaRender === 'function') {
+      orcaRender({ syncRefresh: true });
+    } else if (onEni && typeof eniRender === 'function') {
+      eniRender({ syncRefresh: true });
+    } else if (typeof render === 'function') {
+      render();
+    }
+    if (viewState && typeof hubRestoreOrgChartScrollState === 'function') {
+      hubRestoreOrgChartScrollState(viewState);
+    }
+  } finally {
+    hubEndCloudWriteSuppress('refresh-after-sync');
   }
 }
 
-function hubApplyMergedHubData(merged, cloudHash) {
+function hubApplyMergedHubData(merged, cloudHash, opts) {
+  opts = opts || {};
   if (!merged || typeof hubApplyData !== 'function') return false;
+  hubBeginCloudWriteSuppress('apply-merged');
   let viewState = typeof hubCaptureOrgChartViewState === 'function'
     ? hubCaptureOrgChartViewState()
     : null;
   let beforeHash = typeof hubComputeContentHash === 'function'
     ? hubComputeContentHash(hubPackLocalData())
     : '';
-  hubApplyData(merged, { skipMerge: true });
-  // 同期マージで rootId がメインへ上書きされても、表示中アカウントが残っていれば復元
-  if (viewState && typeof hubRestoreOrgChartViewState === 'function') {
-    hubRestoreOrgChartViewState(viewState);
+  try {
+    hubApplyData(merged, { skipMerge: true });
+    // 同期マージで rootId がメインへ上書きされても、表示中アカウントが残っていれば復元
+    if (viewState && typeof hubRestoreOrgChartViewState === 'function') {
+      hubRestoreOrgChartViewState(viewState);
+    }
+    if (typeof pmEnsureProjectMaster === 'function') pmEnsureProjectMaster();
+    if (typeof pmEnsureFxSettings === 'function') pmEnsureFxSettings();
+    if (typeof pfEnsureManageDisplayAccounts === 'function') pfEnsureManageDisplayAccounts();
+    if (typeof ensurePerformanceLogs === 'function') ensurePerformanceLogs();
+    if (typeof ensureRevenueLog === 'function') ensureRevenueLog();
+    if (typeof hubSaveToStorage === 'function') hubSaveToStorage({ localOnly: true });
+  } finally {
+    hubEndCloudWriteSuppress('apply-merged');
   }
-  if (typeof pmEnsureProjectMaster === 'function') pmEnsureProjectMaster();
-  if (typeof pmEnsureFxSettings === 'function') pmEnsureFxSettings();
-  if (typeof pfEnsureManageDisplayAccounts === 'function') pfEnsureManageDisplayAccounts();
-  if (typeof ensurePerformanceLogs === 'function') ensurePerformanceLogs();
-  if (typeof ensureRevenueLog === 'function') ensureRevenueLog();
-  if (typeof hubSaveToStorage === 'function') hubSaveToStorage({ localOnly: true });
   let afterHash = typeof hubComputeContentHash === 'function'
     ? hubComputeContentHash(hubPackLocalData())
     : '';
   hubLastPushedHash = cloudHash || hubLastPushedHash;
-  if (beforeHash !== afterHash) hubRefreshViewsAfterSync(viewState);
+  if (!opts.skipRefresh && beforeHash !== afterHash) hubRefreshViewsAfterSync(viewState);
   return beforeHash !== afterHash;
 }
 
@@ -1138,6 +1217,12 @@ function hubRunCloudSave(force) {
     } catch (e) {}
     return Promise.resolve(false);
   }
+  if (!force && !hubCloudWriteExplicitBypass && !hubHasLocalDirtyChanges()) {
+    try {
+      console.log('[hubCloudDirty] skip hubRunCloudSave (not dirty)', {});
+    } catch (e) {}
+    return Promise.resolve(false);
+  }
   if (typeof hubIsCloudWriteEnabled === 'function' && !hubIsCloudWriteEnabled()) {
     if (typeof hubRenderLocalDevStatus === 'function') hubRenderLocalDevStatus();
     return Promise.resolve(false);
@@ -1155,7 +1240,9 @@ function hubRunCloudSave(force) {
     if (hubIsCloudWriteExplicitOnly() && !hubCloudWriteExplicitBypass) {
       return Promise.resolve(false);
     }
-    hubCloudSaveQueued = true;
+    if ((force || hubHasLocalDirtyChanges()) && !hubCloudWriteSuppressDepth) {
+      hubCloudSaveQueued = true;
+    }
     return Promise.resolve(false);
   }
   hubCloudSaveInFlight = true;
@@ -1169,14 +1256,27 @@ function hubRunCloudSave(force) {
       hubCloudSaveQueued = false;
       return;
     }
-    if (hubCloudSaveQueued) {
-      hubCloudSaveQueued = false;
+    let shouldFollowUp = hubCloudSaveQueued && hubHasLocalDirtyChanges();
+    hubCloudSaveQueued = false;
+    if (shouldFollowUp) {
       hubRunCloudSave(false);
     }
   });
 }
 
 function hubScheduleCloudSave(immediate) {
+  if (!hubIsCloudWriteScheduleAllowed()) {
+    if (hubCloudWriteSuppressDepth > 0) {
+      try {
+        console.log('[hubCloudWriteSuppress] block hubScheduleCloudSave', { immediate: !!immediate });
+      } catch (e) {}
+    } else if (!hubHasLocalDirtyChanges()) {
+      try {
+        console.log('[hubCloudDirty] skip hubScheduleCloudSave (not dirty)', { immediate: !!immediate });
+      } catch (e) {}
+    }
+    return;
+  }
   if (hubAreAutomaticCloudWritesBlocked()) {
     hubClearCloudSaveTimerAndQueue('schedule-blocked');
     try {
@@ -1283,7 +1383,7 @@ function hubPullCloudDataIfStale(reason) {
   return hubPullCloudData(reason);
 }
 
-/** Full sync: READ always; WRITE only when automatic writes are allowed. */
+/** Full sync: READ always; WRITE only when user-edited dirty data exists. */
 function hubSyncHubData() {
   if (typeof hubIsLocalDevMode === 'function' && hubIsLocalDevMode()) {
     if (typeof hubRenderLocalDevStatus === 'function') hubRenderLocalDevStatus();
@@ -1306,26 +1406,13 @@ function hubSyncHubData() {
       } catch (e) {}
       return pulled;
     }
-    let local = hubLoadFromStorage();
-    return hubFetchCloudDoc().then(function (cloudDoc) {
-      if (!cloudDoc) {
-        return hubRunCloudSave(true).then(function (ok) {
-          if (ok && typeof hubClearPendingCloudWrite === 'function') hubClearPendingCloudWrite();
-          return ok;
-        });
-      }
-      let cloudUnpacked = hubUnpackFirestorePayload(cloudDoc);
-      let merged = hubMergeHubDocuments(local.data, cloudUnpacked);
-      let mergedHash = hubComputeContentHash(merged);
-      let cloudHash = hubComputeContentHash(cloudUnpacked);
-      if (mergedHash !== cloudHash) {
-        return hubRunCloudSave(true).then(function (ok) {
-          if (ok && typeof hubClearPendingCloudWrite === 'function') hubClearPendingCloudWrite();
-          return ok;
-        });
-      }
+    if (!hubHasLocalDirtyChanges()) {
       hubSetSyncStatus(hubSyncPendingWrites > 0 ? 'pending' : 'done', 'Cloud同期済み');
-      return true;
+      return pulled;
+    }
+    return hubRunCloudSave(true).then(function (ok) {
+      if (ok && typeof hubClearPendingCloudWrite === 'function') hubClearPendingCloudWrite();
+      return ok;
     });
   }).catch(function () {
     hubSetSyncStatus('failed', '同期失敗');
@@ -1364,6 +1451,7 @@ function hubSaveRevenueWithCloudConfirm(opts) {
     return Promise.resolve({ ok: false, status: 'offline', message: pendingMessage });
   }
 
+  hubMarkLocalDirtyForCloud('revenue-save');
   hubSetSyncStatus('syncing', 'Cloud保存中…');
   return hubRunCloudSave(true).then(function (written) {
     if (!written) {
@@ -1390,7 +1478,9 @@ function hubBindFirebaseConnectivity() {
     if (typeof hubIsLocalDevMode === 'function' && hubIsLocalDevMode()) return;
     if (hubFirebaseReady && hubFirebaseUid) {
       hubPullCloudDataIfStale('online').then(function () {
-        if (!hubAreAutomaticCloudWritesBlocked()) hubRunCloudSave(false);
+        if (!hubAreAutomaticCloudWritesBlocked() && hubHasLocalDirtyChanges()) {
+          hubRunCloudSave(false);
+        }
       });
     }
   });
@@ -1415,6 +1505,12 @@ function hubBindFirebaseConnectivity() {
 
 if (typeof window !== 'undefined') {
   window.hubScheduleCloudSave = hubScheduleCloudSave;
+  window.hubHasLocalDirtyChanges = hubHasLocalDirtyChanges;
+  window.hubMarkLocalDirtyForCloud = hubMarkLocalDirtyForCloud;
+  window.hubClearLocalDirtyForCloud = hubClearLocalDirtyForCloud;
+  window.hubBeginCloudWriteSuppress = hubBeginCloudWriteSuppress;
+  window.hubEndCloudWriteSuppress = hubEndCloudWriteSuppress;
+  window.hubIsCloudWriteScheduleAllowed = hubIsCloudWriteScheduleAllowed;
   window.hubIsCloudWriteSuspended = hubIsCloudWriteSuspended;
   window.hubIsCloudWriteExplicitOnly = hubIsCloudWriteExplicitOnly;
   window.hubAreAutomaticCloudWritesBlocked = hubAreAutomaticCloudWritesBlocked;
