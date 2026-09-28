@@ -1,5 +1,5 @@
 {
-  "minPassed": 768,
-  "note": "Baseline after revenue save fast path (+16 checks). verify:release Passed 768.",
+  "minPassed": 771,
+  "note": "Baseline after revenue save UX overlay (+19 fast-path checks). verify:release Passed 771.",
   "updatedAt": "2026-09-28"
 }

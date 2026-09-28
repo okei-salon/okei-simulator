@@ -2,7 +2,7 @@
  * Google 認証後に LocalStorage / Firestore を同期
  * 組織図・ポートフォリオはフィールド単位でマージして端末間の上書きを防ぐ
  */
-var HUB_FIREBASE_JS_BUILD = 'Ver2.0.59/Build20260928-v003';
+var HUB_FIREBASE_JS_BUILD = 'Ver2.0.60/Build20260928-v005';
 
 var hubFirebaseApp = null;
 var hubFirebaseAuth = null;
@@ -86,6 +86,9 @@ function hubEndCloudWriteSuppress(reason) {
 
 function hubIsCloudWriteScheduleAllowed() {
   if (hubCloudWriteSuppressDepth > 0) return false;
+  if (typeof hubIsRevenueInputSaveUiLocked === 'function' && hubIsRevenueInputSaveUiLocked()) {
+    return false;
+  }
   if (hubIsRevenueInputSaveFlowActive()) return false;
   if (typeof hubAreAutomaticCloudWritesBlocked === 'function' && hubAreAutomaticCloudWritesBlocked()) {
     return false;
@@ -169,14 +172,34 @@ function hubRevenueSaveTimingReset() {
   hubRevenueSaveTiming = { startMs: Date.now(), marks: {} };
 }
 
-function hubRevenueSaveMark(label) {
+function hubRevenueSaveMark(label, detail) {
   if (!label) return;
   if (!hubRevenueSaveTiming) hubRevenueSaveTimingReset();
   let elapsed = Date.now() - hubRevenueSaveTiming.startMs;
   hubRevenueSaveTiming.marks[label] = elapsed;
+  if (detail && typeof detail === 'object') {
+    hubRevenueSaveTiming.marks[label + '__detail'] = detail;
+  }
   try {
-    console.log('[hubRevenueSaveTiming]', label, elapsed + 'ms');
+    console.log('[hubRevenueSaveTiming]', label, elapsed + 'ms', detail || '');
   } catch (e) {}
+}
+
+function hubFlushRevenueSaveLocalPersist() {
+  if (typeof hubRevenueSaveMark === 'function') hubRevenueSaveMark('LOCAL_PERSIST_START');
+  if (typeof pdFlushDeferredPersist === 'function') {
+    pdFlushDeferredPersist();
+  } else if (typeof hubSaveToStorage === 'function') {
+    hubSaveToStorage({ localOnly: true, immediate: true });
+  }
+  if (typeof hubRevenueSaveMark === 'function') hubRevenueSaveMark('LOCAL_PERSIST_DONE');
+}
+
+function hubRunDeferredRevenueDashboardRefresh() {
+  if (typeof pdNotifyPerformanceChanged === 'function' &&
+      pdNotifyPerformanceChanged._deferred) {
+    pdNotifyPerformanceChanged({ force: true });
+  }
 }
 
 function hubRevenueSaveTimingReport() {
@@ -1329,7 +1352,22 @@ function hubPushCloudDoc(force, _cloudDocOpt, callerHint) {
     let packMergedInMemory = hubPushCloudDocUsesSinglePreWriteFetch(force);
     let packOpts = { packMergedInMemory: packMergedInMemory };
 
-    return hubFetchCloudWriteGate(false).then(function (gate) {
+    let fetchCloudBundle = hubPushCloudDocUsesSinglePreWriteFetch(force)
+      ? Promise.all([
+          hubFetchCloudWriteGate(false),
+          hubFetchCloudDoc()
+        ]).then(function (pair) {
+          return { gate: pair[0], cloudAtStart: pair[1] };
+        })
+      : hubFetchCloudWriteGate(false).then(function (gate) {
+          return hubFetchCloudDoc().then(function (cloudAtStart) {
+            return { gate: gate, cloudAtStart: cloudAtStart };
+          });
+        });
+
+    return fetchCloudBundle.then(function (bundle) {
+      let gate = bundle.gate;
+      let cloudAtStart = bundle.cloudAtStart;
       if (hubIsCloudWriteGateDocSuspended(gate)) {
         try {
           console.log('[hubCloudWriteGate] block hubPushCloudDoc remote suspended', {
@@ -1344,14 +1382,16 @@ function hubPushCloudDoc(force, _cloudDocOpt, callerHint) {
       }
 
       // Fetch latest cloud, merge in-memory for pack (no render / no cloud reschedule).
-      return hubFetchCloudDoc().then(function (cloudAtStart) {
+      return Promise.resolve(cloudAtStart).then(function (cloudAtStart) {
         let built = buildGuardedPayload(cloudAtStart, packOpts);
         if (built.destructive && built.destructive.blocked) {
           hubSetSyncStatus('pending', 'Cloud同期待ち');
           if (typeof hubMarkPendingCloudWrite === 'function') hubMarkPendingCloudWrite();
           return false;
         }
-        let hash = hubComputeContentHash(hubUnpackFirestorePayload(built.payload));
+        let hash = (hubPushCloudDocUsesSinglePreWriteFetch(force) && built.payload)
+          ? String(built.payload.updatedAt || Date.now())
+          : hubComputeContentHash(hubUnpackFirestorePayload(built.payload));
         if (!force && hash === hubLastPushedHash) {
           hubSetSyncStatus('done');
           return false;
@@ -2003,6 +2043,8 @@ if (typeof window !== 'undefined') {
   window.hubRevenueSaveMark = hubRevenueSaveMark;
   window.hubRevenueSaveTimingReport = hubRevenueSaveTimingReport;
   window.hubPushCloudDocUsesSinglePreWriteFetch = hubPushCloudDocUsesSinglePreWriteFetch;
+  window.hubFlushRevenueSaveLocalPersist = hubFlushRevenueSaveLocalPersist;
+  window.hubRunDeferredRevenueDashboardRefresh = hubRunDeferredRevenueDashboardRefresh;
   window.hubRunRevenueCloudSaveOnce = hubRunRevenueCloudSaveOnce;
   window.hubWaitForCloudSaveIdle = hubWaitForCloudSaveIdle;
   window.hubCloudHasRevenueDay = hubCloudHasRevenueDay;

@@ -1,5 +1,5 @@
 /* OUKEI HUB Revenue Save Failure Diagnostics — read-only observation UI (admin only) */
-var HUB_REVENUE_SAVE_DIAG_JS_BUILD = 'Ver2.0.59/Build20260928-v003';
+var HUB_REVENUE_SAVE_DIAG_JS_BUILD = 'Ver2.0.60/Build20260928-v005';
 
 var hubRevenueSaveDiagnosticContext = null;
 var hubRevenueSaveLastFailureDiagnostic = null;

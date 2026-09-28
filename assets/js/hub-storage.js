@@ -1,5 +1,5 @@
 /* OUKEI HUB Local Storage + Cloud Save Hooks — Ver2.0.8 */
-var HUB_STORAGE_JS_BUILD = 'Ver2.0.59/Build20260928-v003';
+var HUB_STORAGE_JS_BUILD = 'Ver2.0.60/Build20260928-v005';
 
 var HUB_STORAGE_KEY = 'oukei_hub_v15_data';
 var HUB_STORAGE_LEGACY_KEY = 'okei_v14_data';
@@ -1863,8 +1863,13 @@ function hubSaveToStorage(options) {
     hubLocalUpdatedAt = now;
     // pack は sim 中でも本番スナップショットのみを書く
     let packed = Object.assign(hubPackLocalData(), { updatedAt: now });
-    // 本番保存直前に1世代バックアップ（sim 中はスキップ）
-    hubBackupRamOrgChartBeforeProductionSave(packed);
+    let revenueSaveFlow = options.deferCloudSchedule === true ||
+      (typeof hubIsRevenueInputSaveUiLocked === 'function' && hubIsRevenueInputSaveUiLocked()) ||
+      (typeof hubIsRevenueInputSaveFlowActive === 'function' && hubIsRevenueInputSaveFlowActive());
+    // 本番保存直前に1世代バックアップ（sim / 実績のみ localOnly 保存中はスキップ）
+    if (!options.localOnly || !revenueSaveFlow) {
+      hubBackupRamOrgChartBeforeProductionSave(packed);
+    }
     localStorage.setItem(hubResolveStorageKey(), JSON.stringify(packed));
     // シミュレーション専用サイドストア（本番キーとは分離）
     try {
@@ -1877,16 +1882,14 @@ function hubSaveToStorage(options) {
         (typeof orcaSimMode !== 'undefined' && orcaSimMode) ||
         (typeof eniSimMode !== 'undefined' && eniSimMode)
       );
-    // ユーザー編集のみ dirty（Cloud READ / merge / render 中は suppress により dirty 化しない）
-    if (!options.localOnly &&
+    // ユーザー編集のみ dirty（Cloud READ / merge / render / 実績保存フロー中は dirty 化しない）
+    if (!options.localOnly && !revenueSaveFlow &&
         (typeof hubCloudWriteSuppressDepth === 'undefined' || hubCloudWriteSuppressDepth === 0) &&
         typeof hubMarkLocalDirtyForCloud === 'function') {
       hubMarkLocalDirtyForCloud('hubSaveToStorage');
     }
     // シミュレーション中はクラウドへ書かない（push→enrich→apply で sim が落ちる経路を遮断）
     // cloud-write suspend / explicit-only / not-dirty 中も自動クラウド予約しない
-    let revenueSaveFlow = options.deferCloudSchedule === true ||
-      (typeof hubIsRevenueInputSaveFlowActive === 'function' && hubIsRevenueInputSaveFlowActive());
     let cloudBlocked = typeof hubAreAutomaticCloudWritesBlocked === 'function'
       ? hubAreAutomaticCloudWritesBlocked()
       : (typeof hubIsCloudWriteSuspended === 'function' && hubIsCloudWriteSuspended());

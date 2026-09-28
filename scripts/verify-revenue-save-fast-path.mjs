@@ -134,12 +134,6 @@ async function runBrowserCases() {
 
     // 1–5: normal save via flow
     setupMocks();
-    if (!settings.revenueLog) settings.revenueLog = {};
-    settings.revenueLog[dateKey] = {
-      ramAccounts: { r1: { todayRevenue: 189.51, revision: 9000 } },
-      ram: 189.51,
-      total: 189.51
-    };
     hubLocalUpdatedAt = Date.now();
     hubMarkLocalDirtyForCloud('fast-test');
     let baseRef = refCount();
@@ -147,7 +141,13 @@ async function runBrowserCases() {
     let t0 = Date.now();
     let saveResult = await hubPersistThenCloudConfirm(function () {
       hubMarkLocalDirtyForCloud('fast-local');
-      if (typeof hubSaveToStorage === 'function') hubSaveToStorage({ immediate: true });
+      if (typeof pdMergeRevenueEntry === 'function') {
+        pdMergeRevenueEntry(dateKey, {
+          ramAccounts: { r1: { todayRevenue: 189.51, revision: 9000 } },
+          ram: 189.51,
+          total: 189.51
+        });
+      }
     }, '✅ 保存しました', function () {
       return !!(settings.revenueLog && settings.revenueLog[dateKey]);
     });
@@ -157,6 +157,7 @@ async function runBrowserCases() {
     let revKeys = lastPayload && lastPayload.revenue && lastPayload.revenue.revenueLog
       ? Object.keys(lastPayload.revenue.revenueLog)
       : [];
+    let marks = timing && timing.marks ? timing.marks : null;
     out.normalSave = {
       ok: saveResult.ok,
       status: saveResult.status,
@@ -171,13 +172,27 @@ async function runBrowserCases() {
       eniMembersLen: lastPayload && lastPayload.eniOrgChart ? lastPayload.eniOrgChart.members.length : null,
       settingsYen: lastPayload && lastPayload.settings ? lastPayload.settings.yenRate : null,
       manageAccountsKeys: lastPayload && lastPayload.manageAccounts ? Object.keys(lastPayload.manageAccounts).length : null,
+      manageAccountsPreserved: !!(lastPayload && lastPayload.manageAccounts && lastPayload.manageAccounts.r1),
       pastRevPreserved: !!(lastPayload && lastPayload.revenue && lastPayload.revenue.revenueLog),
       elapsedMs: elapsed,
-      timingMarks: timing && timing.marks ? timing.marks : null,
-      uiBeforePreCloud: timing && timing.marks
-        ? (timing.marks.UI_DONE || 0) <= (timing.marks.PRE_CLOUD_START || 999999)
-        : null
+      timingMarks: marks,
+      uiBeforePreCloud: marks
+        ? (marks.UI_DONE || 0) <= (marks.PRE_CLOUD_START || 999999)
+        : null,
+      modalClosedBeforePreCloud: marks
+        ? (marks.MODAL_CLOSED || 0) <= (marks.PRE_CLOUD_START || 999999)
+        : null,
+      hasLocalPersistMarks: !!(marks && marks.LOCAL_PERSIST_START != null && marks.LOCAL_PERSIST_DONE != null)
     };
+
+    setupMocks();
+    hubRevenueSaveTimingReset();
+    hubShowRevenueSaveProgressOverlay();
+    out.overlayImmediate = {
+      visible: !!document.getElementById('hubRevenueSaveOverlay') &&
+        document.getElementById('hubRevenueSaveOverlay').classList.contains('isVisible')
+    };
+    hubHideRevenueSaveProgressOverlay();
 
     // 14: double-click → one ref.set
     setupMocks();
@@ -219,13 +234,19 @@ async function runBrowserCases() {
   assert('orcaOrgChart preserved', result.normalSave.orcaMembersLen === 1, '');
   assert('eniOrgChart preserved', result.normalSave.eniMembersLen === 0, '');
   assert('settings preserved', result.normalSave.settingsYen != null, '');
-  assert('manageAccounts preserved', result.normalSave.manageAccountsKeys === 1, '');
+  assert('manageAccounts preserved', result.normalSave.manageAccountsPreserved === true, '');
   assert('timing UI_DONE before PRE_CLOUD_START', result.normalSave.uiBeforePreCloud === true,
+    JSON.stringify(result.normalSave.timingMarks));
+  assert('MODAL_CLOSED before PRE_CLOUD_START', result.normalSave.modalClosedBeforePreCloud === true,
+    JSON.stringify(result.normalSave.timingMarks));
+  assert('local persist sub-marks present', result.normalSave.hasLocalPersistMarks === true,
     JSON.stringify(result.normalSave.timingMarks));
   assert('timing marks present', !!(result.normalSave.timingMarks &&
     result.normalSave.timingMarks.SAVE_START != null &&
     result.normalSave.timingMarks.LOCAL_SAVE_DONE != null &&
-    result.normalSave.timingMarks.UI_DONE != null), JSON.stringify(result.normalSave.timingMarks));
+    result.normalSave.timingMarks.UI_DONE != null &&
+    result.normalSave.timingMarks.MODAL_CLOSED != null), JSON.stringify(result.normalSave.timingMarks));
+  assert('save overlay shows immediately', result.overlayImmediate.visible === true, '');
   assert('double-click same promise', result.doubleClick.samePromise === true, '');
   assert('double-click one ref.set', result.doubleClick.refSets === 1,
     'refSets=' + result.doubleClick.refSets);

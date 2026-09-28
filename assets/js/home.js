@@ -1,5 +1,5 @@
 /* OUKEI HUB Home UI — Ver2.0.7 */
-var HUB_HOME_JS_BUILD = 'Ver2.0.59/Build20260928-v003';
+var HUB_HOME_JS_BUILD = 'Ver2.0.60/Build20260928-v005';
 let homeCalView = { y: new Date().getFullYear(), m: new Date().getMonth() };
 let ramSavePending = null;
 let ramSalesDecreasePending = null;
@@ -1925,6 +1925,13 @@ function refreshHomeAfterRevenueSave() {
 /** In-flight revenue-input save (join duplicate button taps to one Cloud WRITE). */
 var hubRevenueInputSavePromise = null;
 var hubRevenueInputSaveUiBusy = false;
+/** Synchronous lock — set before any async/microtask (prevents double-tap race). */
+var hubRevenueInputSaveLocked = false;
+
+function hubIsRevenueInputSaveUiLocked() {
+  return !!hubRevenueInputSaveLocked ||
+    (typeof hubIsRevenueInputSaveFlowActive === 'function' && hubIsRevenueInputSaveFlowActive());
+}
 
 function hubIsRevenueSaveButtonEl(btn) {
   if (!btn) return false;
@@ -1934,9 +1941,62 @@ function hubIsRevenueSaveButtonEl(btn) {
   return id === 'eniSaveRevenueBtn' || id === 'matrixSaveRevenueBtn' || id === 'bitsyncSaveRevenueBtn';
 }
 
+function hubGetRevenueSaveModalRoot() {
+  return typeof modalBg !== 'undefined' ? modalBg : document.getElementById('modalBg');
+}
+
+function hubShowRevenueSaveProgressOverlay() {
+  let modal = hubGetRevenueSaveModalRoot();
+  if (!modal) return;
+  let overlay = document.getElementById('hubRevenueSaveOverlay');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'hubRevenueSaveOverlay';
+    overlay.className = 'hubRevenueSaveOverlay';
+    overlay.setAttribute('role', 'status');
+    overlay.setAttribute('aria-live', 'polite');
+    overlay.innerHTML =
+      '<div class="hubRevenueSaveOverlayInner">' +
+      '<div class="hubRevenueSaveSpinner" aria-hidden="true"></div>' +
+      '<p class="hubRevenueSaveOverlayTitle">保存中…</p>' +
+      '<p class="hubRevenueSaveOverlayHint">操作しないでください。</p>' +
+      '</div>';
+    modal.appendChild(overlay);
+  }
+  overlay.classList.add('isVisible');
+  hubDisableRevenueModalActions(true);
+}
+
+function hubHideRevenueSaveProgressOverlay() {
+  let overlay = document.getElementById('hubRevenueSaveOverlay');
+  if (overlay) overlay.classList.remove('isVisible');
+  hubDisableRevenueModalActions(false);
+}
+
+function hubDisableRevenueModalActions(disabled) {
+  let modal = hubGetRevenueSaveModalRoot();
+  if (!modal) return;
+  modal.querySelectorAll('button, input, select, textarea, a').forEach(function (el) {
+    if (el.id === 'hubRevenueSaveOverlay') return;
+    if (disabled) {
+      if (!el.hasAttribute('data-hub-save-disabled')) {
+        el.setAttribute('data-hub-save-disabled', el.disabled ? '1' : '0');
+      }
+      el.disabled = true;
+      el.setAttribute('aria-disabled', 'true');
+      el.style.pointerEvents = 'none';
+    } else if (el.hasAttribute('data-hub-save-disabled')) {
+      el.disabled = el.getAttribute('data-hub-save-disabled') === '1';
+      el.removeAttribute('data-hub-save-disabled');
+      el.removeAttribute('aria-disabled');
+      el.style.pointerEvents = '';
+    }
+  });
+}
+
 function hubSetRevenueInputSaveUiBusy(busy) {
   hubRevenueInputSaveUiBusy = !!busy;
-  let modal = typeof modalBg !== 'undefined' ? modalBg : document.getElementById('modalBg');
+  let modal = hubGetRevenueSaveModalRoot();
   if (!modal) return;
   modal.querySelectorAll('.ramInputBtnSave').forEach(function (btn) {
     if (!hubIsRevenueSaveButtonEl(btn)) return;
@@ -1946,25 +2006,88 @@ function hubSetRevenueInputSaveUiBusy(busy) {
       }
       btn.disabled = true;
       btn.textContent = '保存中…';
-    } else {
+    } else if (btn.hasAttribute('data-hub-save-label')) {
       btn.disabled = false;
-      let prev = btn.getAttribute('data-hub-save-label');
-      if (prev) btn.textContent = prev;
+      btn.textContent = btn.getAttribute('data-hub-save-label');
       btn.removeAttribute('data-hub-save-label');
     }
   });
 }
 
+function hubForceCloseRevenueModal() {
+  if (typeof closeModal === 'function') closeModal();
+  let modal = hubGetRevenueSaveModalRoot();
+  if (modal) {
+    modal.style.display = 'none';
+    modal.setAttribute('aria-hidden', 'true');
+  }
+  if (typeof hubRevenueSaveMark === 'function') {
+    let marks = (typeof hubRevenueSaveTiming !== 'undefined' && hubRevenueSaveTiming)
+      ? hubRevenueSaveTiming.marks
+      : null;
+    if (!marks || marks.MODAL_CLOSED == null) {
+      let display = modal ? modal.style.display : null;
+      hubRevenueSaveMark('MODAL_CLOSED', { modalDisplay: display });
+    }
+  }
+}
+
+/** Show home without index.html render() — render() calls hubSaveToStorage and re-dirties after Cloud sync. */
+function hubNavigateHomeAfterRevenueSave() {
+  if (typeof menu !== 'undefined' && menu) menu.classList.remove('open');
+  let pageEls = [
+    typeof homePage !== 'undefined' ? homePage : null,
+    typeof ramPage !== 'undefined' ? ramPage : null,
+    typeof settingsPage !== 'undefined' ? settingsPage : null,
+    typeof accountManagePage !== 'undefined' ? accountManagePage : null,
+    typeof ochanRoomPage !== 'undefined' ? ochanRoomPage : null,
+    typeof portfolioPage !== 'undefined' ? portfolioPage : null,
+    typeof pfGoalSettingsPage !== 'undefined' ? pfGoalSettingsPage : null,
+    typeof pfOperatingSettingsPage !== 'undefined' ? pfOperatingSettingsPage : null,
+    typeof pfProfitSettingsPage !== 'undefined' ? pfProfitSettingsPage : null,
+    typeof projectSettingsPage !== 'undefined' ? projectSettingsPage : null,
+    typeof fxSettingsPage !== 'undefined' ? fxSettingsPage : null,
+    typeof revenueManagePage !== 'undefined' ? revenueManagePage : null,
+    typeof salesManagePage !== 'undefined' ? salesManagePage : null,
+    typeof orgSelectPage !== 'undefined' ? orgSelectPage : null,
+    typeof orcaOrgPage !== 'undefined' ? orcaOrgPage : null,
+    typeof orcaAccountManagePage !== 'undefined' ? orcaAccountManagePage : null,
+    typeof eniOrgPage !== 'undefined' ? eniOrgPage : null,
+    typeof eniAccountManagePage !== 'undefined' ? eniAccountManagePage : null
+  ];
+  pageEls.forEach(function (el) {
+    if (el) el.classList.add('hidden');
+  });
+  if (typeof homePage !== 'undefined' && homePage) homePage.classList.remove('hidden');
+  if (typeof setPageLocation === 'function') setPageLocation('ホーム');
+  if (typeof syncMobileNav === 'function') syncMobileNav('home');
+}
+
 /** Local save complete → close modal first, then home + refresh (Cloud continues async). */
 function hubFinishUiAfterLocalSave() {
-  if (typeof closeModal === 'function') closeModal();
-  if (typeof modalBg !== 'undefined' && modalBg) modalBg.style.display = 'none';
-  if (typeof showPage === 'function') showPage('home');
-  if (typeof refreshHomeAfterRevenueSave === 'function') refreshHomeAfterRevenueSave();
-  if (typeof render === 'function') render();
-  if (typeof modalBg !== 'undefined' && modalBg) modalBg.style.display = 'none';
-  if (typeof showToast === 'function') showToast('✅ 端末に保存しました');
+  hubHideRevenueSaveProgressOverlay();
+  hubForceCloseRevenueModal();
   if (typeof hubRevenueSaveMark === 'function') hubRevenueSaveMark('UI_DONE');
+  requestAnimationFrame(function () {
+    hubNavigateHomeAfterRevenueSave();
+    requestAnimationFrame(function () {
+      if (typeof refreshHomeAfterRevenueSave === 'function') refreshHomeAfterRevenueSave();
+      if (typeof hubRunDeferredRevenueDashboardRefresh === 'function') {
+        hubRunDeferredRevenueDashboardRefresh();
+      }
+      hubForceCloseRevenueModal();
+      if (typeof showToast === 'function') showToast('✅ 保存しました');
+    });
+  });
+}
+
+function hubRunRevenueLocalPersistPhase(localPersistFn) {
+  if (typeof hubRevenueSaveMark === 'function') hubRevenueSaveMark('LOCAL_PERSIST_PHASE_START');
+  if (typeof localPersistFn === 'function') localPersistFn();
+  if (typeof hubFlushRevenueSaveLocalPersist === 'function') {
+    hubFlushRevenueSaveLocalPersist();
+  }
+  if (typeof hubRevenueSaveMark === 'function') hubRevenueSaveMark('LOCAL_PERSIST_PHASE_DONE');
 }
 
 function hubFinishRevenueInputSaveCloudOnly(toastMessage, verifyFn) {
@@ -1979,6 +2102,7 @@ function hubFinishRevenueInputSaveCloudOnly(toastMessage, verifyFn) {
   }).then(function (result) {
     if (result.ok) {
       if (typeof showToast === 'function') showToast('☁️ Cloud同期済み');
+      if (typeof hubSetSyncStatus === 'function') hubSetSyncStatus('done', 'Cloud同期済み');
     } else {
       if (typeof showToast === 'function') {
         showToast(result.message || '端末に保存済み・Cloud同期待ち');
@@ -2002,35 +2126,53 @@ function hubFinishRevenueInputSaveCloudOnly(toastMessage, verifyFn) {
  * Revenue-input save: local persist first (no automatic Cloud schedule), then cloud confirm once.
  */
 function hubPersistThenCloudConfirm(localPersistFn, toastMessage, verifyFn, diagnosticMeta) {
-  if (hubRevenueInputSavePromise) {
-    return hubRevenueInputSavePromise;
+  if (hubRevenueInputSavePromise || hubRevenueInputSaveLocked) {
+    return hubRevenueInputSavePromise || Promise.resolve({ ok: false, status: 'duplicate', message: '保存処理中です' });
   }
-  hubRevenueInputSavePromise = Promise.resolve().then(function () {
-    if (typeof hubRevenueSaveTimingReset === 'function') hubRevenueSaveTimingReset();
-    if (typeof hubRevenueSaveMark === 'function') hubRevenueSaveMark('SAVE_START');
-    if (typeof hubGuessRevenueSaveContextFromUi === 'function') {
-      hubRevenueSaveDiagnosticContext = Object.assign(
-        {},
-        hubGuessRevenueSaveContextFromUi(),
-        diagnosticMeta || {}
-      );
-    } else {
-      hubRevenueSaveDiagnosticContext = diagnosticMeta || null;
+  hubRevenueInputSaveLocked = true;
+  if (typeof hubRevenueSaveTimingReset === 'function') hubRevenueSaveTimingReset();
+  if (typeof hubRevenueSaveMark === 'function') hubRevenueSaveMark('SAVE_START');
+  if (typeof hubGuessRevenueSaveContextFromUi === 'function') {
+    hubRevenueSaveDiagnosticContext = Object.assign(
+      {},
+      hubGuessRevenueSaveContextFromUi(),
+      diagnosticMeta || {}
+    );
+  } else {
+    hubRevenueSaveDiagnosticContext = diagnosticMeta || null;
+  }
+  hubShowRevenueSaveProgressOverlay();
+  hubSetRevenueInputSaveUiBusy(true);
+  if (typeof hubBeginRevenueInputSaveFlow === 'function') hubBeginRevenueInputSaveFlow();
+
+  hubRevenueInputSavePromise = new Promise(function (resolve, reject) {
+    function runLocalAndCloud() {
+      try {
+        hubRunRevenueLocalPersistPhase(localPersistFn);
+        if (typeof hubRevenueSaveMark === 'function') hubRevenueSaveMark('LOCAL_SAVE_DONE');
+        hubFinishUiAfterLocalSave();
+        hubFinishRevenueInputSaveCloudOnly(toastMessage, verifyFn).then(function (result) {
+          return new Promise(function (resolveUi) {
+            requestAnimationFrame(function () {
+              requestAnimationFrame(function () {
+                resolveUi(result);
+              });
+            });
+          });
+        }).then(resolve).catch(reject);
+      } catch (err) {
+        hubHideRevenueSaveProgressOverlay();
+        if (typeof hubEndRevenueInputSaveFlow === 'function') hubEndRevenueInputSaveFlow();
+        reject(err);
+      }
     }
-    hubSetRevenueInputSaveUiBusy(true);
-    if (typeof hubBeginRevenueInputSaveFlow === 'function') hubBeginRevenueInputSaveFlow();
-    try {
-      if (typeof localPersistFn === 'function') localPersistFn();
-    } catch (err) {
-      hubSetRevenueInputSaveUiBusy(false);
-      if (typeof hubEndRevenueInputSaveFlow === 'function') hubEndRevenueInputSaveFlow();
-      throw err;
-    }
-    if (typeof hubRevenueSaveMark === 'function') hubRevenueSaveMark('LOCAL_SAVE_DONE');
-    hubFinishUiAfterLocalSave();
-    return hubFinishRevenueInputSaveCloudOnly(toastMessage, verifyFn);
+    requestAnimationFrame(function () {
+      requestAnimationFrame(runLocalAndCloud);
+    });
   }).finally(function () {
+    hubHideRevenueSaveProgressOverlay();
     hubSetRevenueInputSaveUiBusy(false);
+    hubRevenueInputSaveLocked = false;
     hubRevenueInputSavePromise = null;
   });
   return hubRevenueInputSavePromise;
@@ -2038,19 +2180,40 @@ function hubPersistThenCloudConfirm(localPersistFn, toastMessage, verifyFn, diag
 
 /** 実績入力: ローカル保存済み → Cloud確認（UIは hubFinishUiAfterLocalSave 済み想定） */
 function hubFinishRevenueInputSave(toastMessage, verifyFn) {
-  if (hubRevenueInputSavePromise) {
-    return hubRevenueInputSavePromise;
+  if (hubRevenueInputSavePromise || hubRevenueInputSaveLocked) {
+    return hubRevenueInputSavePromise || Promise.resolve({ ok: false, status: 'duplicate' });
   }
-  hubRevenueInputSavePromise = Promise.resolve().then(function () {
-    if (typeof hubRevenueSaveTimingReset === 'function') hubRevenueSaveTimingReset();
-    if (typeof hubRevenueSaveMark === 'function') hubRevenueSaveMark('SAVE_START');
-    hubSetRevenueInputSaveUiBusy(true);
-    if (typeof hubBeginRevenueInputSaveFlow === 'function') hubBeginRevenueInputSaveFlow();
-    if (typeof hubRevenueSaveMark === 'function') hubRevenueSaveMark('LOCAL_SAVE_DONE');
-    hubFinishUiAfterLocalSave();
-    return hubFinishRevenueInputSaveCloudOnly(toastMessage, verifyFn);
+  hubRevenueInputSaveLocked = true;
+  if (typeof hubRevenueSaveTimingReset === 'function') hubRevenueSaveTimingReset();
+  if (typeof hubRevenueSaveMark === 'function') hubRevenueSaveMark('SAVE_START');
+  hubShowRevenueSaveProgressOverlay();
+  hubSetRevenueInputSaveUiBusy(true);
+  if (typeof hubBeginRevenueInputSaveFlow === 'function') hubBeginRevenueInputSaveFlow();
+  hubRevenueInputSavePromise = new Promise(function (resolve, reject) {
+    requestAnimationFrame(function () {
+      requestAnimationFrame(function () {
+        try {
+          if (typeof hubFlushRevenueSaveLocalPersist === 'function') hubFlushRevenueSaveLocalPersist();
+          if (typeof hubRevenueSaveMark === 'function') hubRevenueSaveMark('LOCAL_SAVE_DONE');
+          hubFinishUiAfterLocalSave();
+          hubFinishRevenueInputSaveCloudOnly(toastMessage, verifyFn).then(function (result) {
+            return new Promise(function (resolveUi) {
+              requestAnimationFrame(function () {
+                requestAnimationFrame(function () {
+                  resolveUi(result);
+                });
+              });
+            });
+          }).then(resolve).catch(reject);
+        } catch (err) {
+          reject(err);
+        }
+      });
+    });
   }).finally(function () {
+    hubHideRevenueSaveProgressOverlay();
     hubSetRevenueInputSaveUiBusy(false);
+    hubRevenueInputSaveLocked = false;
     hubRevenueInputSavePromise = null;
   });
   return hubRevenueInputSavePromise;
@@ -2157,7 +2320,7 @@ function confirmRamOverwriteSave() {
 }
 
 function saveTodayRevenue() {
-  if (hubRevenueInputSavePromise || hubRevenueInputSaveUiBusy) return;
+  if (hubRevenueInputSavePromise || hubRevenueInputSaveUiBusy || hubRevenueInputSaveLocked) return;
   let collected = collectRamInputFromForm();
   let hasRevenue = Object.keys(collected.ramAccounts).some(function (id) {
     let a = collected.ramAccounts[id];

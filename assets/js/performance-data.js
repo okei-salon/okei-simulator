@@ -1644,9 +1644,19 @@ function pdStampAccountRevision(ae) {
   return ae;
 }
 
-function pdPersist() {
+var pdDeferredPersistPending = false;
+
+function pdPersist(options) {
+  options = options || {};
+  if (!options.force &&
+      typeof hubIsRevenueInputSaveFlowActive === 'function' &&
+      hubIsRevenueInputSaveFlowActive()) {
+    pdDeferredPersistPending = true;
+    return;
+  }
+  pdDeferredPersistPending = false;
   if (typeof persistHubSettings === 'function') {
-    persistHubSettings({ immediate: true });
+    persistHubSettings(Object.assign({ immediate: true }, options.hubSaveOptions || {}));
     return;
   }
   if (typeof localStorage === 'undefined' || typeof settings === 'undefined') return;
@@ -2798,8 +2808,21 @@ function pdDeleteAccountPerformanceData(projectKey, accountId, opts) {
   return removed;
 }
 
+function pdFlushDeferredPersist() {
+  if (!pdDeferredPersistPending) return false;
+  pdPersist({ force: true, hubSaveOptions: { localOnly: true } });
+  return true;
+}
+
 function pdNotifyPerformanceChanged(opts) {
   opts = opts || {};
+  if (!opts.force &&
+      typeof hubIsRevenueInputSaveFlowActive === 'function' &&
+      hubIsRevenueInputSaveFlowActive()) {
+    pdNotifyPerformanceChanged._deferred = true;
+    return;
+  }
+  pdNotifyPerformanceChanged._deferred = false;
   // Single refresh path: updateHomeDashboard already refreshes portfolio + visible manage pages.
   if (typeof allOrgSummary === 'function' && typeof updateHomeDashboard === 'function') {
     updateHomeDashboard(allOrgSummary());
@@ -2914,4 +2937,5 @@ if (typeof window !== 'undefined') {
   window.pdFormatExcelImportMonthLabel = pdFormatExcelImportMonthLabel;
   window.pdListExcelImportedMonthKeys = pdListExcelImportedMonthKeys;
   window.pdDetectImportedRamMonth = pdDetectImportedRamMonth;
+  window.pdFlushDeferredPersist = pdFlushDeferredPersist;
 }
