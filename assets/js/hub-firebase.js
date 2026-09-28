@@ -2,7 +2,7 @@
  * Google 認証後に LocalStorage / Firestore を同期
  * 組織図・ポートフォリオはフィールド単位でマージして端末間の上書きを防ぐ
  */
-var HUB_FIREBASE_JS_BUILD = 'Ver2.0.57/Build20260928-v001';
+var HUB_FIREBASE_JS_BUILD = 'Ver2.0.58/Build20260928-v002';
 
 var hubFirebaseApp = null;
 var hubFirebaseAuth = null;
@@ -11,6 +11,8 @@ var hubFirebaseUid = '';
 var hubCloudSaveTimer = null;
 var hubCloudSaveDelayMs = 1500;
 var hubCloudSaveInFlight = false;
+/** Resolves when the current hubRunCloudSave push finishes (success or failure). */
+var hubCloudSaveInFlightPromise = null;
 var hubCloudSaveQueued = false;
 var hubLastPushedHash = '';
 var hubFirebaseReady = false;
@@ -1487,11 +1489,12 @@ function hubRunCloudSave(force) {
   }
   hubCloudSaveInFlight = true;
   // hubPushCloudDoc always re-fetches cloud, rematches on concurrent updates, then set().
-  return hubPushCloudDoc(force, null, 'hubRunCloudSave').catch(function () {
+  let savePromise = hubPushCloudDoc(force, null, 'hubRunCloudSave').catch(function () {
     hubSetSyncStatus('offline');
     return false;
   }).finally(function () {
     hubCloudSaveInFlight = false;
+    hubCloudSaveInFlightPromise = null;
     if (hubAreAutomaticCloudWritesBlocked()) {
       hubCloudSaveQueued = false;
       return;
@@ -1499,9 +1502,49 @@ function hubRunCloudSave(force) {
     let shouldFollowUp = hubCloudSaveQueued && hubHasLocalDirtyChanges();
     hubCloudSaveQueued = false;
     if (shouldFollowUp) {
-      hubRunCloudSave(false);
+      // Revenue cloud confirm will push explicitly after joining any in-flight save.
+      if (typeof hubIsRevenueInputSaveFlowActive === 'function' && hubIsRevenueInputSaveFlowActive()) {
+        try {
+          console.log('[hubRevenueSave] skip automatic follow-up — revenue cloud confirm active');
+        } catch (e) {}
+      } else {
+        hubRunCloudSave(false);
+      }
     }
   });
+  hubCloudSaveInFlightPromise = savePromise;
+  return savePromise;
+}
+
+/**
+ * Wait until no hubRunCloudSave push is in flight (joins tracked promise, polls briefly).
+ * Used by revenue explicit save to serialize after background/automatic saves.
+ */
+function hubWaitForCloudSaveIdle(opts) {
+  opts = opts || {};
+  let maxRounds = typeof opts.maxRounds === 'number' ? opts.maxRounds : 40;
+  let pollMs = typeof opts.pollMs === 'number' ? opts.pollMs : 25;
+
+  function waitOneRound(round) {
+    if (!hubCloudSaveInFlight) {
+      return Promise.resolve(true);
+    }
+    if (round >= maxRounds) {
+      return Promise.resolve(false);
+    }
+    let tracked = hubCloudSaveInFlightPromise;
+    let waitP = tracked
+      ? tracked.catch(function () { return false; })
+      : new Promise(function (resolve) { setTimeout(resolve, pollMs); });
+    return waitP.then(function () {
+      if (hubCloudSaveInFlight) {
+        return waitOneRound(round + 1);
+      }
+      return true;
+    });
+  }
+
+  return waitOneRound(0);
 }
 
 function hubScheduleCloudSave(immediate) {
@@ -1673,12 +1716,33 @@ function hubRunRevenueCloudSaveOnce() {
     hubRevenueSaveTrace('hubRunRevenueCloudSaveOnce', 'ABORT', { reason: 'restore-in-progress' });
     return Promise.resolve(false);
   }
-  if (hubIsCloudWriteExplicitOnly()) {
-    hubRevenueSaveTrace('hubRunRevenueCloudSaveOnce', 'ENTER', { path: 'explicit-once' });
-    return hubRunExplicitCloudSaveOnce('revenue-save');
+
+  function runRevenueCloudWrite() {
+    if (hubIsCloudWriteExplicitOnly()) {
+      hubRevenueSaveTrace('hubRunRevenueCloudSaveOnce', 'ENTER', { path: 'explicit-once' });
+      return hubRunExplicitCloudSaveOnce('revenue-save');
+    }
+    hubRevenueSaveTrace('hubRunRevenueCloudSaveOnce', 'ENTER', { path: 'revenue-force' });
+    return hubRunCloudSave(true);
   }
-  hubRevenueSaveTrace('hubRunRevenueCloudSaveOnce', 'ENTER', { path: 'automatic-open' });
-  return hubRunCloudSave(true);
+
+  function beginRevenueCloudWrite() {
+    if (!hubCloudSaveInFlight) {
+      return runRevenueCloudWrite();
+    }
+    hubRevenueSaveTrace('hubWaitForCloudSaveIdle', 'ENTER', { reason: 'revenue-save-inflight' });
+    return hubWaitForCloudSaveIdle({ reason: 'revenue-save' }).then(function (idleOk) {
+      if (!idleOk) {
+        hubRevenueSaveTrace('hubWaitForCloudSaveIdle', 'ABORT', { reason: 'timeout' });
+        hubRevenueSaveTrace('hubRunRevenueCloudSaveOnce', 'ABORT', { reason: 'wait-idle-timeout' });
+        return false;
+      }
+      hubRevenueSaveTrace('hubWaitForCloudSaveIdle', 'SUCCESS', null);
+      return runRevenueCloudWrite();
+    });
+  }
+
+  return beginRevenueCloudWrite();
 }
 
 function hubCloudHasRevenueDay(doc, dateKey) {
@@ -1869,6 +1933,7 @@ if (typeof window !== 'undefined') {
   window.hubPullCloudDataIfStale = hubPullCloudDataIfStale;
   window.hubSaveRevenueWithCloudConfirm = hubSaveRevenueWithCloudConfirm;
   window.hubRunRevenueCloudSaveOnce = hubRunRevenueCloudSaveOnce;
+  window.hubWaitForCloudSaveIdle = hubWaitForCloudSaveIdle;
   window.hubCloudHasRevenueDay = hubCloudHasRevenueDay;
   window.hubMarkPendingCloudWrite = hubMarkPendingCloudWrite;
   window.hubClearPendingCloudWrite = hubClearPendingCloudWrite;

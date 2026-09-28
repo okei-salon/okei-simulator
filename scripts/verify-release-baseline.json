@@ -1,5 +1,5 @@
 {
-  "minPassed": 737,
-  "note": "Baseline after revenue save failure diagnostics (11 checks). verify:release Passed 737.",
+  "minPassed": 752,
+  "note": "Baseline after revenue inFlight join fix (+15 race checks). verify:release Passed 752.",
   "updatedAt": "2026-09-28"
 }

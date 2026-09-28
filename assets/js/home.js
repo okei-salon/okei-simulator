@@ -1,5 +1,5 @@
 /* OUKEI HUB Home UI — Ver2.0.7 */
-var HUB_HOME_JS_BUILD = 'Ver2.0.57/Build20260928-v001';
+var HUB_HOME_JS_BUILD = 'Ver2.0.58/Build20260928-v002';
 let homeCalView = { y: new Date().getFullYear(), m: new Date().getMonth() };
 let ramSavePending = null;
 let ramSalesDecreasePending = null;

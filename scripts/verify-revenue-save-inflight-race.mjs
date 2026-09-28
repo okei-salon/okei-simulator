@@ -368,6 +368,110 @@ async function runBrowserCases() {
       final: snapState()
     };
 
+    // H: background Cloud SAVE inFlight → revenue waits → single ref.set success
+    setupMocks();
+    baseRepro = refCount();
+    hubMarkLocalDirtyForCloud('case-h-bg');
+    hubCloudSaveInFlight = true;
+    let releaseCaseH;
+    hubCloudSaveInFlightPromise = new Promise(function (resolve) {
+      releaseCaseH = function () {
+        hubCloudSaveInFlight = false;
+        hubCloudSaveInFlightPromise = null;
+        resolve(false);
+      };
+    });
+    let saveHPromise = saveOnceViaFlow(true);
+    await new Promise(function (r) { setTimeout(r, 40); });
+    out.caseH = {
+      waitingWhileInFlight: !!hubCloudSaveInFlight,
+      refSetsDuringWait: refCount() - baseRepro
+    };
+    releaseCaseH();
+    let saveH = await saveHPromise;
+    await new Promise(function (r) { setTimeout(r, 300); });
+    out.caseH.refSetsTotal = refCount() - baseRepro;
+    out.caseH.ok = saveH.ok;
+    out.caseH.status = saveH.status;
+    out.caseH.message = saveH.message;
+    out.caseH.traceHasWait = (saveH.trace || []).some(function (e) {
+      return e && e.step === 'hubWaitForCloudSaveIdle' && e.state === 'SUCCESS';
+    });
+    out.caseH.final = snapState();
+
+    // I: after inFlight idle, Cloud push fails → no false success
+    setupMocks();
+    baseRepro = refCount();
+    let failSet = window.hubFirestoreDocRef;
+    window.hubFirestoreDocRef = function () {
+      return {
+        set: function () {
+          window.__RACE_REFSETS__.push(Date.now());
+          return Promise.reject(new Error('case-i-push-fail'));
+        },
+        get: failSet().get
+      };
+    };
+    hubCloudSaveInFlight = true;
+    let releaseCaseI;
+    hubCloudSaveInFlightPromise = new Promise(function (resolve) {
+      releaseCaseI = function () {
+        hubCloudSaveInFlight = false;
+        hubCloudSaveInFlightPromise = null;
+        resolve(false);
+      };
+    });
+    let saveIPromise = saveOnceViaFlow(true);
+    releaseCaseI();
+    let saveI = await saveIPromise;
+    window.hubFirestoreDocRef = failSet;
+    out.caseI = {
+      ok: saveI.ok,
+      status: saveI.status,
+      message: saveI.message,
+      refSets: refCount() - baseRepro,
+      final: snapState()
+    };
+
+    // J: real slow background save + revenue flow — no duplicate ref.set storm
+    setupMocks();
+    baseRepro = refCount();
+    let bgDone = false;
+    let finishBg;
+    window.hubFirestoreDocRef = function () {
+      return {
+        set: function (payload) {
+          window.__RACE_REFSETS__.push(Date.now());
+          if (payload && payload.revenue && payload.revenue.revenueLog) {
+            cloudPayload.revenue.revenueLog = JSON.parse(JSON.stringify(payload.revenue.revenueLog));
+          }
+          cloudPayload.updatedAt = (payload && payload.updatedAt) || Date.now();
+          if (!bgDone) {
+            bgDone = true;
+            return new Promise(function (resolve) { finishBg = resolve; });
+          }
+          return Promise.resolve();
+        },
+        get: function () {
+          return Promise.resolve({ exists: true, data: function () { return cloudPayload; } });
+        }
+      };
+    };
+    hubMarkLocalDirtyForCloud('case-j-bg');
+    let bgPromise = hubRunCloudSave(true);
+    await new Promise(function (r) { setTimeout(r, 20); });
+    let saveJPromise = saveOnceViaFlow(true);
+    finishBg();
+    await bgPromise;
+    let saveJ = await saveJPromise;
+    await new Promise(function (r) { setTimeout(r, 400); });
+    out.caseJ = {
+      refSetsTotal: refCount() - baseRepro,
+      ok: saveJ.ok,
+      status: saveJ.status,
+      final: snapState()
+    };
+
     return out;
   });
 
@@ -381,11 +485,10 @@ console.log('\n=== REPRO (old path without revenue flow defer) ===');
 console.log(JSON.stringify(r.reproOldPath, null, 2));
 
 assert('REPRO: old path schedules automatic save', r.reproOldPath.scheduleCalls >= 1);
-assert('REPRO: old path inFlight after persist', r.reproOldPath.inFlightAfterPersist === true);
-assert('REPRO: old path explicit save fails', r.reproOldPath.ok === false);
-assert('REPRO: old path status cloud-write-failed', r.reproOldPath.status === 'cloud-write-failed');
-assert('REPRO: old path pending message', (r.reproOldPath.message || '').indexOf('Cloud同期待ち') >= 0);
-assert('REPRO: old path automatic ref.set may complete (race)', r.reproOldPath.refSets >= 0);
+assert('REPRO: old path no longer immediate false (wait join)', r.reproOldPath.ok === true);
+assert('REPRO: old path status synced after wait', r.reproOldPath.status === 'synced');
+assert('REPRO: old path without flow defer may double ref.set', r.reproOldPath.refSets >= 1);
+assert('REPRO: revenue flow defer still preferred for single write', r.reproOldPath.refSets >= 1);
 
 console.log('\n=== CASE A: normal save once ===');
 console.log(JSON.stringify(r.caseA, null, 2));
@@ -448,6 +551,30 @@ assert('CASE G: synced ok', r.caseG.ok === true);
 
 console.log('\n=== persist-only ===');
 assert('PERSIST-ONLY: ref.set 0', r.persistOnly.refSets === 0);
+
+console.log('\n=== CASE H: background inFlight → revenue waits ===');
+console.log(JSON.stringify(r.caseH, null, 2));
+assert('CASE H: no ref.set during wait', r.caseH.refSetsDuringWait === 0);
+assert('CASE H: trace shows wait success', r.caseH.traceHasWait === true);
+assert('CASE H: ref.set exactly 1 after join', r.caseH.refSetsTotal === 1);
+assert('CASE H: synced ok', r.caseH.ok === true && r.caseH.status === 'synced');
+assert('CASE H: final inFlight false', r.caseH.final.inFlight === false);
+assert('CASE H: final pendingWrites 0', r.caseH.final.pendingWrites === 0);
+assert('CASE H: final dirty false', r.caseH.final.dirty === false);
+
+console.log('\n=== CASE I: idle then push fail ===');
+console.log(JSON.stringify(r.caseI, null, 2));
+assert('CASE I: not ok', r.caseI.ok === false);
+assert('CASE I: cloud-write-failed', r.caseI.status === 'cloud-write-failed');
+assert('CASE I: pending message', (r.caseI.message || '').indexOf('Cloud同期待ち') >= 0);
+assert('CASE I: ref.set attempted once', r.caseI.refSets === 1);
+
+console.log('\n=== CASE J: slow background + revenue flow ===');
+console.log(JSON.stringify(r.caseJ, null, 2));
+assert('CASE J: ref.set at most 2 (bg + revenue)', r.caseJ.refSetsTotal >= 1 && r.caseJ.refSetsTotal <= 2);
+assert('CASE J: revenue synced ok', r.caseJ.ok === true && r.caseJ.status === 'synced');
+assert('CASE J: final inFlight false', r.caseJ.final.inFlight === false);
+assert('CASE J: final dirty false', r.caseJ.final.dirty === false);
 
 console.log('\n' + passed + '/' + (passed + failed) + ' PASS');
 process.exit(failed ? 1 : 0);
