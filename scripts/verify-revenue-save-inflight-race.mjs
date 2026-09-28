@@ -46,6 +46,7 @@ async function runBrowserCases() {
 
   const result = await page.evaluate(async () => {
     function refCount() { return (window.__RACE_REFSETS__ || []).length; }
+    var raceDateKey = typeof todayKey === 'function' ? todayKey() : '2026-09-28';
 
     let cloudPayload;
     function setupMocks() {
@@ -118,7 +119,7 @@ async function runBrowserCases() {
       };
 
       if (!settings.revenueLog) settings.revenueLog = {};
-      settings.revenueLog['2026-09-27'] = {
+      settings.revenueLog[raceDateKey] = {
         ramAccounts: { r1: { todayRevenue: 55, revision: 9000 } },
         orcaAccounts: { o1: { dailyProfit: 12, revision: 9000 } },
         ram: 55,
@@ -145,7 +146,7 @@ async function runBrowserCases() {
           hubMarkLocalDirtyForCloud('race-local-persist');
           hubSaveToStorage({ immediate: true });
         }, '✅ 保存しました', function () {
-          return !!(settings.revenueLog && settings.revenueLog['2026-09-27']);
+          return !!(settings.revenueLog && settings.revenueLog[raceDateKey]);
         });
       }
       hubMarkLocalDirtyForCloud('race-local-persist');
@@ -153,9 +154,9 @@ async function runBrowserCases() {
       return hubSaveRevenueWithCloudConfirm({
         successMessage: '✅ 保存しました',
         pendingMessage: '端末に保存済み・Cloud同期待ち',
-        cloudVerifyDateKey: '2026-09-27',
+        cloudVerifyDateKey: raceDateKey,
         verifyFn: function () {
-          return !!(settings.revenueLog && settings.revenueLog['2026-09-27']);
+          return !!(settings.revenueLog && settings.revenueLog[raceDateKey]);
         }
       });
     }
@@ -226,7 +227,7 @@ async function runBrowserCases() {
     afterPersistC.refSetsAfterPersist = refCount() - baseRepro;
     let saveC = await hubSaveRevenueWithCloudConfirm({
       successMessage: '✅ 保存しました',
-      cloudVerifyDateKey: '2026-09-27',
+      cloudVerifyDateKey: raceDateKey,
       verifyFn: function () { return true; }
     });
     hubEndRevenueInputSaveFlow();

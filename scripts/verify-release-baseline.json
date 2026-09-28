@@ -1,5 +1,5 @@
 {
-  "minPassed": 724,
-  "note": "Baseline after save-button mash single-flight checks (E1-E4). verify:release Passed 724.",
-  "updatedAt": "2026-09-27"
+  "minPassed": 737,
+  "note": "Baseline after revenue save failure diagnostics (11 checks). verify:release Passed 737.",
+  "updatedAt": "2026-09-28"
 }

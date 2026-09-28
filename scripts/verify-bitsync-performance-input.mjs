@@ -436,24 +436,27 @@ try {
   assert('recovery bar scale >200%', recoveryBarMath.scale250 === 300, JSON.stringify(recoveryBarMath));
 
   const userScenario = await page.evaluate(() => {
+    var scenarioDateKey = typeof todayKey === 'function' ? todayKey() : '2026-09-28';
+    var scenarioStartDate = scenarioDateKey.replace(/-/g, '/');
     settings.bitsyncInputAccounts = [{
       id: 'bs-scenario',
       username: 'scenario',
       name: 'scenario',
-      startDate: '2026/09/27',
-      nftPurchaseRecords: [{ dateKey: '2026-09-27', amount: 3000, type: 'initial' }],
-      operatingRecords: [{ dateKey: '2026-09-27', amount: 500, type: 'initial' }]
+      startDate: scenarioStartDate,
+      nftPurchaseRecords: [{ dateKey: scenarioDateKey, amount: 3000, type: 'initial' }],
+      operatingRecords: [{ dateKey: scenarioDateKey, amount: 500, type: 'initial' }]
     }];
-    settings.revenueLog = settings.revenueLog || {};
-    settings.revenueLog['2026-09-27'] = settings.revenueLog['2026-09-27'] || {};
-    settings.revenueLog['2026-09-27'].bitsyncAccounts = {
-      'bs-scenario': {
-        accountId: 'bs-scenario',
-        accountName: 'scenario',
-        nftSaleReward: 90,
-        operationReward: 10,
-        profitBonus: 3,
-        total: 103
+    settings.revenueLog = {};
+    settings.revenueLog[scenarioDateKey] = {
+      bitsyncAccounts: {
+        'bs-scenario': {
+          accountId: 'bs-scenario',
+          accountName: 'scenario',
+          nftSaleReward: 90,
+          operationReward: 10,
+          profitBonus: 3,
+          total: 103
+        }
       }
     };
     let nft = bitsyncGetProjectNftPurchaseTotal();

@@ -1,5 +1,5 @@
 /* OUKEI HUB Home UI — Ver2.0.7 */
-var HUB_HOME_JS_BUILD = 'Ver2.0.56/Build20260927-v008';
+var HUB_HOME_JS_BUILD = 'Ver2.0.57/Build20260928-v001';
 let homeCalView = { y: new Date().getFullYear(), m: new Date().getMonth() };
 let ramSavePending = null;
 let ramSalesDecreasePending = null;
@@ -1928,11 +1928,20 @@ var hubRevenueInputSavePromise = null;
 /**
  * Revenue-input save: local persist first (no automatic Cloud schedule), then cloud confirm once.
  */
-function hubPersistThenCloudConfirm(localPersistFn, toastMessage, verifyFn) {
+function hubPersistThenCloudConfirm(localPersistFn, toastMessage, verifyFn, diagnosticMeta) {
   if (hubRevenueInputSavePromise) {
     return hubRevenueInputSavePromise;
   }
   hubRevenueInputSavePromise = Promise.resolve().then(function () {
+    if (typeof hubGuessRevenueSaveContextFromUi === 'function') {
+      hubRevenueSaveDiagnosticContext = Object.assign(
+        {},
+        hubGuessRevenueSaveContextFromUi(),
+        diagnosticMeta || {}
+      );
+    } else {
+      hubRevenueSaveDiagnosticContext = diagnosticMeta || null;
+    }
     if (typeof hubBeginRevenueInputSaveFlow === 'function') hubBeginRevenueInputSaveFlow();
     try {
       if (typeof localPersistFn === 'function') localPersistFn();
@@ -1973,6 +1982,13 @@ function hubFinishRevenueInputSaveInner(toastMessage, verifyFn) {
       cloudVerifyDateKey: typeof todayKey === 'function' ? todayKey() : ''
     }).then(function (result) {
       finishUi(result.message);
+      if (!result.ok && typeof hubPresentRevenueSaveFailureDiagnostic === 'function') {
+        hubPresentRevenueSaveFailureDiagnostic(
+          result,
+          result.errorMessage ? { message: result.errorMessage } : null,
+          hubRevenueSaveDiagnosticContext
+        );
+      }
       if (result.ok && typeof hubClearLocalDirtyForCloud === 'function') {
         hubClearLocalDirtyForCloud('revenue-save-ui-done');
       }

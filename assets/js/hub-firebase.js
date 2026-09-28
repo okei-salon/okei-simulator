@@ -2,7 +2,7 @@
  * Google 認証後に LocalStorage / Firestore を同期
  * 組織図・ポートフォリオはフィールド単位でマージして端末間の上書きを防ぐ
  */
-var HUB_FIREBASE_JS_BUILD = 'Ver2.0.56/Build20260927-v008';
+var HUB_FIREBASE_JS_BUILD = 'Ver2.0.57/Build20260928-v001';
 
 var hubFirebaseApp = null;
 var hubFirebaseAuth = null;
@@ -123,6 +123,23 @@ function hubIsCloudWriteSuspended() {
 
 function hubIsCloudWriteHardSuspended() {
   return !!hubCloudWriteOperatorRestoreInProgress;
+}
+
+function hubShouldTraceRevenueRefSet() {
+  if (typeof hubIsRevenueInputSaveFlowActive === 'function' && hubIsRevenueInputSaveFlowActive()) {
+    return true;
+  }
+  if (!hubRevenueSaveTraceLog || !hubRevenueSaveTraceLog.length) return false;
+  for (let i = hubRevenueSaveTraceLog.length - 1; i >= 0; i--) {
+    let entry = hubRevenueSaveTraceLog[i];
+    if (!entry) continue;
+    if (entry.step === 'hubSaveRevenueWithCloudConfirm' && entry.state === 'ENTER') return true;
+    if (entry.step === 'hubSaveRevenueWithCloudConfirm' &&
+        (entry.state === 'SUCCESS' || entry.state === 'ABORT')) {
+      return false;
+    }
+  }
+  return false;
 }
 
 function hubRevenueSaveTrace(step, state, detail) {
@@ -1270,12 +1287,10 @@ function hubPushCloudDoc(force, _cloudDocOpt, callerHint) {
             return false;
           }
 
-          if (hubCloudWriteExplicitBypass) {
+          if (hubShouldTraceRevenueRefSet()) {
             hubRevenueSaveTrace('ref.set', 'ENTER', {
-              has927: !!(built.payload &&
-                built.payload.revenue &&
-                built.payload.revenue.revenueLog &&
-                built.payload.revenue.revenueLog['2026-09-27'])
+              caller: callerHint || 'hubPushCloudDoc',
+              cloudVerifyDateKey: built.payload && built.payload.updatedAt
             });
           }
 
@@ -1303,12 +1318,19 @@ function hubPushCloudDoc(force, _cloudDocOpt, callerHint) {
               hubClearExplicitHubDataReset();
             }
             hubSetSyncStatus('done');
-            if (hubCloudWriteExplicitBypass) {
+            if (hubShouldTraceRevenueRefSet()) {
               hubRevenueSaveTrace('ref.set', 'SUCCESS', {
                 updatedAt: built.payload.updatedAt
               });
             }
             return true;
+          }).catch(function (err) {
+            if (hubShouldTraceRevenueRefSet()) {
+              hubRevenueSaveTrace('ref.set', 'REJECT', {
+                message: String(err && err.message || err)
+              });
+            }
+            throw err;
           });
         });
       });
@@ -1691,12 +1713,23 @@ function hubSaveRevenueWithCloudConfirm(opts) {
     staleCleared: staleCleared
   });
 
-  function fail(status, message) {
+  function fail(status, message, err) {
     let diag = hubCollectRevenueSaveDiagnostics(savePath);
     hubLogRevenueSaveDiagnostics('fail:' + status, savePath, diag);
-    hubRevenueSaveTrace('hubSaveRevenueWithCloudConfirm', 'ABORT', { status: status, diagnostics: diag });
+    hubRevenueSaveTrace('hubSaveRevenueWithCloudConfirm', 'ABORT', {
+      status: status,
+      diagnostics: diag,
+      errorMessage: err ? String(err.message || err) : null
+    });
     hubMarkPendingCloudWrite();
-    return { ok: false, status: status, message: message, diagnostics: diag, trace: hubRevenueSaveTraceLog.slice() };
+    return {
+      ok: false,
+      status: status,
+      message: message,
+      diagnostics: diag,
+      trace: hubRevenueSaveTraceLog.slice(),
+      errorMessage: err ? String(err.message || err) : null
+    };
   }
 
   if (typeof hubIsLocalDevMode === 'function' && hubIsLocalDevMode()) {
@@ -1764,7 +1797,7 @@ function hubSaveRevenueWithCloudConfirm(opts) {
     });
   }).catch(function (err) {
     hubLogRevenueSaveDiagnostics('error', savePath, { err: String(err && err.message || err) });
-    return fail('error', pendingMessage);
+    return fail('error', pendingMessage, err);
   });
 }
 

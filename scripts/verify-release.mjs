@@ -74,6 +74,13 @@ const SUITES = [
     needsServer: true
   },
   {
+    id: 'hub-revenue-save-diagnostics',
+    label: 'Revenue save failure diagnostics (admin UI + classify)',
+    category: 'Firestore',
+    cmd: ['node', 'scripts/verify-revenue-save-diagnostics.mjs'],
+    needsServer: true
+  },
+  {
     id: 'hub-destructive-guard',
     label: 'Destructive cloud push guard (kai2 wipe block)',
     category: 'Firestore',
