@@ -1,0 +1,47 @@
+{
+  "indexes": [],
+  "fieldOverrides": [
+    {
+      "collectionGroup": "hubData",
+      "fieldPath": "revenue.revenueLog",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "hubData",
+      "fieldPath": "revenue.salesLog",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "hubData",
+      "fieldPath": "orgChart",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "hubData",
+      "fieldPath": "orcaOrgChart",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "hubData",
+      "fieldPath": "eniOrgChart",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "hubData",
+      "fieldPath": "settings",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "hubData",
+      "fieldPath": "manageAccounts",
+      "ttl": false,
+      "indexes": []
+    }
+  ]
+}

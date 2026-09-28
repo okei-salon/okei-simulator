@@ -81,6 +81,13 @@ const SUITES = [
     needsServer: true
   },
   {
+    id: 'hub-revenue-save-fast-path',
+    label: 'Revenue save fast path (local UI + single Cloud READ)',
+    category: 'Firestore',
+    cmd: ['node', 'scripts/verify-revenue-save-fast-path.mjs'],
+    needsServer: true
+  },
+  {
     id: 'hub-destructive-guard',
     label: 'Destructive cloud push guard (kai2 wipe block)',
     category: 'Firestore',

@@ -2,7 +2,7 @@
  * Google 認証後に LocalStorage / Firestore を同期
  * 組織図・ポートフォリオはフィールド単位でマージして端末間の上書きを防ぐ
  */
-var HUB_FIREBASE_JS_BUILD = 'Ver2.0.58/Build20260928-v002';
+var HUB_FIREBASE_JS_BUILD = 'Ver2.0.59/Build20260928-v003';
 
 var hubFirebaseApp = null;
 var hubFirebaseAuth = null;
@@ -160,6 +160,44 @@ function hubRevenueSaveTrace(step, state, detail) {
     console.log('[hubRevenueSaveTrace]', step, state, detail || '');
   } catch (e2) {}
   return entry;
+}
+
+/** Revenue-save wall-clock marks (console / diagnostics only). */
+var hubRevenueSaveTiming = null;
+
+function hubRevenueSaveTimingReset() {
+  hubRevenueSaveTiming = { startMs: Date.now(), marks: {} };
+}
+
+function hubRevenueSaveMark(label) {
+  if (!label) return;
+  if (!hubRevenueSaveTiming) hubRevenueSaveTimingReset();
+  let elapsed = Date.now() - hubRevenueSaveTiming.startMs;
+  hubRevenueSaveTiming.marks[label] = elapsed;
+  try {
+    console.log('[hubRevenueSaveTiming]', label, elapsed + 'ms');
+  } catch (e) {}
+}
+
+function hubRevenueSaveTimingReport() {
+  if (!hubRevenueSaveTiming) return null;
+  let marks = hubRevenueSaveTiming.marks || {};
+  let report = {
+    marks: Object.assign({}, marks),
+    totalMs: marks.UI_DONE || marks.VERIFY_DONE || marks.PRE_CLOUD_DONE ||
+      (Date.now() - hubRevenueSaveTiming.startMs)
+  };
+  try {
+    console.log('[hubRevenueSaveTiming] report', report);
+  } catch (e) {}
+  return report;
+}
+
+/** Revenue explicit save: one Cloud READ before write on happy path (retry keeps double-read). */
+function hubPushCloudDocUsesSinglePreWriteFetch(force) {
+  return !!force &&
+    typeof hubIsRevenueInputSaveFlowActive === 'function' &&
+    hubIsRevenueInputSaveFlowActive();
 }
 
 function hubGetLoadedJsBuildInfo() {
@@ -1166,19 +1204,28 @@ function hubPushCloudDoc(force, _cloudDocOpt, callerHint) {
 
   let maxAttempts = 3;
 
-  function buildGuardedPayload(cloudDoc) {
+  function buildGuardedPayload(cloudDoc, packOpts) {
+    packOpts = packOpts || {};
+    let preferLocal =
+      (typeof hubLocalUpdatedAt !== 'undefined' ? Number(hubLocalUpdatedAt) || 0 : 0) >=
+      hubCloudUpdatedAt(cloudDoc);
+    let payload;
+    let useInMemoryPack = !!packOpts.packMergedInMemory;
     if (cloudDoc && typeof hubMergeHubDocuments === 'function') {
       let localData = typeof hubPackLocalData === 'function'
         ? hubPackLocalData()
         : hubCreateEmptyData();
       let cloudUnpacked = hubUnpackFirestorePayload(cloudDoc);
       let merged = hubMergeHubDocuments(localData, cloudUnpacked);
-      hubApplyMergedHubData(merged, hubComputeContentHash(cloudUnpacked), { skipRefresh: true });
+      if (useInMemoryPack && typeof hubPackFirestorePayloadFromData === 'function') {
+        payload = hubPackFirestorePayloadFromData(merged, Date.now());
+      } else {
+        hubApplyMergedHubData(merged, hubComputeContentHash(cloudUnpacked), { skipRefresh: true });
+        payload = hubPackFirestorePayload(Date.now());
+      }
+    } else {
+      payload = hubPackFirestorePayload(Date.now());
     }
-    let preferLocal =
-      (typeof hubLocalUpdatedAt !== 'undefined' ? Number(hubLocalUpdatedAt) || 0 : 0) >=
-      hubCloudUpdatedAt(cloudDoc);
-    let payload = hubPackFirestorePayload(Date.now());
     let guarded = hubGuardOrcaPayloadBeforePush(
       payload,
       cloudDoc,
@@ -1216,7 +1263,72 @@ function hubPushCloudDoc(force, _cloudDocOpt, callerHint) {
     };
   }
 
+  function writeBuiltPayload(built, n, hash) {
+    if (built.destructive && built.destructive.blocked) {
+      if (hubCloudWriteExplicitBypass) {
+        hubRevenueSaveTrace('hubPushCloudDoc', 'ABORT', {
+          reason: 'destructive-guard',
+          action: built.destructive.action
+        });
+      }
+      hubSetSyncStatus('pending', 'Cloud同期待ち');
+      if (typeof hubMarkPendingCloudWrite === 'function') hubMarkPendingCloudWrite();
+      return Promise.resolve(false);
+    }
+
+    if (typeof hubRevenueSaveMark === 'function') hubRevenueSaveMark('REF_SET_START');
+    if (hubShouldTraceRevenueRefSet()) {
+      hubRevenueSaveTrace('ref.set', 'ENTER', {
+        caller: callerHint || 'hubPushCloudDoc',
+        cloudVerifyDateKey: built.payload && built.payload.updatedAt
+      });
+    }
+
+    console.log('[hubOrcaPushGuard] ref.set about to write', {
+      cloudOrca: built.guarded.cloudCounts,
+      payloadOrca: built.guarded.payloadCounts,
+      explicitOrcaDelete: !!hubExplicitOrcaDeletePending,
+      action: built.guarded.action,
+      destructiveAction: built.destructive && built.destructive.action,
+      writeAllowed: !(built.destructive && built.destructive.blocked),
+      orcaEmptyWipeBlocked: !!built.guarded.blocked,
+      schemaVersion: built.payload.schemaVersion,
+      rematchAttempts: n,
+      caller: (built.guarded.log && built.guarded.log.caller) || callerHint || 'hubPushCloudDoc'
+    });
+
+    return ref.set(built.payload).then(function () {
+      if (typeof hubRevenueSaveMark === 'function') hubRevenueSaveMark('REF_SET_DONE');
+      hubLastPushedHash = hash;
+      hubLastSeenCloudUpdatedAt = Number(built.payload.updatedAt) || Date.now();
+      hubClearLocalDirtyForCloud('cloud-write-ok');
+      if (built.guarded.action === 'allow_explicit_orca_delete') {
+        hubClearExplicitOrcaDelete();
+      }
+      if (built.destructive && built.destructive.action === 'allow_explicit_hub_reset') {
+        hubClearExplicitHubDataReset();
+      }
+      hubSetSyncStatus('done');
+      if (hubShouldTraceRevenueRefSet()) {
+        hubRevenueSaveTrace('ref.set', 'SUCCESS', {
+          updatedAt: built.payload.updatedAt
+        });
+      }
+      return true;
+    }).catch(function (err) {
+      if (hubShouldTraceRevenueRefSet()) {
+        hubRevenueSaveTrace('ref.set', 'REJECT', {
+          message: String(err && err.message || err)
+        });
+      }
+      throw err;
+    });
+  }
+
   function attempt(n) {
+    let packMergedInMemory = hubPushCloudDocUsesSinglePreWriteFetch(force);
+    let packOpts = { packMergedInMemory: packMergedInMemory };
+
     return hubFetchCloudWriteGate(false).then(function (gate) {
       if (hubIsCloudWriteGateDocSuspended(gate)) {
         try {
@@ -1231,9 +1343,9 @@ function hubPushCloudDoc(force, _cloudDocOpt, callerHint) {
         return false;
       }
 
-      // Always fetch latest cloud, merge in-memory for pack (no render / no cloud reschedule).
+      // Fetch latest cloud, merge in-memory for pack (no render / no cloud reschedule).
       return hubFetchCloudDoc().then(function (cloudAtStart) {
-        let built = buildGuardedPayload(cloudAtStart);
+        let built = buildGuardedPayload(cloudAtStart, packOpts);
         if (built.destructive && built.destructive.blocked) {
           hubSetSyncStatus('pending', 'Cloud同期待ち');
           if (typeof hubMarkPendingCloudWrite === 'function') hubMarkPendingCloudWrite();
@@ -1243,6 +1355,14 @@ function hubPushCloudDoc(force, _cloudDocOpt, callerHint) {
         if (!force && hash === hubLastPushedHash) {
           hubSetSyncStatus('done');
           return false;
+        }
+
+        let singlePreWriteFetch =
+          packMergedInMemory && n === 0 && built.preferLocal;
+
+        if (singlePreWriteFetch) {
+          if (typeof hubRevenueSaveMark === 'function') hubRevenueSaveMark('PRE_CLOUD_DONE');
+          return writeBuiltPayload(built, n, hash);
         }
 
         // Re-fetch immediately before write. If another device/tab updated
@@ -1268,7 +1388,7 @@ function hubPushCloudDoc(force, _cloudDocOpt, callerHint) {
               nextUpdatedAt: freshUa,
               caller: callerHint || 'hubPushCloudDoc'
             });
-            built = buildGuardedPayload(cloudJustBeforeWrite);
+            built = buildGuardedPayload(cloudJustBeforeWrite, packOpts);
             if (built.destructive && built.destructive.blocked) {
               hubSetSyncStatus('pending', 'Cloud同期待ち');
               if (typeof hubMarkPendingCloudWrite === 'function') hubMarkPendingCloudWrite();
@@ -1277,63 +1397,8 @@ function hubPushCloudDoc(force, _cloudDocOpt, callerHint) {
             hash = hubComputeContentHash(hubUnpackFirestorePayload(built.payload));
           }
 
-          if (built.destructive && built.destructive.blocked) {
-            if (hubCloudWriteExplicitBypass) {
-              hubRevenueSaveTrace('hubPushCloudDoc', 'ABORT', {
-                reason: 'destructive-guard',
-                action: built.destructive.action
-              });
-            }
-            hubSetSyncStatus('pending', 'Cloud同期待ち');
-            if (typeof hubMarkPendingCloudWrite === 'function') hubMarkPendingCloudWrite();
-            return false;
-          }
-
-          if (hubShouldTraceRevenueRefSet()) {
-            hubRevenueSaveTrace('ref.set', 'ENTER', {
-              caller: callerHint || 'hubPushCloudDoc',
-              cloudVerifyDateKey: built.payload && built.payload.updatedAt
-            });
-          }
-
-          console.log('[hubOrcaPushGuard] ref.set about to write', {
-            cloudOrca: built.guarded.cloudCounts,
-            payloadOrca: built.guarded.payloadCounts,
-            explicitOrcaDelete: !!hubExplicitOrcaDeletePending,
-            action: built.guarded.action,
-            destructiveAction: built.destructive && built.destructive.action,
-            writeAllowed: !(built.destructive && built.destructive.blocked),
-            orcaEmptyWipeBlocked: !!built.guarded.blocked,
-            schemaVersion: built.payload.schemaVersion,
-            rematchAttempts: n,
-            caller: (built.guarded.log && built.guarded.log.caller) || callerHint || 'hubPushCloudDoc'
-          });
-
-          return ref.set(built.payload).then(function () {
-            hubLastPushedHash = hash;
-            hubLastSeenCloudUpdatedAt = Number(built.payload.updatedAt) || Date.now();
-            hubClearLocalDirtyForCloud('cloud-write-ok');
-            if (built.guarded.action === 'allow_explicit_orca_delete') {
-              hubClearExplicitOrcaDelete();
-            }
-            if (built.destructive && built.destructive.action === 'allow_explicit_hub_reset') {
-              hubClearExplicitHubDataReset();
-            }
-            hubSetSyncStatus('done');
-            if (hubShouldTraceRevenueRefSet()) {
-              hubRevenueSaveTrace('ref.set', 'SUCCESS', {
-                updatedAt: built.payload.updatedAt
-              });
-            }
-            return true;
-          }).catch(function (err) {
-            if (hubShouldTraceRevenueRefSet()) {
-              hubRevenueSaveTrace('ref.set', 'REJECT', {
-                message: String(err && err.message || err)
-              });
-            }
-            throw err;
-          });
+          if (typeof hubRevenueSaveMark === 'function') hubRevenueSaveMark('PRE_CLOUD_DONE');
+          return writeBuiltPayload(built, n, hash);
         });
       });
     });
@@ -1818,47 +1883,49 @@ function hubSaveRevenueWithCloudConfirm(opts) {
   hubSetSyncStatus('syncing', 'Cloud保存中…');
   let runPath = hubIsCloudWriteExplicitOnly() ? 'explicit-once' : 'automatic-open';
   hubLogRevenueSaveDiagnostics('run', savePath, { runPath: runPath });
+  if (typeof hubRevenueSaveMark === 'function') hubRevenueSaveMark('PRE_CLOUD_START');
   return hubRunRevenueCloudSaveOnce().then(function (written) {
     if (!written) {
       hubRevenueSaveTrace('hubRunRevenueCloudSaveOnce', 'ABORT', { reason: 'returned-false' });
       return fail('cloud-write-failed', pendingMessage);
     }
     hubRevenueSaveTrace('hubRunRevenueCloudSaveOnce', 'SUCCESS', null);
-    hubRevenueSaveTrace('hubPullCloudData', 'ENTER', { reason: 'post-save-verify' });
-    return hubPullCloudData('post-save-verify').then(function () {
-      hubRevenueSaveTrace('hubPullCloudData', 'SUCCESS', null);
-      if (typeof opts.verifyFn === 'function' && !opts.verifyFn()) {
-        hubRevenueSaveTrace('verifyFn', 'ABORT', { reason: 'local-verify-failed' });
-        return fail('verify-failed', pendingMessage);
-      }
-      hubRevenueSaveTrace('verifyFn', 'SUCCESS', null);
-      let cloudDateKey = opts.cloudVerifyDateKey || '';
-      if (cloudDateKey && typeof hubFetchCloudDocForSaveVerify === 'function') {
-        hubRevenueSaveTrace('cloudDateVerify', 'ENTER', { cloudDateKey: cloudDateKey });
-        return hubFetchCloudDocForSaveVerify(cloudDateKey).then(function (verified) {
-          if (!verified.hasDay) {
-            hubRevenueSaveTrace('cloudDateVerify', 'ABORT', {
-              reason: 'cloud-day-missing',
-              attempt: verified.attempt
-            });
-            return fail('verify-failed', pendingMessage);
-          }
-          hubRevenueSaveTrace('cloudDateVerify', 'SUCCESS', { attempt: verified.attempt });
-          hubClearPendingCloudWrite();
-          hubClearLocalDirtyForCloud('revenue-save-success');
-          hubSetSyncStatus('done', 'Cloud同期済み');
-          hubLogRevenueSaveDiagnostics('success', savePath, { runPath: runPath, cloudDateKey: cloudDateKey });
-          hubRevenueSaveTrace('hubSaveRevenueWithCloudConfirm', 'SUCCESS', { cloudDateKey: cloudDateKey });
-          return { ok: true, status: 'synced', message: successMessage, trace: hubRevenueSaveTraceLog.slice() };
-        });
-      }
+    if (typeof opts.verifyFn === 'function' && !opts.verifyFn()) {
+      hubRevenueSaveTrace('verifyFn', 'ABORT', { reason: 'local-verify-failed' });
+      return fail('verify-failed', pendingMessage);
+    }
+    hubRevenueSaveTrace('verifyFn', 'SUCCESS', null);
+    let cloudDateKey = opts.cloudVerifyDateKey || '';
+    function finishCloudSuccess(verifyMeta) {
       hubClearPendingCloudWrite();
       hubClearLocalDirtyForCloud('revenue-save-success');
       hubSetSyncStatus('done', 'Cloud同期済み');
-      hubLogRevenueSaveDiagnostics('success', savePath, { runPath: runPath });
-      hubRevenueSaveTrace('hubSaveRevenueWithCloudConfirm', 'SUCCESS', null);
-      return { ok: true, status: 'synced', message: successMessage, trace: hubRevenueSaveTraceLog.slice() };
-    });
+      if (typeof hubRevenueSaveMark === 'function') hubRevenueSaveMark('VERIFY_DONE');
+      hubLogRevenueSaveDiagnostics('success', savePath, Object.assign({ runPath: runPath }, verifyMeta || {}));
+      hubRevenueSaveTrace('hubSaveRevenueWithCloudConfirm', 'SUCCESS', verifyMeta || null);
+      return {
+        ok: true,
+        status: 'synced',
+        message: successMessage,
+        trace: hubRevenueSaveTraceLog.slice(),
+        timing: typeof hubRevenueSaveTimingReport === 'function' ? hubRevenueSaveTimingReport() : null
+      };
+    }
+    if (cloudDateKey && typeof hubFetchCloudDocForSaveVerify === 'function') {
+      hubRevenueSaveTrace('cloudDateVerify', 'ENTER', { cloudDateKey: cloudDateKey });
+      return hubFetchCloudDocForSaveVerify(cloudDateKey).then(function (verified) {
+        if (!verified.hasDay) {
+          hubRevenueSaveTrace('cloudDateVerify', 'ABORT', {
+            reason: 'cloud-day-missing',
+            attempt: verified.attempt
+          });
+          return fail('verify-failed', pendingMessage);
+        }
+        hubRevenueSaveTrace('cloudDateVerify', 'SUCCESS', { attempt: verified.attempt });
+        return finishCloudSuccess({ cloudDateKey: cloudDateKey, attempt: verified.attempt });
+      });
+    }
+    return finishCloudSuccess(null);
   }).catch(function (err) {
     hubLogRevenueSaveDiagnostics('error', savePath, { err: String(err && err.message || err) });
     return fail('error', pendingMessage, err);
@@ -1932,6 +1999,10 @@ if (typeof window !== 'undefined') {
   window.hubPullCloudData = hubPullCloudData;
   window.hubPullCloudDataIfStale = hubPullCloudDataIfStale;
   window.hubSaveRevenueWithCloudConfirm = hubSaveRevenueWithCloudConfirm;
+  window.hubRevenueSaveTimingReset = hubRevenueSaveTimingReset;
+  window.hubRevenueSaveMark = hubRevenueSaveMark;
+  window.hubRevenueSaveTimingReport = hubRevenueSaveTimingReport;
+  window.hubPushCloudDocUsesSinglePreWriteFetch = hubPushCloudDocUsesSinglePreWriteFetch;
   window.hubRunRevenueCloudSaveOnce = hubRunRevenueCloudSaveOnce;
   window.hubWaitForCloudSaveIdle = hubWaitForCloudSaveIdle;
   window.hubCloudHasRevenueDay = hubCloudHasRevenueDay;

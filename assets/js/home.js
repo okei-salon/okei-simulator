@@ -1,5 +1,5 @@
 /* OUKEI HUB Home UI — Ver2.0.7 */
-var HUB_HOME_JS_BUILD = 'Ver2.0.58/Build20260928-v002';
+var HUB_HOME_JS_BUILD = 'Ver2.0.59/Build20260928-v003';
 let homeCalView = { y: new Date().getFullYear(), m: new Date().getMonth() };
 let ramSavePending = null;
 let ramSalesDecreasePending = null;
@@ -1924,6 +1924,79 @@ function refreshHomeAfterRevenueSave() {
 
 /** In-flight revenue-input save (join duplicate button taps to one Cloud WRITE). */
 var hubRevenueInputSavePromise = null;
+var hubRevenueInputSaveUiBusy = false;
+
+function hubIsRevenueSaveButtonEl(btn) {
+  if (!btn) return false;
+  let onclick = btn.getAttribute('onclick') || '';
+  if (/saveToday(Revenue|Orca)/.test(onclick)) return true;
+  let id = btn.id || '';
+  return id === 'eniSaveRevenueBtn' || id === 'matrixSaveRevenueBtn' || id === 'bitsyncSaveRevenueBtn';
+}
+
+function hubSetRevenueInputSaveUiBusy(busy) {
+  hubRevenueInputSaveUiBusy = !!busy;
+  let modal = typeof modalBg !== 'undefined' ? modalBg : document.getElementById('modalBg');
+  if (!modal) return;
+  modal.querySelectorAll('.ramInputBtnSave').forEach(function (btn) {
+    if (!hubIsRevenueSaveButtonEl(btn)) return;
+    if (busy) {
+      if (!btn.getAttribute('data-hub-save-label')) {
+        btn.setAttribute('data-hub-save-label', btn.textContent || '保存');
+      }
+      btn.disabled = true;
+      btn.textContent = '保存中…';
+    } else {
+      btn.disabled = false;
+      let prev = btn.getAttribute('data-hub-save-label');
+      if (prev) btn.textContent = prev;
+      btn.removeAttribute('data-hub-save-label');
+    }
+  });
+}
+
+/** Local save complete → close modal first, then home + refresh (Cloud continues async). */
+function hubFinishUiAfterLocalSave() {
+  if (typeof closeModal === 'function') closeModal();
+  if (typeof modalBg !== 'undefined' && modalBg) modalBg.style.display = 'none';
+  if (typeof showPage === 'function') showPage('home');
+  if (typeof refreshHomeAfterRevenueSave === 'function') refreshHomeAfterRevenueSave();
+  if (typeof render === 'function') render();
+  if (typeof modalBg !== 'undefined' && modalBg) modalBg.style.display = 'none';
+  if (typeof showToast === 'function') showToast('✅ 端末に保存しました');
+  if (typeof hubRevenueSaveMark === 'function') hubRevenueSaveMark('UI_DONE');
+}
+
+function hubFinishRevenueInputSaveCloudOnly(toastMessage, verifyFn) {
+  if (typeof hubSaveRevenueWithCloudConfirm !== 'function') {
+    if (typeof hubEndRevenueInputSaveFlow === 'function') hubEndRevenueInputSaveFlow();
+    return Promise.resolve({ ok: true, status: 'fallback', message: toastMessage });
+  }
+  return hubSaveRevenueWithCloudConfirm({
+    successMessage: toastMessage || '✅ 保存しました',
+    verifyFn: verifyFn,
+    cloudVerifyDateKey: typeof todayKey === 'function' ? todayKey() : ''
+  }).then(function (result) {
+    if (result.ok) {
+      if (typeof showToast === 'function') showToast('☁️ Cloud同期済み');
+    } else {
+      if (typeof showToast === 'function') {
+        showToast(result.message || '端末に保存済み・Cloud同期待ち');
+      }
+      if (typeof hubPresentRevenueSaveFailureDiagnostic === 'function') {
+        hubPresentRevenueSaveFailureDiagnostic(
+          result,
+          result.errorMessage ? { message: result.errorMessage } : null,
+          hubRevenueSaveDiagnosticContext
+        );
+      }
+    }
+    if (typeof hubRevenueSaveTimingReport === 'function') hubRevenueSaveTimingReport();
+    return result;
+  }).finally(function () {
+    if (typeof hubEndRevenueInputSaveFlow === 'function') hubEndRevenueInputSaveFlow();
+  });
+}
 
 /**
  * Revenue-input save: local persist first (no automatic Cloud schedule), then cloud confirm once.
@@ -1933,6 +2006,8 @@ function hubPersistThenCloudConfirm(localPersistFn, toastMessage, verifyFn, diag
     return hubRevenueInputSavePromise;
   }
   hubRevenueInputSavePromise = Promise.resolve().then(function () {
+    if (typeof hubRevenueSaveTimingReset === 'function') hubRevenueSaveTimingReset();
+    if (typeof hubRevenueSaveMark === 'function') hubRevenueSaveMark('SAVE_START');
     if (typeof hubGuessRevenueSaveContextFromUi === 'function') {
       hubRevenueSaveDiagnosticContext = Object.assign(
         {},
@@ -1942,65 +2017,47 @@ function hubPersistThenCloudConfirm(localPersistFn, toastMessage, verifyFn, diag
     } else {
       hubRevenueSaveDiagnosticContext = diagnosticMeta || null;
     }
+    hubSetRevenueInputSaveUiBusy(true);
     if (typeof hubBeginRevenueInputSaveFlow === 'function') hubBeginRevenueInputSaveFlow();
     try {
       if (typeof localPersistFn === 'function') localPersistFn();
     } catch (err) {
+      hubSetRevenueInputSaveUiBusy(false);
       if (typeof hubEndRevenueInputSaveFlow === 'function') hubEndRevenueInputSaveFlow();
       throw err;
     }
-    return hubFinishRevenueInputSaveInner(toastMessage, verifyFn);
+    if (typeof hubRevenueSaveMark === 'function') hubRevenueSaveMark('LOCAL_SAVE_DONE');
+    hubFinishUiAfterLocalSave();
+    return hubFinishRevenueInputSaveCloudOnly(toastMessage, verifyFn);
   }).finally(function () {
+    hubSetRevenueInputSaveUiBusy(false);
     hubRevenueInputSavePromise = null;
   });
   return hubRevenueInputSavePromise;
 }
 
-/** 実績入力保存成功後: Cloud確認 → 再描画 → モーダル閉じる → ホームへ */
+/** 実績入力: ローカル保存済み → Cloud確認（UIは hubFinishUiAfterLocalSave 済み想定） */
 function hubFinishRevenueInputSave(toastMessage, verifyFn) {
   if (hubRevenueInputSavePromise) {
     return hubRevenueInputSavePromise;
   }
-  hubRevenueInputSavePromise = hubFinishRevenueInputSaveInner(toastMessage, verifyFn).finally(function () {
+  hubRevenueInputSavePromise = Promise.resolve().then(function () {
+    if (typeof hubRevenueSaveTimingReset === 'function') hubRevenueSaveTimingReset();
+    if (typeof hubRevenueSaveMark === 'function') hubRevenueSaveMark('SAVE_START');
+    hubSetRevenueInputSaveUiBusy(true);
+    if (typeof hubBeginRevenueInputSaveFlow === 'function') hubBeginRevenueInputSaveFlow();
+    if (typeof hubRevenueSaveMark === 'function') hubRevenueSaveMark('LOCAL_SAVE_DONE');
+    hubFinishUiAfterLocalSave();
+    return hubFinishRevenueInputSaveCloudOnly(toastMessage, verifyFn);
+  }).finally(function () {
+    hubSetRevenueInputSaveUiBusy(false);
     hubRevenueInputSavePromise = null;
   });
   return hubRevenueInputSavePromise;
 }
 
 function hubFinishRevenueInputSaveInner(toastMessage, verifyFn) {
-  function finishUi(message) {
-    if (typeof refreshHomeAfterRevenueSave === 'function') refreshHomeAfterRevenueSave();
-    if (typeof render === 'function') render();
-    if (typeof showPage === 'function') showPage('home');
-    if (typeof closeModal === 'function') closeModal();
-    if (message && typeof showToast === 'function') showToast(message);
-  }
-  if (typeof hubSaveRevenueWithCloudConfirm === 'function') {
-    return hubSaveRevenueWithCloudConfirm({
-      successMessage: toastMessage || '✅ 保存しました',
-      verifyFn: verifyFn,
-      cloudVerifyDateKey: typeof todayKey === 'function' ? todayKey() : ''
-    }).then(function (result) {
-      finishUi(result.message);
-      if (!result.ok && typeof hubPresentRevenueSaveFailureDiagnostic === 'function') {
-        hubPresentRevenueSaveFailureDiagnostic(
-          result,
-          result.errorMessage ? { message: result.errorMessage } : null,
-          hubRevenueSaveDiagnosticContext
-        );
-      }
-      if (result.ok && typeof hubClearLocalDirtyForCloud === 'function') {
-        hubClearLocalDirtyForCloud('revenue-save-ui-done');
-      }
-      return result;
-    }).finally(function () {
-      if (typeof hubEndRevenueInputSaveFlow === 'function') hubEndRevenueInputSaveFlow();
-    });
-  }
-  if (typeof hubEndRevenueInputSaveFlow === 'function') hubEndRevenueInputSaveFlow();
-  persistHubSettings({ immediate: true });
-  finishUi(toastMessage || '✅ 保存しました');
-  return Promise.resolve({ ok: true, status: 'fallback', message: toastMessage });
+  return hubFinishRevenueInputSave(toastMessage, verifyFn);
 }
 
 function hubFinishRevenueSaveAfterLocal(toastMessage, verifyFn) {
@@ -2100,6 +2157,7 @@ function confirmRamOverwriteSave() {
 }
 
 function saveTodayRevenue() {
+  if (hubRevenueInputSavePromise || hubRevenueInputSaveUiBusy) return;
   let collected = collectRamInputFromForm();
   let hasRevenue = Object.keys(collected.ramAccounts).some(function (id) {
     let a = collected.ramAccounts[id];

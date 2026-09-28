@@ -1,5 +1,5 @@
 /* OUKEI HUB Local Storage + Cloud Save Hooks — Ver2.0.8 */
-var HUB_STORAGE_JS_BUILD = 'Ver2.0.58/Build20260928-v002';
+var HUB_STORAGE_JS_BUILD = 'Ver2.0.59/Build20260928-v003';
 
 var HUB_STORAGE_KEY = 'oukei_hub_v15_data';
 var HUB_STORAGE_LEGACY_KEY = 'okei_v14_data';
@@ -1545,9 +1545,10 @@ function hubRestoreRamOrgChartFromBackup(backup, opts) {
   }
 }
 
-function hubPackFirestorePayload(updatedAt) {
-  let local = hubPackLocalData();
-  let settingsCopy = Object.assign({}, local.settings);
+/** Pack hubData Firestore payload from an in-memory hub document (no global mutation). */
+function hubPackFirestorePayloadFromData(local, updatedAt) {
+  local = local || hubCreateEmptyData();
+  let settingsCopy = Object.assign({}, local.settings || hubCreateDefaultSettings());
   let manageAccounts = settingsCopy.manageDisplayAccounts || {};
   let revenueLog = settingsCopy.revenueLog || {};
   let salesLog = settingsCopy.salesLog || {};
@@ -1556,11 +1557,11 @@ function hubPackFirestorePayload(updatedAt) {
   delete settingsCopy.salesLog;
   return {
     orgChart: {
-      members: local.members,
-      currentData: local.currentData,
-      rootId: local.rootId,
-      rootAccountIds: local.rootAccountIds,
-      scenarios: local.scenarios
+      members: local.members || [],
+      currentData: local.currentData || [],
+      rootId: local.rootId || '',
+      rootAccountIds: local.rootAccountIds || [],
+      scenarios: local.scenarios || []
     },
     orcaOrgChart: local.orcaOrgChart || hubCreateEmptyOrcaOrgChart(),
     eniOrgChart: local.eniOrgChart || hubCreateEmptyEniOrgChart(),
@@ -1575,6 +1576,11 @@ function hubPackFirestorePayload(updatedAt) {
       : (typeof HUB_SCHEMA_VERSION === 'number' ? Number(HUB_SCHEMA_VERSION) : 0)),
     updatedAt: typeof updatedAt === 'number' ? updatedAt : Date.now()
   };
+}
+
+function hubPackFirestorePayload(updatedAt) {
+  let local = typeof hubPackLocalData === 'function' ? hubPackLocalData() : hubCreateEmptyData();
+  return hubPackFirestorePayloadFromData(local, updatedAt);
 }
 
 function hubUnpackFirestorePayload(doc) {
@@ -1893,6 +1899,7 @@ function hubSaveToStorage(options) {
     if (cloudWriteOk && typeof hubScheduleCloudSave === 'function') {
       hubScheduleCloudSave(options.immediate === true);
     } else if (!options.localOnly && !simActive && !revenueSaveFlow &&
+        typeof hubHasLocalDirtyChanges === 'function' && hubHasLocalDirtyChanges() &&
         typeof hubMarkPendingCloudWrite === 'function' &&
         (typeof hubIsCloudWriteEnabled !== 'function' || hubIsCloudWriteEnabled())) {
       hubMarkPendingCloudWrite();
@@ -2041,6 +2048,7 @@ if (typeof window !== 'undefined') {
   window.hubStorageKeyForUid = hubStorageKeyForUid;
   window.hubPackLocalData = hubPackLocalData;
   window.hubPackFirestorePayload = hubPackFirestorePayload;
+  window.hubPackFirestorePayloadFromData = hubPackFirestorePayloadFromData;
   window.hubUnpackFirestorePayload = hubUnpackFirestorePayload;
   window.hubComputeContentHash = hubComputeContentHash;
   window.hubIsAnyOrgSimActive = typeof hubIsAnyOrgSimActive === 'function'
