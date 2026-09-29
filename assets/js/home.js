@@ -1,5 +1,5 @@
 /* OUKEI HUB Home UI — Ver2.0.7 */
-var HUB_HOME_JS_BUILD = 'Ver2.0.61/Build20260929-v001';
+var HUB_HOME_JS_BUILD = 'Ver2.0.62/Build20260929-v002';
 let homeCalView = { y: new Date().getFullYear(), m: new Date().getMonth() };
 let ramSavePending = null;
 let ramSalesDecreasePending = null;
@@ -2063,22 +2063,33 @@ function hubNavigateHomeAfterRevenueSave() {
   if (typeof syncMobileNav === 'function') syncMobileNav('home');
 }
 
+var hubCloudSyncToastTimer = null;
+var HUB_CLOUD_SYNC_TOAST_DELAY_MS = 2800;
+
+function hubShowLocalSaveToast() {
+  if (typeof showToast === 'function') showToast('✅ 保存しました');
+}
+
+/** Cloud toast is deferred so the local-save toast is never overwritten on Safari. */
+function hubShowDeferredCloudSyncToast() {
+  if (hubCloudSyncToastTimer) clearTimeout(hubCloudSyncToastTimer);
+  hubCloudSyncToastTimer = setTimeout(function () {
+    hubCloudSyncToastTimer = null;
+    if (typeof showToast === 'function') showToast('☁️ Cloud同期済み');
+  }, HUB_CLOUD_SYNC_TOAST_DELAY_MS);
+}
+
 /** Local save complete → close modal first, then home + refresh (Cloud continues async). */
 function hubFinishUiAfterLocalSave() {
   hubHideRevenueSaveProgressOverlay();
   hubForceCloseRevenueModal();
   if (typeof hubRevenueSaveMark === 'function') hubRevenueSaveMark('UI_DONE');
-  requestAnimationFrame(function () {
-    hubNavigateHomeAfterRevenueSave();
-    requestAnimationFrame(function () {
-      if (typeof refreshHomeAfterRevenueSave === 'function') refreshHomeAfterRevenueSave();
-      if (typeof hubRunDeferredRevenueDashboardRefresh === 'function') {
-        hubRunDeferredRevenueDashboardRefresh();
-      }
-      hubForceCloseRevenueModal();
-      if (typeof showToast === 'function') showToast('✅ 保存しました');
-    });
-  });
+  hubNavigateHomeAfterRevenueSave();
+  if (typeof refreshHomeAfterRevenueSave === 'function') refreshHomeAfterRevenueSave();
+  if (typeof hubRunDeferredRevenueDashboardRefresh === 'function') {
+    hubRunDeferredRevenueDashboardRefresh();
+  }
+  hubShowLocalSaveToast();
 }
 
 function hubRunRevenueLocalPersistPhase(localPersistFn) {
@@ -2105,13 +2116,11 @@ function hubFinishRevenueInputSaveCloudOnly(toastMessage, verifyFn) {
       hubRunDeferredRevenueDashboardRefresh();
     }
     if (result.ok) {
-      if (typeof showToast === 'function') {
-        showToast(result.verifySoft ? '☁️ Cloud保存済み' : '☁️ Cloud同期済み');
-      }
+      hubShowDeferredCloudSyncToast();
       if (typeof hubSetSyncStatus === 'function') hubSetSyncStatus('done', 'Cloud同期済み');
     } else if (result.refSetCompleted) {
-      if (typeof showToast === 'function') showToast('☁️ Cloud保存済み');
-      if (typeof hubSetSyncStatus === 'function') hubSetSyncStatus('done', 'Cloud保存済み');
+      hubShowDeferredCloudSyncToast();
+      if (typeof hubSetSyncStatus === 'function') hubSetSyncStatus('done', 'Cloud同期済み');
     } else {
       if (typeof showToast === 'function') {
         showToast('端末に保存済み・Cloud同期待ち');

@@ -95,6 +95,13 @@ const SUITES = [
     needsServer: true
   },
   {
+    id: 'hub-revenue-save-home-toast',
+    label: 'Revenue save home refresh + toast order (iPhone Safari)',
+    category: 'Firestore',
+    cmd: ['node', 'scripts/verify-revenue-save-home-toast.mjs'],
+    needsServer: true
+  },
+  {
     id: 'hub-destructive-guard',
     label: 'Destructive cloud push guard (kai2 wipe block)',
     category: 'Firestore',

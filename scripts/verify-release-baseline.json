@@ -1,5 +1,5 @@
 {
-  "minPassed": 787,
-  "note": "Baseline after iPhone post-write verify fix (+13) and diag mode gate (+2). verify:release Passed 787.",
+  "minPassed": 799,
+  "note": "Baseline after iPhone home refresh + toast order fix (+11). verify:release Passed 799.",
   "updatedAt": "2026-09-29"
 }

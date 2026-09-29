@@ -2,7 +2,7 @@
  * Google 認証後に LocalStorage / Firestore を同期
  * 組織図・ポートフォリオはフィールド単位でマージして端末間の上書きを防ぐ
  */
-var HUB_FIREBASE_JS_BUILD = 'Ver2.0.61/Build20260929-v001';
+var HUB_FIREBASE_JS_BUILD = 'Ver2.0.62/Build20260929-v002';
 
 var hubFirebaseApp = null;
 var hubFirebaseAuth = null;
@@ -1362,10 +1362,7 @@ function hubPushCloudDoc(force, _cloudDocOpt, callerHint) {
       hubLastPushedHash = hash;
       hubLastSeenCloudUpdatedAt = Number(built.payload.updatedAt) || Date.now();
       if (typeof hubIsRevenueInputSaveFlowActive === 'function' && hubIsRevenueInputSaveFlowActive()) {
-        hubRevenueSaveLastPushMeta = {
-          updatedAt: hubLastSeenCloudUpdatedAt,
-          dateKeys: Object.keys((built.payload.revenue && built.payload.revenue.revenueLog) || {})
-        };
+        hubRevenueSaveLastPushMeta = hubCollectPushRevenueMeta(built.payload);
       }
       hubClearLocalDirtyForCloud('cloud-write-ok');
       if (built.guarded.action === 'allow_explicit_orca_delete') {
@@ -1762,6 +1759,18 @@ function hubPullCloudData(reason) {
   if (typeof hubIsCloudReadEnabled === 'function' && !hubIsCloudReadEnabled()) {
     return Promise.resolve(false);
   }
+  if (hubIsRevenueInputSaveFlowActive()) {
+    try {
+      console.log('[hubCloudPull] skipped during revenue-input save', { reason: reason || '' });
+    } catch (e) {}
+    return Promise.resolve(false);
+  }
+  if (typeof hubIsRevenueInputSaveUiLocked === 'function' && hubIsRevenueInputSaveUiLocked()) {
+    try {
+      console.log('[hubCloudPull] skipped while revenue save UI locked', { reason: reason || '' });
+    } catch (e) {}
+    return Promise.resolve(false);
+  }
   if (!hubFirebaseReady || !hubFirebaseUid) {
     hubSetSyncStatus('offline', 'オフライン');
     return Promise.resolve(false);
@@ -1907,6 +1916,29 @@ function hubRevenueDayEntryHasData(day) {
   return Object.keys(day).length > 0;
 }
 
+function hubRevenueDayEntryHasRam(day) {
+  if (!day || typeof day !== 'object') return false;
+  if (day.ramAccounts && Object.keys(day.ramAccounts).length) return true;
+  return Number(day.ram) > 0;
+}
+
+function hubCollectPushRevenueMeta(payload) {
+  let rev = (payload && payload.revenue && payload.revenue.revenueLog) || {};
+  let dateKeys = Object.keys(rev);
+  let ramDateKeys = dateKeys.filter(function (dk) {
+    return hubRevenueDayEntryHasRam(rev[dk]);
+  });
+  return {
+    updatedAt: Number(payload && payload.updatedAt) || Date.now(),
+    dateKeys: dateKeys,
+    ramDateKeys: ramDateKeys
+  };
+}
+
+function hubPushMetaHasRamForDateKey(meta, dateKey) {
+  return !!(meta && meta.ramDateKeys && meta.ramDateKeys.indexOf(dateKey) >= 0);
+}
+
 function hubCloudHasRevenueDay(doc, dateKey) {
   if (!doc || !dateKey) return false;
   if (doc.revenue && doc.revenue.revenueLog && doc.revenue.revenueLog[dateKey]) {
@@ -2035,17 +2067,27 @@ function hubSaveRevenueWithCloudConfirm(opts) {
         }
         let refSetOk = hubTraceRefSetSucceeded(hubRevenueSaveTraceLog);
         let localStillOk = typeof opts.verifyFn !== 'function' || opts.verifyFn();
-        if (refSetOk && localStillOk) {
+        let pushHadRam = hubPushMetaHasRamForDateKey(hubRevenueSaveLastPushMeta, cloudDateKey);
+        if (refSetOk && localStillOk && pushHadRam) {
           hubRevenueSaveTrace('cloudDateVerify', 'SUCCESS', {
             reason: verified.updatedAtOk ? 'soft-updated-at' : 'soft-after-ref-set',
             attempt: verified.attempt,
             updatedAtOk: !!verified.updatedAtOk,
-            docUpdatedAt: verified.docUpdatedAt
+            docUpdatedAt: verified.docUpdatedAt,
+            pushHadRam: true
           });
           return finishCloudSuccess({
             cloudDateKey: cloudDateKey,
             attempt: verified.attempt,
-            verifySoft: true
+            verifySoft: true,
+            pushHadRam: true
+          });
+        }
+        if (refSetOk && localStillOk && !pushHadRam) {
+          hubRevenueSaveTrace('cloudDateVerify', 'ABORT', {
+            reason: 'soft-blocked-missing-ram-in-payload',
+            attempt: verified.attempt,
+            pushMeta: hubRevenueSaveLastPushMeta
           });
         }
         hubRevenueSaveTrace('cloudDateVerify', 'ABORT', {
@@ -2123,6 +2165,10 @@ if (typeof window !== 'undefined') {
   window.hubTraceRefSetSucceeded = hubTraceRefSetSucceeded;
   window.hubCloudHasRevenueDay = hubCloudHasRevenueDay;
   window.hubRevenueDayEntryHasData = hubRevenueDayEntryHasData;
+  window.hubRevenueDayEntryHasRam = hubRevenueDayEntryHasRam;
+  window.hubCollectPushRevenueMeta = hubCollectPushRevenueMeta;
+  window.hubPushMetaHasRamForDateKey = hubPushMetaHasRamForDateKey;
+  window.hubRevenueSaveLastPushMeta = hubRevenueSaveLastPushMeta;
   window.hubSuspendCloudWrites = hubSuspendCloudWrites;
   window.hubResumeCloudWrites = hubResumeCloudWrites;
   window.hubAllowAutomaticCloudWrites = hubAllowAutomaticCloudWrites;

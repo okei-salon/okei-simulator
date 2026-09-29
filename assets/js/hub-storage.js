@@ -1,5 +1,5 @@
 /* OUKEI HUB Local Storage + Cloud Save Hooks — Ver2.0.8 */
-var HUB_STORAGE_JS_BUILD = 'Ver2.0.61/Build20260929-v001';
+var HUB_STORAGE_JS_BUILD = 'Ver2.0.62/Build20260929-v002';
 
 var HUB_STORAGE_KEY = 'oukei_hub_v15_data';
 var HUB_STORAGE_LEGACY_KEY = 'okei_v14_data';
