@@ -1,5 +1,5 @@
 /* OUKEI HUB Local Storage + Cloud Save Hooks — Ver2.0.8 */
-var HUB_STORAGE_JS_BUILD = 'Ver2.0.64/Build20260929-v004';
+var HUB_STORAGE_JS_BUILD = 'Ver2.0.65/Build20260929-v005';
 
 var HUB_STORAGE_KEY = 'oukei_hub_v15_data';
 var HUB_STORAGE_LEGACY_KEY = 'okei_v14_data';
@@ -750,11 +750,43 @@ var HUB_REVENUE_ACCOUNT_MAP_KEYS = [
   'accounts'
 ];
 
+var HUB_REVENUE_SCALAR_ACCOUNT_MAP = {
+  ram: 'ramAccounts',
+  orca: 'orcaAccounts',
+  eni: 'eniAccounts',
+  matrix: 'matrixAccounts',
+  bitsync: 'bitsyncAccounts',
+  cary: 'caryAccounts'
+};
+
+/** After account-map recalc, restore Cloud day scalars for projects without per-account maps. */
+function hubRestoreCloudDayScalarsWhenNoAccounts(base, cloudDay) {
+  if (!base || !cloudDay) return base;
+  Object.keys(HUB_REVENUE_SCALAR_ACCOUNT_MAP).forEach(function (k) {
+    let amKey = HUB_REVENUE_SCALAR_ACCOUNT_MAP[k];
+    let hasAccounts = base[amKey] && Object.keys(base[amKey]).length;
+    if (hasAccounts) return;
+    if (typeof cloudDay[k] === 'number' && cloudDay[k] !== 0) {
+      base[k] = cloudDay[k];
+    }
+  });
+  let totalKeys = ['ram', 'orca', 'eni', 'matrix', 'bitsync', 'cary', 'genesis', 'other'];
+  let sum = totalKeys.reduce(function (s, k) { return s + (Number(base[k]) || 0); }, 0);
+  if (typeof pdRound === 'function') {
+    base.total = pdRound(sum);
+  } else {
+    base.total = Math.round(sum * 100) / 100;
+  }
+  return base;
+}
+
 /**
  * Field-level day merge: never replace whole account maps via Object.assign.
  * Cloud-only account IDs are kept unless explicitly tombstoned.
  */
-function hubMergeRevenueDayEntry(cloudEntry, localEntry, _preferLocalIgnored, removedSets) {
+function hubMergeRevenueDayEntry(cloudEntry, localEntry, mergeOpts, removedSets) {
+  mergeOpts = mergeOpts || {};
+  let preferCloudScalars = !!mergeOpts.preferCloudScalars;
   let c = cloudEntry && typeof cloudEntry === 'object' ? cloudEntry : null;
   let l = localEntry && typeof localEntry === 'object' ? localEntry : null;
   let removed = hubNormalizeRemovedSets(removedSets);
@@ -776,6 +808,11 @@ function hubMergeRevenueDayEntry(cloudEntry, localEntry, _preferLocalIgnored, re
     }
     if (cv === undefined) {
       base[k] = lv;
+      return;
+    }
+    // Cloud pull: Firestore snapshot scalars win over stale local copies.
+    if (preferCloudScalars && cv !== undefined) {
+      base[k] = cv;
       return;
     }
     // Project totals are recomputed from account maps; keep non-zero cloud when local is stale 0.
@@ -804,7 +841,12 @@ function hubMergeRevenueDayEntry(cloudEntry, localEntry, _preferLocalIgnored, re
 }
 
 /** Keep all project revenue account maps (RAM/ORCA/ENI/…) across preferLocal merges. */
-function hubMergeOrcaRevenueLogs(cloudLog, localLog, preferLocal, removedIdsOrSets) {
+function hubMergeOrcaRevenueLogs(cloudLog, localLog, preferLocal, removedIdsOrSets, mergeOpts) {
+  mergeOpts = mergeOpts || {};
+  let dayMergeOpts = mergeOpts;
+  if (mergeOpts.preferCloudRevenue) {
+    dayMergeOpts = Object.assign({}, mergeOpts, { preferCloudScalars: true });
+  }
   let cloudObj = cloudLog && typeof cloudLog === 'object' ? cloudLog : {};
   let localObj = localLog && typeof localLog === 'object' ? localLog : {};
   let removedSets = hubNormalizeRemovedSets(removedIdsOrSets);
@@ -813,10 +855,13 @@ function hubMergeOrcaRevenueLogs(cloudLog, localLog, preferLocal, removedIdsOrSe
   Object.keys(localObj).forEach(function (dk) { dates[dk] = true; });
   let out = {};
   Object.keys(dates).forEach(function (dk) {
-    let base = hubMergeRevenueDayEntry(cloudObj[dk], localObj[dk], preferLocal, removedSets);
+    let base = hubMergeRevenueDayEntry(cloudObj[dk], localObj[dk], dayMergeOpts, removedSets);
 
     if (typeof pdRecalculateRevenueEntry === 'function') {
       base = pdRecalculateRevenueEntry(base, dk);
+      if (mergeOpts.preferCloudRevenue) {
+        base = hubRestoreCloudDayScalarsWhenNoAccounts(base, cloudObj[dk]);
+      }
     } else if (base.orcaAccounts && Object.keys(base.orcaAccounts).length) {
       let sum = 0;
       Object.keys(base.orcaAccounts).forEach(function (id) {
@@ -937,10 +982,12 @@ function hubMergePortfolioProfit(cloudVal, localVal, preferLocal) {
   };
 }
 
-function hubMergeHubSettings(localSettings, cloudSettings, localUpdatedAt, cloudUpdatedAt) {
+function hubMergeHubSettings(localSettings, cloudSettings, localUpdatedAt, cloudUpdatedAt, mergeOpts) {
+  mergeOpts = mergeOpts || {};
   let local = Object.assign(hubCreateDefaultSettings(), localSettings || {});
   let cloud = Object.assign(hubCreateDefaultSettings(), cloudSettings || {});
-  let preferLocal = (localUpdatedAt || 0) >= (cloudUpdatedAt || 0);
+  let preferCloudRevenue = !!mergeOpts.preferCloudRevenue;
+  let preferLocal = !preferCloudRevenue && (localUpdatedAt || 0) >= (cloudUpdatedAt || 0);
   let merged = Object.assign({}, cloud, local);
   merged.portfolioGoal = hubMergePortfolioGoal(cloud.portfolioGoal, local.portfolioGoal, preferLocal);
   merged.portfolioOperating = hubMergePortfolioOperating(cloud.portfolioOperating, local.portfolioOperating, preferLocal);
@@ -975,7 +1022,8 @@ function hubMergeHubSettings(localSettings, cloudSettings, localUpdatedAt, cloud
     cloud.revenueLog,
     local.revenueLog,
     false,
-    revenueRemovedSets
+    revenueRemovedSets,
+    mergeOpts
   );
   merged.salesLog = hubMergeOrcaSalesLogs(
     cloud.salesLog,
@@ -1028,11 +1076,23 @@ function hubMergeHubSettings(localSettings, cloudSettings, localUpdatedAt, cloud
   return hubStripRemovedAccountsFromSettings(merged);
 }
 
-function hubMergeHubDocuments(localData, cloudData) {
+function hubMergeHubDocuments(localData, cloudData, mergeOpts) {
+  mergeOpts = mergeOpts || {};
   let local = hubNormalizeLoadedData(localData || hubCreateEmptyData());
   let cloud = hubNormalizeLoadedData(cloudData || hubCreateEmptyData());
-  let preferLocal = (local.updatedAt || 0) >= (cloud.updatedAt || 0);
-  let mergedSettings = hubMergeHubSettings(local.settings, cloud.settings, local.updatedAt, cloud.updatedAt);
+  let localDirty = mergeOpts.forPull === true &&
+    typeof hubHasLocalDirtyChanges === 'function' && hubHasLocalDirtyChanges();
+  let cloudNewer = (cloud.updatedAt || 0) > (local.updatedAt || 0);
+  let preferCloudRevenue = mergeOpts.preferCloudRevenue === true ||
+    (mergeOpts.forPull === true && cloudNewer && !localDirty);
+  let preferLocal = !preferCloudRevenue && (local.updatedAt || 0) >= (cloud.updatedAt || 0);
+  let mergedSettings = hubMergeHubSettings(
+    local.settings,
+    cloud.settings,
+    local.updatedAt,
+    cloud.updatedAt,
+    Object.assign({}, mergeOpts, { preferCloudRevenue: preferCloudRevenue })
+  );
   let mergedRam = hubMergeRamOrgCharts(
     hubPackRamOrgFromData(cloud),
     hubPackRamOrgFromData(local),
@@ -1051,6 +1111,10 @@ function hubMergeHubDocuments(localData, cloudData) {
     preferLocal,
     mergedSettings
   );
+  let mergedUpdatedAt = Math.max(local.updatedAt || 0, cloud.updatedAt || 0);
+  if (preferCloudRevenue && (cloud.updatedAt || 0) > 0) {
+    mergedUpdatedAt = cloud.updatedAt;
+  }
   return {
     members: mergedRam.members,
     currentData: mergedRam.currentData,
@@ -1060,7 +1124,7 @@ function hubMergeHubDocuments(localData, cloudData) {
     settings: mergedSettings,
     orcaOrgChart: mergedOrca,
     eniOrgChart: mergedEni,
-    updatedAt: Math.max(local.updatedAt || 0, cloud.updatedAt || 0)
+    updatedAt: mergedUpdatedAt
   };
 }
 
@@ -1864,9 +1928,12 @@ function hubSaveToStorage(options) {
   if (typeof localStorage === 'undefined' || typeof settings === 'undefined') return;
   try {
     let now = Date.now();
-    hubLocalUpdatedAt = now;
+    let ts = (options.localOnly && typeof options.preserveUpdatedAt === 'number')
+      ? options.preserveUpdatedAt
+      : now;
+    hubLocalUpdatedAt = ts;
     // pack は sim 中でも本番スナップショットのみを書く
-    let packed = Object.assign(hubPackLocalData(), { updatedAt: now });
+    let packed = Object.assign(hubPackLocalData(), { updatedAt: ts });
     let revenueSaveFlow = options.deferCloudSchedule === true ||
       (typeof hubIsRevenueInputSaveUiLocked === 'function' && hubIsRevenueInputSaveUiLocked()) ||
       (typeof hubIsRevenueInputSaveFlowActive === 'function' && hubIsRevenueInputSaveFlowActive());

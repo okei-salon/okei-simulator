@@ -486,11 +486,11 @@ function hubHandleAuthUser(user) {
   if (!user || hubAuthBusy) return Promise.resolve();
   let auth = typeof hubGetFirebaseAuth === 'function' ? hubGetFirebaseAuth() : null;
   if (document.body.classList.contains('hub-auth-ready') && auth && auth.currentUser && auth.currentUser.uid === user.uid) {
-    if (typeof hubPullCloudDataIfStale === 'function') {
-      return hubPullCloudDataIfStale('auth-same-uid').then(function () {});
-    }
     if (typeof hubPullCloudData === 'function') {
-      return hubPullCloudData('auth-same-uid').then(function () {});
+      return hubPullCloudData('auth-same-uid', { force: true }).then(function () {});
+    }
+    if (typeof hubPullCloudDataIfStale === 'function') {
+      return hubPullCloudDataIfStale('auth-same-uid', { force: true }).then(function () {});
     }
     return Promise.resolve();
   }

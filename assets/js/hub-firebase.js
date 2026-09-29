@@ -2,7 +2,7 @@
  * Google 認証後に LocalStorage / Firestore を同期
  * 組織図・ポートフォリオはフィールド単位でマージして端末間の上書きを防ぐ
  */
-var HUB_FIREBASE_JS_BUILD = 'Ver2.0.64/Build20260929-v004';
+var HUB_FIREBASE_JS_BUILD = 'Ver2.0.65/Build20260929-v005';
 
 var HUB_REVENUE_CLOUD_SYNC_FAIL_MSG = 'Cloud同期に失敗しました。端末には保存されています';
 
@@ -23,6 +23,8 @@ var hubSyncInFlight = false;
 var hubPullInFlight = false;
 var hubLastPullAt = 0;
 var hubPullMinIntervalMs = 2500;
+var hubLastHomePullAt = 0;
+var hubHomePullMinIntervalMs = 4000;
 var hubSyncPendingWrites = 0;
 var hubLastCloudUpdatedAt = 0;
 /** Nested suspend depth: while > 0, automatic Firestore push / sync write paths run blocked. */
@@ -1620,7 +1622,12 @@ function hubApplyMergedHubData(merged, cloudHash, opts) {
     if (typeof pfEnsureManageDisplayAccounts === 'function') pfEnsureManageDisplayAccounts();
     if (typeof ensurePerformanceLogs === 'function') ensurePerformanceLogs();
     if (typeof ensureRevenueLog === 'function') ensureRevenueLog();
-    if (typeof hubSaveToStorage === 'function') hubSaveToStorage({ localOnly: true });
+    if (typeof hubSaveToStorage === 'function') {
+      hubSaveToStorage({
+        localOnly: true,
+        preserveUpdatedAt: typeof opts.preserveUpdatedAt === 'number' ? opts.preserveUpdatedAt : undefined
+      });
+    }
   } finally {
     hubEndCloudWriteSuppress('apply-merged');
   }
@@ -1808,7 +1815,38 @@ function hubApplyCloudDataIfNewer(cloudDoc, localUpdatedAt) {
  * Cloud READ-only pull. Never blocked by write gate.
  * Merges cloud into local cache; does not push.
  */
-function hubPullCloudData(reason) {
+function hubBuildCloudPullMergeOpts(localData, cloudUnpacked) {
+  let localUpdatedAt = (localData && localData.updatedAt) ||
+    (typeof hubLocalUpdatedAt !== 'undefined' ? hubLocalUpdatedAt : 0) || 0;
+  let cloudUpdatedAt = (cloudUnpacked && cloudUnpacked.updatedAt) || 0;
+  let localDirty = typeof hubHasLocalDirtyChanges === 'function' && hubHasLocalDirtyChanges();
+  let cloudNewer = cloudUpdatedAt > localUpdatedAt;
+  let mergeOpts = { forPull: true };
+  if (cloudNewer && !localDirty) {
+    mergeOpts.preferCloudRevenue = true;
+  }
+  return mergeOpts;
+}
+
+function hubMaybePullCloudOnHomeDisplay() {
+  if (typeof hubIsLocalDevMode === 'function' && hubIsLocalDevMode()) {
+    return Promise.resolve(false);
+  }
+  if (typeof hubIsCloudReadEnabled === 'function' && !hubIsCloudReadEnabled()) {
+    return Promise.resolve(false);
+  }
+  if (!hubFirebaseReady || !hubFirebaseUid) {
+    return Promise.resolve(false);
+  }
+  if (Date.now() - hubLastHomePullAt < hubHomePullMinIntervalMs) {
+    return Promise.resolve(false);
+  }
+  hubLastHomePullAt = Date.now();
+  return hubPullCloudData('home-display', { force: true });
+}
+
+function hubPullCloudData(reason, opts) {
+  opts = opts || {};
   if (typeof hubIsLocalDevMode === 'function' && hubIsLocalDevMode()) {
     if (typeof hubRenderLocalDevStatus === 'function') hubRenderLocalDevStatus();
     return Promise.resolve(false);
@@ -1838,6 +1876,9 @@ function hubPullCloudData(reason) {
     hubSetSyncStatus('offline', 'オフライン');
     return Promise.resolve(false);
   }
+  if (!opts.force && Date.now() - hubLastPullAt < hubPullMinIntervalMs) {
+    return Promise.resolve(false);
+  }
   if (hubPullInFlight) return Promise.resolve(false);
   hubPullInFlight = true;
   hubSetSyncStatus('syncing', 'Cloud同期中…');
@@ -1857,16 +1898,23 @@ function hubPullCloudData(reason) {
     let cloudEmpty = typeof hubIsEffectivelyEmptyHubData === 'function'
       ? hubIsEffectivelyEmptyHubData(cloudUnpacked)
       : false;
+    let mergeOpts = hubBuildCloudPullMergeOpts(local.data, cloudUnpacked);
     let merged;
     if (localEmpty && !cloudEmpty) {
       merged = cloudUnpacked;
     } else {
-      merged = hubMergeHubDocuments(local.data, cloudUnpacked);
+      merged = hubMergeHubDocuments(local.data, cloudUnpacked, mergeOpts);
     }
     let cloudHash = hubComputeContentHash(cloudUnpacked);
-    hubApplyMergedHubData(merged, cloudHash);
+    hubApplyMergedHubData(merged, cloudHash, {
+      preserveUpdatedAt: merged.updatedAt || cloudUnpacked.updatedAt || 0
+    });
     try {
-      console.log('[hubCloudPull] applied', { reason: reason || '', cloudUpdatedAt: hubLastCloudUpdatedAt });
+      console.log('[hubCloudPull] applied', {
+        reason: reason || '',
+        cloudUpdatedAt: hubLastCloudUpdatedAt,
+        preferCloudRevenue: !!mergeOpts.preferCloudRevenue
+      });
     } catch (e) {}
     hubSetSyncStatus(hubSyncPendingWrites > 0 ? 'pending' : 'done', 'Cloud同期済み');
     return true;
@@ -1881,9 +1929,12 @@ function hubPullCloudData(reason) {
   });
 }
 
-function hubPullCloudDataIfStale(reason) {
-  if (Date.now() - hubLastPullAt < hubPullMinIntervalMs) return Promise.resolve(false);
-  return hubPullCloudData(reason);
+function hubPullCloudDataIfStale(reason, opts) {
+  opts = opts || {};
+  if (!opts.force && Date.now() - hubLastPullAt < hubPullMinIntervalMs) {
+    return Promise.resolve(false);
+  }
+  return hubPullCloudData(reason, opts);
 }
 
 /** Full sync: READ always; WRITE only when user-edited dirty data exists. */
@@ -2457,10 +2508,12 @@ function hubSaveRevenueWithCloudConfirm(opts) {
               accountCount: revenueSnapshot.accountCount,
               expectedDayTotal: revenueSnapshot.expectedDayTotal
             });
-            return finishCloudSuccess({
-              cloudDateKey: cloudDateKey,
-              attempt: verified.attempt,
-              strictSnapshot: true
+            return hubPullCloudData('post-save-verify', { force: true }).then(function () {
+              return finishCloudSuccess({
+                cloudDateKey: cloudDateKey,
+                attempt: verified.attempt,
+                strictSnapshot: true
+              });
             });
           }
           hubRevenueSaveTrace('cloudDateVerify', 'ABORT', Object.assign({
@@ -2499,7 +2552,7 @@ function hubBindFirebaseConnectivity() {
   window.addEventListener('online', function () {
     if (typeof hubIsLocalDevMode === 'function' && hubIsLocalDevMode()) return;
     if (hubFirebaseReady && hubFirebaseUid) {
-      hubPullCloudDataIfStale('online').then(function () {
+      hubPullCloudData('online', { force: true }).then(function () {
         if (!hubAreAutomaticCloudWritesBlocked() && hubHasLocalDirtyChanges()) {
           hubRunCloudSave(false);
         }
@@ -2516,12 +2569,12 @@ function hubBindFirebaseConnectivity() {
   document.addEventListener('visibilitychange', function () {
     if (typeof hubIsLocalDevMode === 'function' && hubIsLocalDevMode()) return;
     if (document.visibilityState === 'visible' && hubFirebaseReady && hubFirebaseUid) {
-      hubPullCloudDataIfStale('visibility');
+      hubPullCloudData('visibility', { force: true });
     }
   });
   window.addEventListener('pageshow', function () {
     if (typeof hubIsLocalDevMode === 'function' && hubIsLocalDevMode()) return;
-    if (hubFirebaseReady && hubFirebaseUid) hubPullCloudDataIfStale('pageshow');
+    if (hubFirebaseReady && hubFirebaseUid) hubPullCloudData('pageshow', { force: true });
   });
 }
 
@@ -2580,6 +2633,8 @@ if (typeof window !== 'undefined') {
   window.hubSyncHubData = hubSyncHubData;
   window.hubPullCloudData = hubPullCloudData;
   window.hubPullCloudDataIfStale = hubPullCloudDataIfStale;
+  window.hubMaybePullCloudOnHomeDisplay = hubMaybePullCloudOnHomeDisplay;
+  window.hubBuildCloudPullMergeOpts = hubBuildCloudPullMergeOpts;
   window.hubSaveRevenueWithCloudConfirm = hubSaveRevenueWithCloudConfirm;
   window.hubRevenueSaveTimingReset = hubRevenueSaveTimingReset;
   window.hubRevenueSaveMark = hubRevenueSaveMark;

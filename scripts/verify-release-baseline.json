@@ -1,5 +1,5 @@
 {
-  "minPassed": 831,
-  "note": "Baseline after Ver2.0.64 strict Cloud sync verify + locked snapshot (+14 net). verify:release Passed 831.",
+  "minPassed": 838,
+  "note": "Baseline after Ver2.0.65 Cloud pull as source of truth + cross-device merge (+7 net). verify:release Passed 838.",
   "updatedAt": "2026-09-29"
 }

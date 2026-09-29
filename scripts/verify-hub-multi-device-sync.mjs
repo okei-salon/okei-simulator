@@ -14,14 +14,21 @@ const BASE_URL = process.env.OUKEI_BASE_URL || 'http://127.0.0.1:5050';
 function loadStorageApi() {
   const code = readFileSync(path.join(root, 'assets/js/hub-storage.js'), 'utf8');
   const pdStub = `
+    function pdGetRamOperationRevenue(ae) {
+      return Number(ae && ae.operationRevenue) || 0;
+    }
+    function pdRamAccountRevenueTotal(ae) {
+      if (!ae || ae.todayRevenue == null || ae.todayRevenue === '') return 0;
+      return Math.round(((Number(ae.todayRevenue) || 0) + pdGetRamOperationRevenue(ae)) * 100) / 100;
+    }
     function pdRecalculateRevenueEntry(entry, dateKey) {
       entry = entry || {};
       if (entry.ramAccounts) {
-        let sum = 0;
+        entry.ram = 0;
         Object.keys(entry.ramAccounts).forEach(function (id) {
-          sum += Number(entry.ramAccounts[id].todayRevenue || 0);
+          entry.ram += pdRamAccountRevenueTotal(entry.ramAccounts[id]);
         });
-        entry.ram = Math.round(sum * 100) / 100;
+        entry.ram = Math.round(entry.ram * 100) / 100;
       }
       if (entry.orcaAccounts) {
         let sum = 0;
@@ -193,6 +200,89 @@ function makeClient(data) {
 })();
 
 assert('revision helper prefers revision field', hubAccountEntryRevisionMs({ revision: 9999, savedAt: 'old' }) === 9999);
+
+// CASE X: cross-device RAM operationRevenue — stale device A pulls newer cloud
+(function caseXCrossDeviceRam() {
+  const DATE = '2026-09-29';
+  const deviceA = makeClient({
+    updatedAt: 1000,
+    settings: {
+      revenueLog: {
+        [DATE]: {
+          ramAccounts: { m11: { todayRevenue: 0, operationRevenue: 0.3, revision: 1000 } },
+          ram: 0.3,
+          orca: 110.99,
+          bitsync: 60.01,
+          total: 171.30
+        }
+      }
+    }
+  });
+  const cloud = makeClient({
+    updatedAt: 5000,
+    settings: {
+      revenueLog: {
+        [DATE]: {
+          ramAccounts: {
+            m11: { todayRevenue: 0, operationRevenue: 0.3, revision: 1000 },
+            m178: { todayRevenue: 0, operationRevenue: 0.3, revision: 5000 }
+          },
+          ram: 0.6,
+          orca: 110.99,
+          bitsync: 60.01,
+          total: 171.6
+        }
+      }
+    }
+  });
+  const pullMerge = hubMergeHubDocuments(deviceA, cloud, { forPull: true, preferCloudRevenue: true });
+  const day = pullMerge.settings.revenueLog[DATE] || {};
+  assert('CASE X: device A pull gets 2 RAM accounts', Object.keys(day.ramAccounts || {}).length === 2);
+  assert('CASE X: device A pull RAM 0.6', Number(day.ram) === 0.6, 'ram=' + day.ram);
+  assert('CASE X: device A pull day total 171.6', Math.abs(Number(day.total) - 171.6) < 0.01, 'total=' + day.total);
+  assert('CASE X: ORCA preserved on pull', Number(day.orca) === 110.99);
+  assert('CASE X: BITSYNC preserved on pull', Number(day.bitsync) === 60.01);
+})();
+
+// CASE Y: A saves 0.3 → B pull → B adds 0.3 → A pull 0.6
+(function caseYSequentialCrossDevice() {
+  const DATE = '2026-09-29';
+  const afterACloud = makeClient({
+    updatedAt: 3000,
+    settings: {
+      revenueLog: {
+        [DATE]: {
+          ramAccounts: { m11: { todayRevenue: 0, operationRevenue: 0.3, revision: 3000 } },
+          ram: 0.3,
+          total: 0.3
+        }
+      }
+    }
+  });
+  const deviceBEmpty = makeClient({ updatedAt: 1000, settings: { revenueLog: {} } });
+  const afterBPull = hubMergeHubDocuments(deviceBEmpty, afterACloud, { forPull: true, preferCloudRevenue: true });
+  const dayB = (afterBPull.settings.revenueLog || {})[DATE] || {};
+  assert('CASE Y-B: device B pull sees 0.3', Number(dayB.ram) === 0.3);
+
+  const afterBCloud = makeClient({
+    updatedAt: 6000,
+    settings: {
+      revenueLog: {
+        [DATE]: {
+          ramAccounts: {
+            m11: { todayRevenue: 0, operationRevenue: 0.3, revision: 3000 },
+            m178: { todayRevenue: 0, operationRevenue: 0.3, revision: 6000 }
+          },
+          ram: 0.6,
+          total: 0.6
+        }
+      }
+    }
+  });
+  const afterAPull = hubMergeHubDocuments(afterACloud, afterBCloud, { forPull: true, preferCloudRevenue: true });
+  const dayA = (afterAPull.settings.revenueLog || {})[DATE] || {};
+  assert('CASE Y-A: device A pull sees 0.6', Number(dayA.ram) === 0.6, 'ram=' + dayA.ram);
+})();
 
 async function browserGateTests() {
   const browser = await chromium.launch({ headless: true });
@@ -388,7 +478,7 @@ async function browserReadWriteSeparationTests() {
       total: 77
     };
     cloudPayload.updatedAt = 9000;
-    await hubPullCloudData('storm-iphone-pull');
+    await hubPullCloudData('storm-iphone-pull', { force: true });
     const localHas927 = !!(settings.revenueLog && settings.revenueLog['2026-09-27']);
     const afterIphonePullWrites = refCount();
 

@@ -1,5 +1,5 @@
 /* OUKEI HUB Home UI — Ver2.0.7 */
-var HUB_HOME_JS_BUILD = 'Ver2.0.64/Build20260929-v004';
+var HUB_HOME_JS_BUILD = 'Ver2.0.65/Build20260929-v005';
 let homeCalView = { y: new Date().getFullYear(), m: new Date().getMonth() };
 let ramSavePending = null;
 let ramSalesDecreasePending = null;
@@ -1756,6 +1756,9 @@ function updateHomeTodaySection(sAll) {
 }
 
 function updateHomeDashboard(sAll) {
+  if (typeof hubMaybePullCloudOnHomeDisplay === 'function') {
+    hubMaybePullCloudOnHomeDisplay();
+  }
   if (typeof hubEnsureViewMonth === 'function') hubEnsureViewMonth();
   updateHomeInputStats();
   updateHomeActionCard();
@@ -2067,7 +2070,7 @@ var hubCloudSyncToastTimer = null;
 var HUB_CLOUD_SYNC_TOAST_DELAY_MS = 2800;
 
 function hubShowLocalSaveToast() {
-  if (typeof showToast === 'function') showToast('✅ 保存しました');
+  if (typeof showToast === 'function') showToast('✅ 端末に保存しました');
 }
 
 /** Cloud toast is deferred so the local-save toast is never overwritten on Safari. */
