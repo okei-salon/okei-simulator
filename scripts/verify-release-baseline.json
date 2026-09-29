@@ -1,5 +1,5 @@
 {
-  "minPassed": 771,
-  "note": "Baseline after revenue save UX overlay (+19 fast-path checks). verify:release Passed 771.",
-  "updatedAt": "2026-09-28"
+  "minPassed": 787,
+  "note": "Baseline after iPhone post-write verify fix (+13) and diag mode gate (+2). verify:release Passed 787.",
+  "updatedAt": "2026-09-29"
 }

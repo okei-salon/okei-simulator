@@ -1,11 +1,24 @@
 /* OUKEI HUB Revenue Save Failure Diagnostics — read-only observation UI (admin only) */
-var HUB_REVENUE_SAVE_DIAG_JS_BUILD = 'Ver2.0.60/Build20260928-v005';
+var HUB_REVENUE_SAVE_DIAG_JS_BUILD = 'Ver2.0.61/Build20260929-v001';
 
 var hubRevenueSaveDiagnosticContext = null;
 var hubRevenueSaveLastFailureDiagnostic = null;
 
+function hubIsRevenueSaveDiagnosticModeEnabled() {
+  try {
+    if (typeof location !== 'undefined' && /(?:^|[?&])hub_rev_diag=1(?:&|$)/.test(location.search || '')) {
+      return true;
+    }
+    if (typeof localStorage !== 'undefined' && localStorage.getItem('hubRevenueSaveDiag') === '1') {
+      return true;
+    }
+  } catch (e) {}
+  return false;
+}
+
 function hubShouldShowRevenueSaveFailureDiagnostic() {
-  return typeof hubIsAdminUser === 'function' && hubIsAdminUser();
+  return typeof hubIsAdminUser === 'function' && hubIsAdminUser() &&
+    hubIsRevenueSaveDiagnosticModeEnabled();
 }
 
 function hubTraceHasRefSet(trace, state) {
@@ -388,5 +401,7 @@ if (typeof window !== 'undefined') {
   window.hubRevenueSyncDebug = hubRevenueSyncDebug;
   window.hubRevenueSaveLastFailureDiagnostic = hubRevenueSaveLastFailureDiagnostic;
   window.hubGuessRevenueSaveContextFromUi = hubGuessRevenueSaveContextFromUi;
+  window.hubIsRevenueSaveDiagnosticModeEnabled = hubIsRevenueSaveDiagnosticModeEnabled;
+  window.hubShouldShowRevenueSaveFailureDiagnostic = hubShouldShowRevenueSaveFailureDiagnostic;
   window.HUB_REVENUE_SAVE_DIAG_JS_BUILD = HUB_REVENUE_SAVE_DIAG_JS_BUILD;
 }

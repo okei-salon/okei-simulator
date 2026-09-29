@@ -88,6 +88,13 @@ const SUITES = [
     needsServer: true
   },
   {
+    id: 'hub-revenue-save-post-write-verify',
+    label: 'Revenue save post-write verify (ref.set + server lag / soft verify)',
+    category: 'Firestore',
+    cmd: ['node', 'scripts/verify-revenue-save-post-write-verify.mjs'],
+    needsServer: true
+  },
+  {
     id: 'hub-destructive-guard',
     label: 'Destructive cloud push guard (kai2 wipe block)',
     category: 'Firestore',

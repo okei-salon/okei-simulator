@@ -2,7 +2,7 @@
  * Google 認証後に LocalStorage / Firestore を同期
  * 組織図・ポートフォリオはフィールド単位でマージして端末間の上書きを防ぐ
  */
-var HUB_FIREBASE_JS_BUILD = 'Ver2.0.60/Build20260928-v005';
+var HUB_FIREBASE_JS_BUILD = 'Ver2.0.61/Build20260929-v001';
 
 var hubFirebaseApp = null;
 var hubFirebaseAuth = null;
@@ -44,6 +44,8 @@ var hubLocalDirtyForCloud = false;
 var hubCloudWriteSuppressDepth = 0;
 /** While > 0: revenue-input save button flow — local persist only; cloud confirm writes once. */
 var hubRevenueInputSaveDepth = 0;
+/** Last revenue-save ref.set payload meta (verify fallback after write). */
+var hubRevenueSaveLastPushMeta = null;
 
 function hubHasLocalDirtyChanges() {
   return !!hubLocalDirtyForCloud;
@@ -341,16 +343,51 @@ function hubCollectRevenueSaveDiagnostics(savePath) {
   };
 }
 
-function hubFetchCloudDocForSaveVerify(dateKey, attempt) {
+function hubTraceRefSetSucceeded(trace) {
+  trace = trace || hubRevenueSaveTraceLog || [];
+  return trace.some(function (e) {
+    return e && e.step === 'ref.set' && e.state === 'SUCCESS';
+  });
+}
+
+function hubRevenueSaveVerifyRetryDelayMs(attempt) {
+  let delays = [250, 400, 600, 900, 1200, 1600];
+  return delays[attempt] || 1600;
+}
+
+function hubFetchCloudDocForSaveVerify(dateKey, attempt, opts) {
   attempt = attempt || 0;
-  return hubFetchCloudDoc({ server: true }).then(function (doc) {
-    if (hubCloudHasRevenueDay(doc, dateKey) || attempt >= 2) {
-      return { doc: doc, attempt: attempt, hasDay: hubCloudHasRevenueDay(doc, dateKey) };
+  opts = opts || {};
+  let maxAttempts = typeof opts.maxAttempts === 'number' ? opts.maxAttempts : 6;
+  let minUpdatedAt = Number(opts.minUpdatedAt) || 0;
+  let preferServer = attempt === 0 || attempt % 2 === 0;
+
+  function readDoc() {
+    if (preferServer) {
+      return hubFetchCloudDoc({ server: true }).catch(function () {
+        return hubFetchCloudDoc({ server: false });
+      });
+    }
+    return hubFetchCloudDoc({ server: false });
+  }
+
+  return readDoc().then(function (doc) {
+    let hasDay = hubCloudHasRevenueDay(doc, dateKey);
+    let docUpdatedAt = hubCloudUpdatedAt(doc);
+    let updatedAtOk = minUpdatedAt > 0 && docUpdatedAt >= minUpdatedAt;
+    if (hasDay || updatedAtOk || attempt >= maxAttempts - 1) {
+      return {
+        doc: doc,
+        attempt: attempt,
+        hasDay: hasDay,
+        updatedAtOk: updatedAtOk,
+        docUpdatedAt: docUpdatedAt
+      };
     }
     return new Promise(function (resolve) {
       setTimeout(function () {
-        resolve(hubFetchCloudDocForSaveVerify(dateKey, attempt + 1));
-      }, 400);
+        resolve(hubFetchCloudDocForSaveVerify(dateKey, attempt + 1, opts));
+      }, hubRevenueSaveVerifyRetryDelayMs(attempt));
     });
   });
 }
@@ -1324,6 +1361,12 @@ function hubPushCloudDoc(force, _cloudDocOpt, callerHint) {
       if (typeof hubRevenueSaveMark === 'function') hubRevenueSaveMark('REF_SET_DONE');
       hubLastPushedHash = hash;
       hubLastSeenCloudUpdatedAt = Number(built.payload.updatedAt) || Date.now();
+      if (typeof hubIsRevenueInputSaveFlowActive === 'function' && hubIsRevenueInputSaveFlowActive()) {
+        hubRevenueSaveLastPushMeta = {
+          updatedAt: hubLastSeenCloudUpdatedAt,
+          dateKeys: Object.keys((built.payload.revenue && built.payload.revenue.revenueLog) || {})
+        };
+      }
       hubClearLocalDirtyForCloud('cloud-write-ok');
       if (built.guarded.action === 'allow_explicit_orca_delete') {
         hubClearExplicitOrcaDelete();
@@ -1850,14 +1893,30 @@ function hubRunRevenueCloudSaveOnce() {
   return beginRevenueCloudWrite();
 }
 
+function hubRevenueDayEntryHasData(day) {
+  if (!day || typeof day !== 'object') return false;
+  if (day.ramAccounts && Object.keys(day.ramAccounts).length) return true;
+  if (day.orcaAccounts && Object.keys(day.orcaAccounts).length) return true;
+  if (day.eniAccounts && Object.keys(day.eniAccounts).length) return true;
+  if (day.matrixAccounts && Object.keys(day.matrixAccounts).length) return true;
+  if (day.bitsyncAccounts && Object.keys(day.bitsyncAccounts).length) return true;
+  let keys = ['ram', 'orca', 'eni', 'cary', 'genesis', 'matrix', 'bitsync', 'total'];
+  for (let i = 0; i < keys.length; i++) {
+    if (Number(day[keys[i]]) > 0) return true;
+  }
+  return Object.keys(day).length > 0;
+}
+
 function hubCloudHasRevenueDay(doc, dateKey) {
   if (!doc || !dateKey) return false;
-  if (doc.revenue && doc.revenue.revenueLog && doc.revenue.revenueLog[dateKey]) return true;
+  if (doc.revenue && doc.revenue.revenueLog && doc.revenue.revenueLog[dateKey]) {
+    return hubRevenueDayEntryHasData(doc.revenue.revenueLog[dateKey]);
+  }
   if (typeof hubUnpackFirestorePayload === 'function') {
     let unpacked = hubUnpackFirestorePayload(doc);
     let rev = (unpacked.settings && unpacked.settings.revenueLog) ||
       (unpacked.revenue && unpacked.revenue.revenueLog) || {};
-    return !!rev[dateKey];
+    return hubRevenueDayEntryHasData(rev[dateKey]);
   }
   return false;
 }
@@ -1882,19 +1941,28 @@ function hubSaveRevenueWithCloudConfirm(opts) {
     staleCleared: staleCleared
   });
 
-  function fail(status, message, err) {
+  function fail(status, message, err, failOpts) {
+    failOpts = failOpts || {};
+    let refSetOk = failOpts.refSetCompleted === true || hubTraceRefSetSucceeded(hubRevenueSaveTraceLog);
     let diag = hubCollectRevenueSaveDiagnostics(savePath);
     hubLogRevenueSaveDiagnostics('fail:' + status, savePath, diag);
     hubRevenueSaveTrace('hubSaveRevenueWithCloudConfirm', 'ABORT', {
       status: status,
+      refSetCompleted: refSetOk,
       diagnostics: diag,
       errorMessage: err ? String(err.message || err) : null
     });
-    hubMarkPendingCloudWrite();
+    if (refSetOk) {
+      hubClearPendingCloudWrite();
+      hubSetSyncStatus('done', 'Cloud保存済み');
+    } else {
+      hubMarkPendingCloudWrite();
+    }
     return {
       ok: false,
       status: status,
-      message: message,
+      message: refSetOk ? (failOpts.successMessage || 'Cloud保存済み') : message,
+      refSetCompleted: refSetOk,
       diagnostics: diag,
       trace: hubRevenueSaveTraceLog.slice(),
       errorMessage: err ? String(err.message || err) : null
@@ -1921,6 +1989,7 @@ function hubSaveRevenueWithCloudConfirm(opts) {
 
   hubMarkLocalDirtyForCloud('revenue-save');
   hubSetSyncStatus('syncing', 'Cloud保存中…');
+  hubRevenueSaveLastPushMeta = null;
   let runPath = hubIsCloudWriteExplicitOnly() ? 'explicit-once' : 'automatic-open';
   hubLogRevenueSaveDiagnostics('run', savePath, { runPath: runPath });
   if (typeof hubRevenueSaveMark === 'function') hubRevenueSaveMark('PRE_CLOUD_START');
@@ -1947,22 +2016,46 @@ function hubSaveRevenueWithCloudConfirm(opts) {
         ok: true,
         status: 'synced',
         message: successMessage,
+        verifySoft: !!(verifyMeta && verifyMeta.verifySoft),
         trace: hubRevenueSaveTraceLog.slice(),
         timing: typeof hubRevenueSaveTimingReport === 'function' ? hubRevenueSaveTimingReport() : null
       };
     }
     if (cloudDateKey && typeof hubFetchCloudDocForSaveVerify === 'function') {
       hubRevenueSaveTrace('cloudDateVerify', 'ENTER', { cloudDateKey: cloudDateKey });
-      return hubFetchCloudDocForSaveVerify(cloudDateKey).then(function (verified) {
-        if (!verified.hasDay) {
-          hubRevenueSaveTrace('cloudDateVerify', 'ABORT', {
-            reason: 'cloud-day-missing',
-            attempt: verified.attempt
-          });
-          return fail('verify-failed', pendingMessage);
+      let verifyOpts = {
+        minUpdatedAt: hubRevenueSaveLastPushMeta && hubRevenueSaveLastPushMeta.updatedAt
+          ? hubRevenueSaveLastPushMeta.updatedAt
+          : 0
+      };
+      return hubFetchCloudDocForSaveVerify(cloudDateKey, 0, verifyOpts).then(function (verified) {
+        if (verified.hasDay) {
+          hubRevenueSaveTrace('cloudDateVerify', 'SUCCESS', { attempt: verified.attempt });
+          return finishCloudSuccess({ cloudDateKey: cloudDateKey, attempt: verified.attempt });
         }
-        hubRevenueSaveTrace('cloudDateVerify', 'SUCCESS', { attempt: verified.attempt });
-        return finishCloudSuccess({ cloudDateKey: cloudDateKey, attempt: verified.attempt });
+        let refSetOk = hubTraceRefSetSucceeded(hubRevenueSaveTraceLog);
+        let localStillOk = typeof opts.verifyFn !== 'function' || opts.verifyFn();
+        if (refSetOk && localStillOk) {
+          hubRevenueSaveTrace('cloudDateVerify', 'SUCCESS', {
+            reason: verified.updatedAtOk ? 'soft-updated-at' : 'soft-after-ref-set',
+            attempt: verified.attempt,
+            updatedAtOk: !!verified.updatedAtOk,
+            docUpdatedAt: verified.docUpdatedAt
+          });
+          return finishCloudSuccess({
+            cloudDateKey: cloudDateKey,
+            attempt: verified.attempt,
+            verifySoft: true
+          });
+        }
+        hubRevenueSaveTrace('cloudDateVerify', 'ABORT', {
+          reason: 'cloud-day-missing',
+          attempt: verified.attempt,
+          refSetOk: refSetOk,
+          localStillOk: localStillOk,
+          updatedAtOk: !!verified.updatedAtOk
+        });
+        return fail('verify-failed', pendingMessage, null, { refSetCompleted: refSetOk });
       });
     }
     return finishCloudSuccess(null);
@@ -2027,6 +2120,9 @@ if (typeof window !== 'undefined') {
   window.hubRevenueSaveTraceLog = hubRevenueSaveTraceLog;
   window.HUB_FIREBASE_JS_BUILD = HUB_FIREBASE_JS_BUILD;
   window.hubFetchCloudDocForSaveVerify = hubFetchCloudDocForSaveVerify;
+  window.hubTraceRefSetSucceeded = hubTraceRefSetSucceeded;
+  window.hubCloudHasRevenueDay = hubCloudHasRevenueDay;
+  window.hubRevenueDayEntryHasData = hubRevenueDayEntryHasData;
   window.hubSuspendCloudWrites = hubSuspendCloudWrites;
   window.hubResumeCloudWrites = hubResumeCloudWrites;
   window.hubAllowAutomaticCloudWrites = hubAllowAutomaticCloudWrites;

@@ -1,5 +1,5 @@
 /* OUKEI HUB Home UI — Ver2.0.7 */
-var HUB_HOME_JS_BUILD = 'Ver2.0.60/Build20260928-v005';
+var HUB_HOME_JS_BUILD = 'Ver2.0.61/Build20260929-v001';
 let homeCalView = { y: new Date().getFullYear(), m: new Date().getMonth() };
 let ramSavePending = null;
 let ramSalesDecreasePending = null;
@@ -2100,12 +2100,21 @@ function hubFinishRevenueInputSaveCloudOnly(toastMessage, verifyFn) {
     verifyFn: verifyFn,
     cloudVerifyDateKey: typeof todayKey === 'function' ? todayKey() : ''
   }).then(function (result) {
+    if (typeof refreshHomeAfterRevenueSave === 'function') refreshHomeAfterRevenueSave();
+    if (typeof hubRunDeferredRevenueDashboardRefresh === 'function') {
+      hubRunDeferredRevenueDashboardRefresh();
+    }
     if (result.ok) {
-      if (typeof showToast === 'function') showToast('☁️ Cloud同期済み');
+      if (typeof showToast === 'function') {
+        showToast(result.verifySoft ? '☁️ Cloud保存済み' : '☁️ Cloud同期済み');
+      }
       if (typeof hubSetSyncStatus === 'function') hubSetSyncStatus('done', 'Cloud同期済み');
+    } else if (result.refSetCompleted) {
+      if (typeof showToast === 'function') showToast('☁️ Cloud保存済み');
+      if (typeof hubSetSyncStatus === 'function') hubSetSyncStatus('done', 'Cloud保存済み');
     } else {
       if (typeof showToast === 'function') {
-        showToast(result.message || '端末に保存済み・Cloud同期待ち');
+        showToast('端末に保存済み・Cloud同期待ち');
       }
       if (typeof hubPresentRevenueSaveFailureDiagnostic === 'function') {
         hubPresentRevenueSaveFailureDiagnostic(

@@ -130,6 +130,7 @@ async function run() {
     };
 
     hubIsAdminUser = function () { return true; };
+    try { localStorage.setItem('hubRevenueSaveDiag', '1'); } catch (e) {}
     settings.revenueLog = settings.revenueLog || {};
     settings.revenueLog['2026-09-27'] = {
       ramAccounts: { r1: { todayRevenue: 10, revision: 9000 } },
@@ -171,13 +172,26 @@ async function run() {
     await hubPresentRevenueSaveFailureDiagnostic(failResult, null, { project: 'RAM' });
     var panelHiddenForUser = !!(panel && panel.classList.contains('hidden'));
 
+    try { localStorage.removeItem('hubRevenueSaveDiag'); } catch (e2) {}
+    hubIsAdminUser = function () { return true; };
+    if (panel) panel.classList.add('hidden');
+    await hubPresentRevenueSaveFailureDiagnostic(failResult, null, { project: 'RAM' });
+    var panelHiddenAdminNoDiagMode = !!(panel && panel.classList.contains('hidden'));
+    try { localStorage.setItem('hubRevenueSaveDiag', '1'); } catch (e3) {}
+    if (panel) panel.classList.add('hidden');
+    await hubPresentRevenueSaveFailureDiagnostic(failResult, null, { project: 'RAM' });
+    var panelVisibleAdminDiagMode = !!(panel && !panel.classList.contains('hidden'));
+    try { localStorage.removeItem('hubRevenueSaveDiag'); } catch (e4) {}
+
     return {
       successOk: okResult.ok,
       successPanelHidden: successPanelHidden,
       failPanelVisibleAdmin: panelVisible,
       failCopyHasClassification: copyText.indexOf('classification') >= 0,
       failClassificationCode: lastDiag && lastDiag.classification ? lastDiag.classification.code : null,
-      hiddenForNonAdmin: panelHiddenForUser
+      hiddenForNonAdmin: panelHiddenForUser,
+      hiddenForAdminWithoutDiagMode: panelHiddenAdminNoDiagMode,
+      visibleForAdminWithDiagMode: panelVisibleAdminDiagMode
     };
   });
 
@@ -187,6 +201,8 @@ async function run() {
   assert('UI: copy text includes classification', ui.failCopyHasClassification === true);
   assert('UI: failure classified A', ui.failClassificationCode === 'A');
   assert('UI: non-admin does not see panel', ui.hiddenForNonAdmin === true);
+  assert('UI: admin without diag mode hidden', ui.hiddenForAdminWithoutDiagMode === true);
+  assert('UI: admin with diag mode visible', ui.visibleForAdminWithDiagMode === true);
 
   await browser.close();
 }
