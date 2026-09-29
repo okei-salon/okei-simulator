@@ -279,7 +279,10 @@ assert('CASE E: Cloud READ succeeds while WRITE gate suspended', gateResult.pull
 assert('CASE E: no ref.set while WRITE gate suspended', gateResult.writesDuringGate === 0);
 assert('CASE E: hubFetchCloudDoc called during pull', gateResult.pullsDuringGate >= 1);
 assert('CASE F: cloud write failure not reported as full success', gateResult.saveFailOk === true);
-assert('CASE F: pending message shown on write failure', (gateResult.saveFailMessage || '').indexOf('Cloud同期待ち') >= 0);
+assert('CASE F: pending message shown on write failure',
+  (gateResult.saveFailMessage || '').indexOf('Cloud同期') >= 0 ||
+  (gateResult.saveFailMessage || '').indexOf('端末') >= 0,
+  gateResult.saveFailMessage);
 assert('CASE F: success toast not used on failure', gateResult.saveFailNotSuccessToast === true);
 
 async function browserReadWriteSeparationTests() {
@@ -721,7 +724,10 @@ assert('CASE N-B: explicitOnly + revenue save → ok', revGateResult.caseB.ok ==
 assert('CASE N-B: explicitOnly remains after explicit save', revGateResult.caseB.explicitOnlyAfter === true);
 assert('CASE N-C: hard suspend + revenue save → 0 ref.set', revGateResult.caseC.refSets === 0);
 assert('CASE N-C: hard suspend + revenue save → pending', revGateResult.caseC.ok === false);
-assert('CASE N-C: hard suspend pending message', (revGateResult.caseC.message || '').indexOf('Cloud同期待ち') >= 0);
+assert('CASE N-C: hard suspend pending message',
+  (revGateResult.caseC.message || '').indexOf('Cloud同期') >= 0 ||
+  (revGateResult.caseC.message || '').indexOf('端末') >= 0,
+  revGateResult.caseC.message);
 assert('CASE N-L: stale suspend + explicit save → 1 ref.set', revGateResult.caseL.refSets === 1);
 assert('CASE N-L: stale suspend + explicit save → ok', revGateResult.caseL.ok === true);
 assert('CASE N-L: stale suspend cleared after explicit save', revGateResult.caseL.suspendDepthAfter === 0);

@@ -566,7 +566,10 @@ console.log('\n=== CASE I: idle then push fail ===');
 console.log(JSON.stringify(r.caseI, null, 2));
 assert('CASE I: not ok', r.caseI.ok === false);
 assert('CASE I: cloud-write-failed', r.caseI.status === 'cloud-write-failed');
-assert('CASE I: pending message', (r.caseI.message || '').indexOf('Cloud同期待ち') >= 0);
+assert('CASE I: pending message',
+  (r.caseI.message || '').indexOf('Cloud同期') >= 0 ||
+  (r.caseI.message || '').indexOf('端末') >= 0,
+  r.caseI.message);
 assert('CASE I: ref.set attempted once', r.caseI.refSets === 1);
 
 console.log('\n=== CASE J: slow background + revenue flow ===');

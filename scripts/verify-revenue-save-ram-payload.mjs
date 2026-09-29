@@ -236,7 +236,7 @@ async function main() {
 
   assert('STRICT: updatedAt-only write fails verify', updatedAtOnlyFail.ok === false, JSON.stringify(updatedAtOnlyFail));
   assert('STRICT: status verify-failed', updatedAtOnlyFail.status === 'verify-failed', updatedAtOnlyFail.status);
-  assert('STRICT: RAM error message', String(updatedAtOnlyFail.message || '').indexOf('RAM') >= 0, updatedAtOnlyFail.message);
+  assert('STRICT: cloud sync fail message', String(updatedAtOnlyFail.message || '').indexOf('Cloud同期に失敗') >= 0, updatedAtOnlyFail.message);
   assert('STRICT: strictVerifyFail flag', updatedAtOnlyFail.strictVerifyFail === true, '');
 
   const pinBlocksMissing = await runCase(page, baseMocks(dateKey), `async function() {
@@ -298,6 +298,159 @@ async function main() {
 
   assert('ORCA: strict save ok', orcaCase.ok === true, JSON.stringify(orcaCase));
   assert('ORCA: orcaAccounts in payload', orcaCase.orcaIds.indexOf('o2') >= 0, JSON.stringify(orcaCase));
+
+  const orcaBitsyncRam = await runCase(page, baseMocks(dateKey), `async function() {
+    settings.revenueLog[dateKey] = {
+      orca: 110.99,
+      bitsync: 60.01,
+      total: 171,
+      orcaAccounts: { o1: { yesterdayAiProfit: 1, todayAffiliateProfit: 2, revision: 8000 } },
+      bitsyncAccounts: { b1: { nftSaleReward: 60, total: 60.01, revision: 8000 } },
+      ramAccounts: { r1: { todayRevenue: 0.3, revision: 9000 } },
+      ram: 0.3
+    };
+    hubLocalUpdatedAt = Date.now();
+    var result = await hubPersistThenCloudConfirm(function () {
+      pdMergeRevenueEntry(dateKey, {
+        ramAccounts: { r1: { todayRevenue: 0.3, revision: 9000 } },
+        ram: 0.3
+      });
+      hubFlushRevenueSaveLocalPersist();
+    }, '✅ 保存しました', function () {
+      return !!(settings.revenueLog[dateKey].ramAccounts && settings.revenueLog[dateKey].ramAccounts.r1);
+    }, hubRevenueSaveMeta('ram', dateKey));
+    var payload = window.__PAYLOAD_REFSETS__[0];
+    var day = payload.revenue.revenueLog[dateKey];
+    var ramAcc = day.ramAccounts && day.ramAccounts.r1;
+    return {
+      ok: result.ok,
+      ramTodayRevenue: ramAcc && ramAcc.todayRevenue,
+      orcaIds: Object.keys(day.orcaAccounts || {}),
+      bitsyncIds: Object.keys(day.bitsyncAccounts || {}),
+      ramIds: Object.keys(day.ramAccounts || {})
+    };
+  }`);
+
+  assert('ORCA+BS+RAM: save ok', orcaBitsyncRam.ok === true, JSON.stringify(orcaBitsyncRam));
+  assert('ORCA+BS+RAM: ram todayRevenue in payload', Number(orcaBitsyncRam.ramTodayRevenue) === 0.3,
+    'todayRevenue=' + orcaBitsyncRam.ramTodayRevenue);
+  assert('ORCA+BS+RAM: orca preserved', orcaBitsyncRam.orcaIds.indexOf('o1') >= 0, JSON.stringify(orcaBitsyncRam.orcaIds));
+  assert('ORCA+BS+RAM: bitsync preserved', orcaBitsyncRam.bitsyncIds.indexOf('b1') >= 0, JSON.stringify(orcaBitsyncRam.bitsyncIds));
+  assert('ORCA+BS+RAM: ramAccounts pinned', orcaBitsyncRam.ramIds.indexOf('r1') >= 0, JSON.stringify(orcaBitsyncRam.ramIds));
+
+  const snapshotMissing = await runCase(page, baseMocks(dateKey), `async function() {
+    settings.revenueLog[dateKey] = {
+      ramAccounts: { r1: { todayRevenue: 0.3, revision: 9000 } },
+      ram: 0.3,
+      total: 171.3
+    };
+    hubLocalUpdatedAt = Date.now();
+    var origCapture = hubCaptureRevenueSaveSnapshotFromMeta;
+    hubCaptureRevenueSaveSnapshotFromMeta = function () { return null; };
+    var result = await hubPersistThenCloudConfirm(function () {
+      pdMergeRevenueEntry(dateKey, {
+        ramAccounts: { r1: { todayRevenue: 0.3, revision: 9000 } },
+        ram: 0.3
+      });
+      hubFlushRevenueSaveLocalPersist();
+    }, '✅ 保存しました', function () {
+      return !!(settings.revenueLog[dateKey].ramAccounts.r1);
+    }, hubRevenueSaveMeta('ram', dateKey));
+    hubCaptureRevenueSaveSnapshotFromMeta = origCapture;
+    return {
+      ok: result.ok,
+      status: result.status,
+      refSets: (window.__PAYLOAD_REFSETS__ || []).length,
+      message: result.message
+    };
+  }`);
+
+  assert('SNAP-MISS: fails before cloud write', snapshotMissing.ok === false, JSON.stringify(snapshotMissing));
+  assert('SNAP-MISS: no ref.set', snapshotMissing.refSets === 0, 'refSets=' + snapshotMissing.refSets);
+  assert('SNAP-MISS: snapshot-missing or verify-failed', snapshotMissing.status === 'snapshot-missing' || snapshotMissing.status === 'verify-failed', snapshotMissing.status);
+
+  const historyPreserve = await runCase(page, baseMocks(dateKey), `async function() {
+    settings.revenueLog['2026-09-28'] = {
+      ramAccounts: { r1: { todayRevenue: 190.11, revision: 8000 } },
+      ram: 190.11,
+      total: 190.11
+    };
+    settings.revenueLog[dateKey] = {
+      ramAccounts: { r1: { todayRevenue: 0.3, revision: 9000 } },
+      ram: 0.3,
+      total: 0.3
+    };
+    hubLocalUpdatedAt = Date.now();
+    var result = await hubPersistThenCloudConfirm(function () {
+      pdMergeRevenueEntry(dateKey, {
+        ramAccounts: { r1: { todayRevenue: 0.3, revision: 9000 } },
+        ram: 0.3
+      });
+      hubFlushRevenueSaveLocalPersist();
+    }, '✅ 保存しました', function () {
+      return !!(settings.revenueLog[dateKey].ramAccounts.r1);
+    }, hubRevenueSaveMeta('ram', dateKey));
+    var payload = window.__PAYLOAD_REFSETS__[0];
+    var prev = payload.revenue.revenueLog['2026-09-28'];
+    var prevAcc = prev && prev.ramAccounts && prev.ramAccounts.r1;
+    return {
+      ok: result.ok,
+      prevTodayRevenue: prevAcc && prevAcc.todayRevenue,
+      prevCount: prev && prev.ramAccounts ? Object.keys(prev.ramAccounts).length : 0
+    };
+  }`);
+
+  assert('HISTORY: save ok', historyPreserve.ok === true, JSON.stringify(historyPreserve));
+  assert('HISTORY: 2026-09-28 todayRevenue preserved', Number(historyPreserve.prevTodayRevenue) === 190.11,
+    'todayRevenue=' + historyPreserve.prevTodayRevenue);
+  assert('HISTORY: 2026-09-28 accounts preserved', historyPreserve.prevCount === 1, 'count=' + historyPreserve.prevCount);
+
+  const serverMismatch = await runCase(page, baseMocks(dateKey), `async function() {
+    settings.revenueLog[dateKey] = {
+      ramAccounts: { r1: { todayRevenue: 0.3, revision: 9000 } },
+      ram: 0.3,
+      total: 171.3,
+      orca: 110.99,
+      bitsync: 60.01
+    };
+    hubLocalUpdatedAt = Date.now();
+    var origRef = window.hubFirestoreDocRef;
+    window.hubFirestoreDocRef = function () {
+      return {
+        set: function (payload) {
+          window.__PAYLOAD_REFSETS__.push(JSON.parse(JSON.stringify(payload)));
+          cloudPayload.updatedAt = (payload && payload.updatedAt) || Date.now();
+          if (payload && payload.revenue && payload.revenue.revenueLog) {
+            var day = JSON.parse(JSON.stringify(payload.revenue.revenueLog[dateKey] || {}));
+            day.ram = 0;
+            day.ramAccounts = {};
+            cloudPayload.revenue.revenueLog[dateKey] = day;
+          }
+          return Promise.resolve();
+        },
+        get: function () { return origRef().get(); }
+      };
+    };
+    var result = await hubPersistThenCloudConfirm(function () {
+      pdMergeRevenueEntry(dateKey, {
+        ramAccounts: { r1: { todayRevenue: 0.3, revision: 9000 } },
+        ram: 0.3
+      });
+      hubFlushRevenueSaveLocalPersist();
+    }, '✅ 保存しました', function () {
+      return !!(settings.revenueLog[dateKey].ramAccounts.r1);
+    }, hubRevenueSaveMeta('ram', dateKey));
+    return {
+      ok: result.ok,
+      status: result.status,
+      message: result.message,
+      strictVerifyFail: !!result.strictVerifyFail
+    };
+  }`);
+
+  assert('SERVER: ram mismatch fails', serverMismatch.ok === false, JSON.stringify(serverMismatch));
+  assert('SERVER: verify-failed status', serverMismatch.status === 'verify-failed', serverMismatch.status);
+  assert('SERVER: fail message', String(serverMismatch.message || '').indexOf('Cloud同期に失敗') >= 0, serverMismatch.message);
 
   await browser.close();
   console.log('\n' + passed + '/' + (passed + failed) + ' PASS');

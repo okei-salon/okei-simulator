@@ -195,7 +195,7 @@ async function main() {
 
   assert('STRICT: updatedAt-only ref.set fails', softCase.ok === false, JSON.stringify(softCase));
   assert('STRICT: status verify-failed', softCase.status === 'verify-failed', softCase.status);
-  assert('STRICT: RAM verify message', String(softCase.message || '').indexOf('RAM') >= 0, softCase.message);
+  assert('STRICT: cloud sync fail message', String(softCase.message || '').indexOf('Cloud同期に失敗') >= 0, softCase.message);
   assert('STRICT: strictVerifyFail set', softCase.strictVerifyFail === true, '');
 
   const iphone = await browser.newContext({ ...devices['iPhone 13'] });

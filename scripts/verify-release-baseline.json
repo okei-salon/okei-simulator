@@ -1,5 +1,5 @@
 {
-  "minPassed": 817,
-  "note": "Baseline after RAM payload pin + strict Cloud verify (+17 net). verify:release Passed 817.",
+  "minPassed": 831,
+  "note": "Baseline after Ver2.0.64 strict Cloud sync verify + locked snapshot (+14 net). verify:release Passed 831.",
   "updatedAt": "2026-09-29"
 }

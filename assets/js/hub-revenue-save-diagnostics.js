@@ -1,5 +1,5 @@
 /* OUKEI HUB Revenue Save Failure Diagnostics — read-only observation UI (admin only) */
-var HUB_REVENUE_SAVE_DIAG_JS_BUILD = 'Ver2.0.63/Build20260929-v003';
+var HUB_REVENUE_SAVE_DIAG_JS_BUILD = 'Ver2.0.64/Build20260929-v004';
 
 var hubRevenueSaveDiagnosticContext = null;
 var hubRevenueSaveLastFailureDiagnostic = null;
@@ -377,17 +377,17 @@ function hubGuessRevenueSaveContextFromUi() {
   var ctx = { dateKey: typeof todayKey === 'function' ? todayKey() : null };
   try {
     if (typeof eniOrgPage !== 'undefined' && eniOrgPage && !eniOrgPage.classList.contains('hidden')) {
-      ctx.project = 'ENI';
+      ctx.projectKey = 'eni';
     } else if (typeof orcaOrgPage !== 'undefined' && orcaOrgPage && !orcaOrgPage.classList.contains('hidden')) {
-      ctx.project = 'ORCA';
+      ctx.projectKey = 'orca';
     } else if (document.getElementById('matrixRevenuePage') &&
       !document.getElementById('matrixRevenuePage').classList.contains('hidden')) {
-      ctx.project = 'MATRIX';
+      ctx.projectKey = 'matrix';
     } else if (document.getElementById('bitsyncRevenuePage') &&
       !document.getElementById('bitsyncRevenuePage').classList.contains('hidden')) {
-      ctx.project = 'BITSYNC';
+      ctx.projectKey = 'bitsync';
     } else {
-      ctx.project = 'RAM';
+      ctx.projectKey = 'ram';
     }
   } catch (e) {}
   return ctx;

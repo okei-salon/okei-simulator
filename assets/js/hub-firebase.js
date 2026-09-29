@@ -2,7 +2,9 @@
  * Google 認証後に LocalStorage / Firestore を同期
  * 組織図・ポートフォリオはフィールド単位でマージして端末間の上書きを防ぐ
  */
-var HUB_FIREBASE_JS_BUILD = 'Ver2.0.63/Build20260929-v003';
+var HUB_FIREBASE_JS_BUILD = 'Ver2.0.64/Build20260929-v004';
+
+var HUB_REVENUE_CLOUD_SYNC_FAIL_MSG = 'Cloud同期に失敗しました。端末には保存されています';
 
 var hubFirebaseApp = null;
 var hubFirebaseAuth = null;
@@ -46,8 +48,12 @@ var hubCloudWriteSuppressDepth = 0;
 var hubRevenueInputSaveDepth = 0;
 /** Last revenue-save ref.set payload meta (verify fallback after write). */
 var hubRevenueSaveLastPushMeta = null;
-/** Local revenue-save snapshot pinned through push + server verify (cleared on flow end). */
+/** Local revenue-save snapshot pinned through push + server verify (cleared after verify). */
 var hubRevenueSavePendingSnapshot = null;
+/** Immutable snapshot locked for entire revenue-save cloud path (survives flow depth changes). */
+var hubRevenueSaveLockedSnapshot = null;
+/** Payload copy sent on last revenue-save ref.set (for post-write diagnostics). */
+var hubRevenueSaveLastWrittenPayload = null;
 
 var HUB_REVENUE_PROJECT_ACCOUNT_KEYS = {
   ram: 'ramAccounts',
@@ -126,9 +132,6 @@ function hubBeginRevenueInputSaveFlow() {
 
 function hubEndRevenueInputSaveFlow() {
   if (hubRevenueInputSaveDepth > 0) hubRevenueInputSaveDepth -= 1;
-  if (hubRevenueInputSaveDepth <= 0 && typeof hubClearRevenueSavePendingSnapshot === 'function') {
-    hubClearRevenueSavePendingSnapshot();
-  }
   try {
     console.log('[hubRevenueSave] end revenue-input save flow', {
       depth: hubRevenueInputSaveDepth
@@ -389,9 +392,10 @@ function hubFetchCloudDocForSaveVerify(dateKey, attempt, opts) {
     let docUpdatedAt = hubCloudUpdatedAt(doc);
     let updatedAtOk = minUpdatedAt > 0 && docUpdatedAt >= minUpdatedAt;
     let strictSnapshot = !!opts.strictSnapshot;
+    let verifySnapshot = opts.revenueSnapshot || hubGetRevenueSaveLockedSnapshot();
     let snapshotReady = false;
-    if (strictSnapshot && hubRevenueSavePendingSnapshot) {
-      snapshotReady = hubCloudDocMatchesRevenueSnapshot(doc, hubRevenueSavePendingSnapshot).ok;
+    if (strictSnapshot && verifySnapshot) {
+      snapshotReady = hubCloudDocMatchesRevenueSnapshot(doc, verifySnapshot).ok;
     }
     if (snapshotReady || (!strictSnapshot && hasDay) || attempt >= maxAttempts - 1) {
       return {
@@ -1319,6 +1323,10 @@ function hubPushCloudDoc(force, _cloudDocOpt, callerHint) {
       cloudDoc,
       callerHint || 'hubPushCloudDoc'
     );
+    let activeSnap = hubGetRevenueSaveLockedSnapshot();
+    if (activeSnap) {
+      hubPinRevenueSaveSnapshotToPayload(payload, activeSnap);
+    }
     try {
       console.log('[hubCloudSave] pre-write', {
         caller: callerHint || 'hubPushCloudDoc',
@@ -1328,6 +1336,7 @@ function hubPushCloudDoc(force, _cloudDocOpt, callerHint) {
         preferLocal: preferLocal,
         orcaAction: guarded.action,
         destructiveAction: destructive.action,
+        revenueSnapshotPinned: !!(activeSnap && activeSnap.requireAccounts),
         droppedAccountIds: destructive.droppedIds && destructive.droppedIds.slice(0, 20),
         reducedRevAccountIds: destructive.reducedRevIds && destructive.reducedRevIds.slice(0, 20),
         reducedSalesAccountIds: destructive.reducedSalesIds && destructive.reducedSalesIds.slice(0, 20),
@@ -1363,18 +1372,20 @@ function hubPushCloudDoc(force, _cloudDocOpt, callerHint) {
       });
     }
 
-    if (hubRevenueSavePendingSnapshot && built.payload) {
-      hubPinRevenueSaveSnapshotToPayload(built.payload, hubRevenueSavePendingSnapshot);
-      if (!hubPayloadMatchesRevenueSnapshot(built.payload, hubRevenueSavePendingSnapshot)) {
+    let activeSnap = hubGetRevenueSaveLockedSnapshot();
+    if (activeSnap && built.payload) {
+      hubPinRevenueSaveSnapshotToPayload(built.payload, activeSnap);
+      if (!hubPayloadMatchesRevenueSnapshot(built.payload, activeSnap)) {
         hubRevenueSaveTrace('ref.set', 'ABORT', {
           reason: 'payload-missing-revenue-snapshot',
-          projectKey: hubRevenueSavePendingSnapshot.projectKey,
-          dateKey: hubRevenueSavePendingSnapshot.dateKey
+          projectKey: activeSnap.projectKey,
+          dateKey: activeSnap.dateKey
         });
         hubSetSyncStatus('pending', 'Cloud同期待ち');
         if (typeof hubMarkPendingCloudWrite === 'function') hubMarkPendingCloudWrite();
         return Promise.resolve(false);
       }
+      hubRevenueSaveLastWrittenPayload = JSON.parse(JSON.stringify(built.payload));
     }
 
     console.log('[hubOrcaPushGuard] ref.set about to write', {
@@ -1387,11 +1398,13 @@ function hubPushCloudDoc(force, _cloudDocOpt, callerHint) {
       orcaEmptyWipeBlocked: !!built.guarded.blocked,
       schemaVersion: built.payload.schemaVersion,
       rematchAttempts: n,
-      revenueSnapshot: hubRevenueSavePendingSnapshot
+      revenueSnapshot: activeSnap
         ? {
-            projectKey: hubRevenueSavePendingSnapshot.projectKey,
-            dateKey: hubRevenueSavePendingSnapshot.dateKey,
-            accountCount: hubRevenueSavePendingSnapshot.accountCount
+            projectKey: activeSnap.projectKey,
+            dateKey: activeSnap.dateKey,
+            accountCount: activeSnap.accountCount,
+            expectedTotal: activeSnap.expectedTotal,
+            expectedDayTotal: activeSnap.expectedDayTotal
           }
         : null,
       caller: (built.guarded.log && built.guarded.log.caller) || callerHint || 'hubPushCloudDoc'
@@ -1411,7 +1424,11 @@ function hubPushCloudDoc(force, _cloudDocOpt, callerHint) {
       if (built.destructive && built.destructive.action === 'allow_explicit_hub_reset') {
         hubClearExplicitHubDataReset();
       }
-      hubSetSyncStatus('done');
+      if (typeof hubIsRevenueInputSaveFlowActive === 'function' && hubIsRevenueInputSaveFlowActive()) {
+        hubSetSyncStatus('syncing', 'Cloud確認中…');
+      } else {
+        hubSetSyncStatus('done');
+      }
       if (hubShouldTraceRevenueRefSet()) {
         hubRevenueSaveTrace('ref.set', 'SUCCESS', {
           updatedAt: built.payload.updatedAt
@@ -1805,7 +1822,7 @@ function hubPullCloudData(reason) {
     } catch (e) {}
     return Promise.resolve(false);
   }
-  if (hubRevenueSavePendingSnapshot) {
+  if (hubGetRevenueSaveLockedSnapshot()) {
     try {
       console.log('[hubCloudPull] skipped during revenue snapshot verify', { reason: reason || '' });
     } catch (e) {}
@@ -1989,8 +2006,47 @@ function hubGetRevenueSavePendingSnapshot() {
   return hubRevenueSavePendingSnapshot;
 }
 
+function hubGetRevenueSaveLockedSnapshot() {
+  return hubRevenueSaveLockedSnapshot || hubRevenueSavePendingSnapshot;
+}
+
 function hubClearRevenueSavePendingSnapshot() {
   hubRevenueSavePendingSnapshot = null;
+}
+
+function hubFinalizeRevenueSaveSnapshot() {
+  hubRevenueSaveLockedSnapshot = null;
+  hubRevenueSavePendingSnapshot = null;
+  hubRevenueSaveLastWrittenPayload = null;
+}
+
+function hubReadRevenueEntryForSave(dateKey) {
+  if (!dateKey) return null;
+  if (typeof getRevenueEntry === 'function') {
+    let fromGetter = getRevenueEntry(dateKey);
+    if (fromGetter && typeof fromGetter === 'object') return fromGetter;
+  }
+  if (typeof settings !== 'undefined' && settings.revenueLog && settings.revenueLog[dateKey]) {
+    return settings.revenueLog[dateKey];
+  }
+  if (typeof hubPackLocalData === 'function') {
+    let local = hubPackLocalData();
+    if (local.settings && local.settings.revenueLog && local.settings.revenueLog[dateKey]) {
+      return local.settings.revenueLog[dateKey];
+    }
+  }
+  return null;
+}
+
+function hubLockRevenueSaveSnapshot(snapshot) {
+  if (!snapshot) {
+    hubRevenueSaveLockedSnapshot = null;
+    hubRevenueSavePendingSnapshot = null;
+    return null;
+  }
+  hubRevenueSaveLockedSnapshot = JSON.parse(JSON.stringify(snapshot));
+  hubRevenueSavePendingSnapshot = hubRevenueSaveLockedSnapshot;
+  return hubRevenueSaveLockedSnapshot;
 }
 
 function hubRevenueAccountEntryHasSavedData(projectKey, accountEntry) {
@@ -2030,14 +2086,28 @@ function hubFilterRevenueSaveAccountIds(projectKey, accounts) {
   return out;
 }
 
+function hubNormalizeRevenueSaveMeta(meta) {
+  if (!meta || typeof meta !== 'object') return null;
+  let out = Object.assign({}, meta);
+  if (!out.projectKey && out.project) {
+    let p = String(out.project).toLowerCase();
+    if (HUB_REVENUE_PROJECT_ACCOUNT_KEYS[p]) out.projectKey = p;
+  }
+  if (!out.dateKey && typeof todayKey === 'function') out.dateKey = todayKey();
+  return out.projectKey && out.dateKey ? out : null;
+}
+
 function hubCaptureRevenueSaveSnapshotFromMeta(meta) {
-  hubClearRevenueSavePendingSnapshot();
-  if (!meta || !meta.projectKey || !meta.dateKey) return null;
+  hubFinalizeRevenueSaveSnapshot();
+  meta = hubNormalizeRevenueSaveMeta(meta);
+  if (!meta) return null;
   let accountMapKey = HUB_REVENUE_PROJECT_ACCOUNT_KEYS[meta.projectKey];
   if (!accountMapKey) return null;
-  if (typeof getRevenueEntry !== 'function') return null;
-  let entry = getRevenueEntry(meta.dateKey);
+  let entry = hubReadRevenueEntryForSave(meta.dateKey);
   if (!entry || typeof entry !== 'object') entry = {};
+  if (typeof pdRecalculateRevenueEntry === 'function') {
+    entry = pdRecalculateRevenueEntry(JSON.parse(JSON.stringify(entry)), meta.dateKey);
+  }
   let accounts = entry[accountMapKey] || {};
   let accountIds = hubFilterRevenueSaveAccountIds(meta.projectKey, accounts);
   let requireAccounts = accountIds.length > 0;
@@ -2045,26 +2115,31 @@ function hubCaptureRevenueSaveSnapshotFromMeta(meta) {
   let expectedTotal = typeof pdSumProjectDayRevenue === 'function'
     ? Number(pdSumProjectDayRevenue(entry, meta.projectKey, meta.dateKey)) || 0
     : Number(entry[meta.projectKey]) || 0;
-  hubRevenueSavePendingSnapshot = {
+  expectedTotal = Math.round(expectedTotal * 10000) / 10000;
+  if (meta.projectKey === 'ram' && expectedTotal <= 0) return null;
+  let snapshot = {
     projectKey: meta.projectKey,
     dateKey: meta.dateKey,
     accountMapKey: accountMapKey,
     accountIds: accountIds.slice(),
     accounts: JSON.parse(JSON.stringify(accounts)),
     accountCount: accountIds.length,
-    expectedTotal: Math.round(expectedTotal * 10000) / 10000,
+    expectedTotal: expectedTotal,
+    expectedDayTotal: Math.round((Number(entry.total) || 0) * 10000) / 10000,
     entry: JSON.parse(JSON.stringify(entry)),
     requireAccounts: true
   };
+  hubLockRevenueSaveSnapshot(snapshot);
   try {
     console.log('[hubRevenueSave] snapshot captured', {
       projectKey: meta.projectKey,
       dateKey: meta.dateKey,
       accountCount: accountIds.length,
-      expectedTotal: hubRevenueSavePendingSnapshot.expectedTotal
+      expectedTotal: snapshot.expectedTotal,
+      expectedDayTotal: snapshot.expectedDayTotal
     });
   } catch (e) {}
-  return hubRevenueSavePendingSnapshot;
+  return hubGetRevenueSaveLockedSnapshot();
 }
 
 function hubPinRevenueSaveSnapshotToPayload(payload, snapshot) {
@@ -2119,6 +2194,10 @@ function hubPayloadMatchesRevenueSnapshot(payload, snapshot) {
     ? payload.revenue.revenueLog[snapshot.dateKey]
     : null;
   if (!day) return false;
+  if (snapshot.projectKey === 'ram') {
+    if (Number(day.ram) <= 0) return false;
+    if (!day.ramAccounts || !Object.keys(day.ramAccounts).length) return false;
+  }
   let map = day[snapshot.accountMapKey] || {};
   let ids = hubFilterRevenueSaveAccountIds(snapshot.projectKey, map);
   if (ids.length !== snapshot.accountCount) return false;
@@ -2133,7 +2212,12 @@ function hubPayloadMatchesRevenueSnapshot(payload, snapshot) {
     ? Number(pdSumProjectDayRevenue(day, snapshot.projectKey, snapshot.dateKey)) || 0
     : Number(day[snapshot.projectKey]) || 0;
   total = Math.round(total * 10000) / 10000;
-  return Math.abs(total - snapshot.expectedTotal) < 0.0001;
+  if (Math.abs(total - snapshot.expectedTotal) >= 0.0001) return false;
+  if (snapshot.expectedDayTotal != null) {
+    let dayTotal = Math.round((Number(day.total) || 0) * 10000) / 10000;
+    if (Math.abs(dayTotal - snapshot.expectedDayTotal) >= 0.0001) return false;
+  }
+  return true;
 }
 
 function hubCloudDocMatchesRevenueSnapshot(doc, snapshot) {
@@ -2155,6 +2239,14 @@ function hubCloudDocMatchesRevenueSnapshot(doc, snapshot) {
       return { ok: false, reason: 'account-value-mismatch', accountId: id };
     }
   }
+  if (snapshot.projectKey === 'ram') {
+    if (Number(day.ram) <= 0) {
+      return { ok: false, reason: 'ram-zero-on-cloud' };
+    }
+    if (!day.ramAccounts || !Object.keys(day.ramAccounts).length) {
+      return { ok: false, reason: 'ram-accounts-empty-on-cloud' };
+    }
+  }
   let total = typeof pdSumProjectDayRevenue === 'function'
     ? Number(pdSumProjectDayRevenue(day, snapshot.projectKey, snapshot.dateKey)) || 0
     : Number(day[snapshot.projectKey]) || 0;
@@ -2162,18 +2254,27 @@ function hubCloudDocMatchesRevenueSnapshot(doc, snapshot) {
   if (Math.abs(total - snapshot.expectedTotal) >= 0.0001) {
     return { ok: false, reason: 'total-mismatch', cloudTotal: total, expectedTotal: snapshot.expectedTotal };
   }
+  if (snapshot.expectedDayTotal != null) {
+    let dayTotal = Math.round((Number(day.total) || 0) * 10000) / 10000;
+    if (Math.abs(dayTotal - snapshot.expectedDayTotal) >= 0.0001) {
+      return {
+        ok: false,
+        reason: 'day-total-mismatch',
+        cloudDayTotal: dayTotal,
+        expectedDayTotal: snapshot.expectedDayTotal
+      };
+    }
+  }
   return { ok: true };
 }
 
 function hubRevenueSaveCloudVerifyFailMessage(snapshot) {
-  let labels = { ram: 'RAM', orca: 'ORCA', eni: 'ENI', matrix: 'MATRIX', bitsync: 'BITSYNC' };
-  let name = labels[snapshot && snapshot.projectKey] || '収益';
-  return name + 'のCloud保存を確認できませんでした';
+  return HUB_REVENUE_CLOUD_SYNC_FAIL_MSG;
 }
 
 /** During pull/merge: never drop pending local revenue-save account maps into empty cloud shells. */
 function hubProtectPendingRevenueSaveDayEntry(base, cloudEntry, localEntry) {
-  let snap = hubRevenueSavePendingSnapshot;
+  let snap = hubGetRevenueSaveLockedSnapshot();
   if (!snap || !snap.dateKey || !snap.accountMapKey || !snap.requireAccounts) return base;
   let amKey = snap.accountMapKey;
   let localMap = localEntry && localEntry[amKey];
@@ -2234,9 +2335,9 @@ function hubSaveRevenueWithCloudConfirm(opts) {
   function fail(status, message, err, failOpts) {
     failOpts = failOpts || {};
     let refSetOk = failOpts.refSetCompleted === true || hubTraceRefSetSucceeded(hubRevenueSaveTraceLog);
-    let snapshot = opts.revenueSaveSnapshot || hubRevenueSavePendingSnapshot;
-    let strictVerifyFail = !!(snapshot && snapshot.requireAccounts &&
-      (status === 'verify-failed' || status === 'payload-missing-snapshot'));
+    let snapshot = opts.revenueSaveSnapshot || hubGetRevenueSaveLockedSnapshot();
+    let requireStrictCloud = !!opts.requireStrictCloudVerify;
+    let strictVerifyFail = !!(requireStrictCloud || (snapshot && snapshot.requireAccounts));
     let diag = hubCollectRevenueSaveDiagnostics(savePath);
     hubLogRevenueSaveDiagnostics('fail:' + status, savePath, diag);
     hubRevenueSaveTrace('hubSaveRevenueWithCloudConfirm', 'ABORT', {
@@ -2246,22 +2347,16 @@ function hubSaveRevenueWithCloudConfirm(opts) {
       diagnostics: diag,
       errorMessage: err ? String(err.message || err) : null
     });
-    if (refSetOk && !strictVerifyFail) {
-      hubClearPendingCloudWrite();
-      hubSetSyncStatus('done', 'Cloud保存済み');
-    } else {
-      hubMarkPendingCloudWrite();
-      if (strictVerifyFail) hubSetSyncStatus('pending', 'Cloud同期待ち');
-    }
-    let userMessage = message;
-    if (strictVerifyFail && snapshot) {
-      userMessage = hubRevenueSaveCloudVerifyFailMessage(snapshot);
-    }
+    hubMarkPendingCloudWrite();
+    hubSetSyncStatus('pending', 'Cloud同期待ち');
+    let userMessage = strictVerifyFail
+      ? HUB_REVENUE_CLOUD_SYNC_FAIL_MSG
+      : (message || HUB_REVENUE_CLOUD_SYNC_FAIL_MSG);
     return {
       ok: false,
       status: status,
       message: userMessage,
-      refSetCompleted: refSetOk && !strictVerifyFail,
+      refSetCompleted: false,
       strictVerifyFail: strictVerifyFail,
       diagnostics: diag,
       trace: hubRevenueSaveTraceLog.slice(),
@@ -2287,11 +2382,28 @@ function hubSaveRevenueWithCloudConfirm(opts) {
     return Promise.resolve(fail('offline', pendingMessage));
   }
 
+  let requireStrictCloud = opts.requireStrictCloudVerify === true ||
+    (typeof opts.verifyFn === 'function' && !!opts.verifyFn());
+  if (requireStrictCloud && !(opts.revenueSaveSnapshot || hubGetRevenueSaveLockedSnapshot())) {
+    let autoMeta = hubNormalizeRevenueSaveMeta(opts.revenueSaveMeta || {
+      dateKey: opts.cloudVerifyDateKey || (typeof todayKey === 'function' ? todayKey() : ''),
+      projectKey: opts.revenueProjectKey || 'ram'
+    });
+    if (autoMeta && typeof hubCaptureRevenueSaveSnapshotFromMeta === 'function') {
+      hubCaptureRevenueSaveSnapshotFromMeta(autoMeta);
+    }
+  }
+  let revenueSnapshot = opts.revenueSaveSnapshot || hubGetRevenueSaveLockedSnapshot();
+  if (requireStrictCloud && (!revenueSnapshot || !revenueSnapshot.requireAccounts)) {
+    hubRevenueSaveTrace('hubSaveRevenueWithCloudConfirm', 'ABORT', { reason: 'snapshot-missing-before-push' });
+    return Promise.resolve(fail('snapshot-missing', HUB_REVENUE_CLOUD_SYNC_FAIL_MSG));
+  }
+
   hubMarkLocalDirtyForCloud('revenue-save');
   hubSetSyncStatus('syncing', 'Cloud保存中…');
   hubRevenueSaveLastPushMeta = null;
   let runPath = hubIsCloudWriteExplicitOnly() ? 'explicit-once' : 'automatic-open';
-  hubLogRevenueSaveDiagnostics('run', savePath, { runPath: runPath });
+  hubLogRevenueSaveDiagnostics('run', savePath, { runPath: runPath, requireStrictCloud: requireStrictCloud });
   if (typeof hubRevenueSaveMark === 'function') hubRevenueSaveMark('PRE_CLOUD_START');
   return hubRunRevenueCloudSaveOnce().then(function (written) {
     if (!written) {
@@ -2321,26 +2433,29 @@ function hubSaveRevenueWithCloudConfirm(opts) {
         timing: typeof hubRevenueSaveTimingReport === 'function' ? hubRevenueSaveTimingReport() : null
       };
     }
-    let revenueSnapshot = opts.revenueSaveSnapshot || hubRevenueSavePendingSnapshot;
     if (cloudDateKey && typeof hubFetchCloudDocForSaveVerify === 'function') {
+      let strictSnapshot = requireStrictCloud || !!(revenueSnapshot && revenueSnapshot.requireAccounts);
       hubRevenueSaveTrace('cloudDateVerify', 'ENTER', {
         cloudDateKey: cloudDateKey,
-        strictSnapshot: !!(revenueSnapshot && revenueSnapshot.requireAccounts)
+        strictSnapshot: strictSnapshot
       });
       let verifyOpts = {
         minUpdatedAt: hubRevenueSaveLastPushMeta && hubRevenueSaveLastPushMeta.updatedAt
           ? hubRevenueSaveLastPushMeta.updatedAt
           : 0,
-        strictSnapshot: !!(revenueSnapshot && revenueSnapshot.requireAccounts)
+        strictSnapshot: strictSnapshot,
+        revenueSnapshot: revenueSnapshot,
+        maxAttempts: strictSnapshot ? 8 : 6
       };
       return hubFetchCloudDocForSaveVerify(cloudDateKey, 0, verifyOpts).then(function (verified) {
-        if (revenueSnapshot && revenueSnapshot.requireAccounts) {
+        if (strictSnapshot && revenueSnapshot && revenueSnapshot.requireAccounts) {
           let match = hubCloudDocMatchesRevenueSnapshot(verified.doc, revenueSnapshot);
-          if (match.ok) {
+          if (match.ok && verified.snapshotReady) {
             hubRevenueSaveTrace('cloudDateVerify', 'SUCCESS', {
               attempt: verified.attempt,
               strictSnapshot: true,
-              accountCount: revenueSnapshot.accountCount
+              accountCount: revenueSnapshot.accountCount,
+              expectedDayTotal: revenueSnapshot.expectedDayTotal
             });
             return finishCloudSuccess({
               cloudDateKey: cloudDateKey,
@@ -2350,30 +2465,32 @@ function hubSaveRevenueWithCloudConfirm(opts) {
           }
           hubRevenueSaveTrace('cloudDateVerify', 'ABORT', Object.assign({
             attempt: verified.attempt,
-            strictSnapshot: true
+            strictSnapshot: true,
+            snapshotReady: !!verified.snapshotReady,
+            updatedAtOk: !!verified.updatedAtOk
           }, match));
-          return fail('verify-failed', hubRevenueSaveCloudVerifyFailMessage(revenueSnapshot), null, {
+          return fail('verify-failed', HUB_REVENUE_CLOUD_SYNC_FAIL_MSG, null, {
             refSetCompleted: hubTraceRefSetSucceeded(hubRevenueSaveTraceLog)
           });
         }
-        if (verified.hasDay) {
-          hubRevenueSaveTrace('cloudDateVerify', 'SUCCESS', { attempt: verified.attempt });
-          return finishCloudSuccess({ cloudDateKey: cloudDateKey, attempt: verified.attempt });
-        }
         hubRevenueSaveTrace('cloudDateVerify', 'ABORT', {
-          reason: 'cloud-day-missing',
-          attempt: verified.attempt,
-          updatedAtOk: !!verified.updatedAtOk
+          reason: 'strict-verify-required',
+          attempt: verified.attempt
         });
-        return fail('verify-failed', pendingMessage, null, {
+        return fail('verify-failed', HUB_REVENUE_CLOUD_SYNC_FAIL_MSG, null, {
           refSetCompleted: hubTraceRefSetSucceeded(hubRevenueSaveTraceLog)
         });
       });
     }
-    return finishCloudSuccess(null);
+    if (requireStrictCloud) {
+      return fail('verify-failed', HUB_REVENUE_CLOUD_SYNC_FAIL_MSG);
+    }
+    return fail('verify-failed', pendingMessage);
   }).catch(function (err) {
     hubLogRevenueSaveDiagnostics('error', savePath, { err: String(err && err.message || err) });
     return fail('error', pendingMessage, err);
+  }).finally(function () {
+    if (typeof hubFinalizeRevenueSaveSnapshot === 'function') hubFinalizeRevenueSaveSnapshot();
   });
 }
 
@@ -2440,7 +2557,12 @@ if (typeof window !== 'undefined') {
   window.hubPushMetaHasRamForDateKey = hubPushMetaHasRamForDateKey;
   window.hubRevenueSaveLastPushMeta = hubRevenueSaveLastPushMeta;
   window.hubGetRevenueSavePendingSnapshot = hubGetRevenueSavePendingSnapshot;
+  window.hubGetRevenueSaveLockedSnapshot = hubGetRevenueSaveLockedSnapshot;
   window.hubClearRevenueSavePendingSnapshot = hubClearRevenueSavePendingSnapshot;
+  window.hubFinalizeRevenueSaveSnapshot = hubFinalizeRevenueSaveSnapshot;
+  window.hubReadRevenueEntryForSave = hubReadRevenueEntryForSave;
+  window.hubNormalizeRevenueSaveMeta = hubNormalizeRevenueSaveMeta;
+  window.HUB_REVENUE_CLOUD_SYNC_FAIL_MSG = HUB_REVENUE_CLOUD_SYNC_FAIL_MSG;
   window.hubCaptureRevenueSaveSnapshotFromMeta = hubCaptureRevenueSaveSnapshotFromMeta;
   window.hubPinRevenueSaveSnapshotToPayload = hubPinRevenueSaveSnapshotToPayload;
   window.hubPayloadMatchesRevenueSnapshot = hubPayloadMatchesRevenueSnapshot;

@@ -1,5 +1,5 @@
 /* OUKEI HUB Home UI — Ver2.0.7 */
-var HUB_HOME_JS_BUILD = 'Ver2.0.63/Build20260929-v003';
+var HUB_HOME_JS_BUILD = 'Ver2.0.64/Build20260929-v004';
 let homeCalView = { y: new Date().getFullYear(), m: new Date().getMonth() };
 let ramSavePending = null;
 let ramSalesDecreasePending = null;
@@ -2109,18 +2109,20 @@ function hubRunRevenueLocalPersistPhase(localPersistFn) {
   if (typeof hubRevenueSaveMark === 'function') hubRevenueSaveMark('LOCAL_PERSIST_PHASE_DONE');
 }
 
-function hubFinishRevenueInputSaveCloudOnly(toastMessage, verifyFn) {
+function hubFinishRevenueInputSaveCloudOnly(toastMessage, verifyFn, revenueSaveSnapshot) {
   if (typeof hubSaveRevenueWithCloudConfirm !== 'function') {
     if (typeof hubEndRevenueInputSaveFlow === 'function') hubEndRevenueInputSaveFlow();
     return Promise.resolve({ ok: true, status: 'fallback', message: toastMessage });
   }
+  let localVerified = typeof verifyFn === 'function' ? !!verifyFn() : false;
+  let lockedSnapshot = revenueSaveSnapshot ||
+    (typeof hubGetRevenueSaveLockedSnapshot === 'function' ? hubGetRevenueSaveLockedSnapshot() : null);
   return hubSaveRevenueWithCloudConfirm({
     successMessage: toastMessage || '✅ 保存しました',
     verifyFn: verifyFn,
     cloudVerifyDateKey: typeof todayKey === 'function' ? todayKey() : '',
-    revenueSaveSnapshot: typeof hubGetRevenueSavePendingSnapshot === 'function'
-      ? hubGetRevenueSavePendingSnapshot()
-      : null
+    revenueSaveSnapshot: lockedSnapshot,
+    requireStrictCloudVerify: localVerified
   }).then(function (result) {
     if (typeof refreshHomeAfterRevenueSave === 'function') refreshHomeAfterRevenueSave();
     if (typeof hubRunDeferredRevenueDashboardRefresh === 'function') {
@@ -2131,7 +2133,11 @@ function hubFinishRevenueInputSaveCloudOnly(toastMessage, verifyFn) {
       if (typeof hubSetSyncStatus === 'function') hubSetSyncStatus('done', 'Cloud同期済み');
     } else {
       if (typeof showToast === 'function') {
-        showToast(result.message || '端末に保存済み・Cloud同期待ち');
+        let failMsg = result.message ||
+          (typeof HUB_REVENUE_CLOUD_SYNC_FAIL_MSG !== 'undefined'
+            ? HUB_REVENUE_CLOUD_SYNC_FAIL_MSG
+            : 'Cloud同期に失敗しました。端末には保存されています');
+        showToast(failMsg);
       }
       if (typeof hubPresentRevenueSaveFailureDiagnostic === 'function') {
         hubPresentRevenueSaveFailureDiagnostic(
@@ -2144,6 +2150,7 @@ function hubFinishRevenueInputSaveCloudOnly(toastMessage, verifyFn) {
     if (typeof hubRevenueSaveTimingReport === 'function') hubRevenueSaveTimingReport();
     return result;
   }).finally(function () {
+    if (typeof hubFinalizeRevenueSaveSnapshot === 'function') hubFinalizeRevenueSaveSnapshot();
     if (typeof hubEndRevenueInputSaveFlow === 'function') hubEndRevenueInputSaveFlow();
   });
 }
@@ -2167,6 +2174,9 @@ function hubPersistThenCloudConfirm(localPersistFn, toastMessage, verifyFn, diag
   } else {
     hubRevenueSaveDiagnosticContext = diagnosticMeta || null;
   }
+  if (typeof hubNormalizeRevenueSaveMeta === 'function') {
+    hubRevenueSaveDiagnosticContext = hubNormalizeRevenueSaveMeta(hubRevenueSaveDiagnosticContext);
+  }
   hubShowRevenueSaveProgressOverlay();
   hubSetRevenueInputSaveUiBusy(true);
   if (typeof hubBeginRevenueInputSaveFlow === 'function') hubBeginRevenueInputSaveFlow();
@@ -2175,12 +2185,12 @@ function hubPersistThenCloudConfirm(localPersistFn, toastMessage, verifyFn, diag
     function runLocalAndCloud() {
       try {
         hubRunRevenueLocalPersistPhase(localPersistFn);
-        if (typeof hubCaptureRevenueSaveSnapshotFromMeta === 'function') {
-          hubCaptureRevenueSaveSnapshotFromMeta(hubRevenueSaveDiagnosticContext);
-        }
+        let revenueSaveSnapshot = typeof hubCaptureRevenueSaveSnapshotFromMeta === 'function'
+          ? hubCaptureRevenueSaveSnapshotFromMeta(hubRevenueSaveDiagnosticContext)
+          : null;
         if (typeof hubRevenueSaveMark === 'function') hubRevenueSaveMark('LOCAL_SAVE_DONE');
         hubFinishUiAfterLocalSave();
-        hubFinishRevenueInputSaveCloudOnly(toastMessage, verifyFn).then(resolve).catch(reject);
+        hubFinishRevenueInputSaveCloudOnly(toastMessage, verifyFn, revenueSaveSnapshot).then(resolve).catch(reject);
       } catch (err) {
         hubHideRevenueSaveProgressOverlay();
         if (typeof hubEndRevenueInputSaveFlow === 'function') hubEndRevenueInputSaveFlow();
