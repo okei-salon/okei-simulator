@@ -2,7 +2,7 @@
  * Google 認証後に LocalStorage / Firestore を同期
  * 組織図・ポートフォリオはフィールド単位でマージして端末間の上書きを防ぐ
  */
-var HUB_FIREBASE_JS_BUILD = 'Ver2.0.62/Build20260929-v002';
+var HUB_FIREBASE_JS_BUILD = 'Ver2.0.63/Build20260929-v003';
 
 var hubFirebaseApp = null;
 var hubFirebaseAuth = null;
@@ -46,6 +46,16 @@ var hubCloudWriteSuppressDepth = 0;
 var hubRevenueInputSaveDepth = 0;
 /** Last revenue-save ref.set payload meta (verify fallback after write). */
 var hubRevenueSaveLastPushMeta = null;
+/** Local revenue-save snapshot pinned through push + server verify (cleared on flow end). */
+var hubRevenueSavePendingSnapshot = null;
+
+var HUB_REVENUE_PROJECT_ACCOUNT_KEYS = {
+  ram: 'ramAccounts',
+  orca: 'orcaAccounts',
+  eni: 'eniAccounts',
+  matrix: 'matrixAccounts',
+  bitsync: 'bitsyncAccounts'
+};
 
 function hubHasLocalDirtyChanges() {
   return !!hubLocalDirtyForCloud;
@@ -116,6 +126,9 @@ function hubBeginRevenueInputSaveFlow() {
 
 function hubEndRevenueInputSaveFlow() {
   if (hubRevenueInputSaveDepth > 0) hubRevenueInputSaveDepth -= 1;
+  if (hubRevenueInputSaveDepth <= 0 && typeof hubClearRevenueSavePendingSnapshot === 'function') {
+    hubClearRevenueSavePendingSnapshot();
+  }
   try {
     console.log('[hubRevenueSave] end revenue-input save flow', {
       depth: hubRevenueInputSaveDepth
@@ -375,12 +388,18 @@ function hubFetchCloudDocForSaveVerify(dateKey, attempt, opts) {
     let hasDay = hubCloudHasRevenueDay(doc, dateKey);
     let docUpdatedAt = hubCloudUpdatedAt(doc);
     let updatedAtOk = minUpdatedAt > 0 && docUpdatedAt >= minUpdatedAt;
-    if (hasDay || updatedAtOk || attempt >= maxAttempts - 1) {
+    let strictSnapshot = !!opts.strictSnapshot;
+    let snapshotReady = false;
+    if (strictSnapshot && hubRevenueSavePendingSnapshot) {
+      snapshotReady = hubCloudDocMatchesRevenueSnapshot(doc, hubRevenueSavePendingSnapshot).ok;
+    }
+    if (snapshotReady || (!strictSnapshot && hasDay) || attempt >= maxAttempts - 1) {
       return {
         doc: doc,
         attempt: attempt,
         hasDay: hasDay,
         updatedAtOk: updatedAtOk,
+        snapshotReady: snapshotReady,
         docUpdatedAt: docUpdatedAt
       };
     }
@@ -1344,6 +1363,20 @@ function hubPushCloudDoc(force, _cloudDocOpt, callerHint) {
       });
     }
 
+    if (hubRevenueSavePendingSnapshot && built.payload) {
+      hubPinRevenueSaveSnapshotToPayload(built.payload, hubRevenueSavePendingSnapshot);
+      if (!hubPayloadMatchesRevenueSnapshot(built.payload, hubRevenueSavePendingSnapshot)) {
+        hubRevenueSaveTrace('ref.set', 'ABORT', {
+          reason: 'payload-missing-revenue-snapshot',
+          projectKey: hubRevenueSavePendingSnapshot.projectKey,
+          dateKey: hubRevenueSavePendingSnapshot.dateKey
+        });
+        hubSetSyncStatus('pending', 'Cloud同期待ち');
+        if (typeof hubMarkPendingCloudWrite === 'function') hubMarkPendingCloudWrite();
+        return Promise.resolve(false);
+      }
+    }
+
     console.log('[hubOrcaPushGuard] ref.set about to write', {
       cloudOrca: built.guarded.cloudCounts,
       payloadOrca: built.guarded.payloadCounts,
@@ -1354,6 +1387,13 @@ function hubPushCloudDoc(force, _cloudDocOpt, callerHint) {
       orcaEmptyWipeBlocked: !!built.guarded.blocked,
       schemaVersion: built.payload.schemaVersion,
       rematchAttempts: n,
+      revenueSnapshot: hubRevenueSavePendingSnapshot
+        ? {
+            projectKey: hubRevenueSavePendingSnapshot.projectKey,
+            dateKey: hubRevenueSavePendingSnapshot.dateKey,
+            accountCount: hubRevenueSavePendingSnapshot.accountCount
+          }
+        : null,
       caller: (built.guarded.log && built.guarded.log.caller) || callerHint || 'hubPushCloudDoc'
     });
 
@@ -1765,6 +1805,12 @@ function hubPullCloudData(reason) {
     } catch (e) {}
     return Promise.resolve(false);
   }
+  if (hubRevenueSavePendingSnapshot) {
+    try {
+      console.log('[hubCloudPull] skipped during revenue snapshot verify', { reason: reason || '' });
+    } catch (e) {}
+    return Promise.resolve(false);
+  }
   if (typeof hubIsRevenueInputSaveUiLocked === 'function' && hubIsRevenueInputSaveUiLocked()) {
     try {
       console.log('[hubCloudPull] skipped while revenue save UI locked', { reason: reason || '' });
@@ -1939,6 +1985,218 @@ function hubPushMetaHasRamForDateKey(meta, dateKey) {
   return !!(meta && meta.ramDateKeys && meta.ramDateKeys.indexOf(dateKey) >= 0);
 }
 
+function hubGetRevenueSavePendingSnapshot() {
+  return hubRevenueSavePendingSnapshot;
+}
+
+function hubClearRevenueSavePendingSnapshot() {
+  hubRevenueSavePendingSnapshot = null;
+}
+
+function hubRevenueAccountEntryHasSavedData(projectKey, accountEntry) {
+  if (!accountEntry || typeof accountEntry !== 'object') return false;
+  if (projectKey === 'ram') {
+    return accountEntry.todayRevenue != null && accountEntry.todayRevenue !== '' ||
+      accountEntry.addInvestment != null && accountEntry.addInvestment !== '' ||
+      accountEntry.operationRevenue != null && accountEntry.operationRevenue !== '';
+  }
+  if (projectKey === 'orca') {
+    return accountEntry.yesterdayAiProfit != null || accountEntry.todayAffiliateProfit != null ||
+      accountEntry.todayRevenue != null;
+  }
+  if (projectKey === 'eni') {
+    return accountEntry.dailyProfit != null || accountEntry.todayRevenue != null ||
+      accountEntry.referralProfit != null || accountEntry.titleProfit != null;
+  }
+  if (projectKey === 'matrix') {
+    return typeof pdIsMatrixAccountEntryPresent === 'function'
+      ? pdIsMatrixAccountEntryPresent(accountEntry)
+      : (accountEntry.revenueBonus != null || accountEntry.matrixBonus != null);
+  }
+  if (projectKey === 'bitsync') {
+    return accountEntry.nftSaleReward != null || accountEntry.operationReward != null ||
+      accountEntry.profitBonus != null || accountEntry.total != null;
+  }
+  return Object.keys(accountEntry).length > 0;
+}
+
+function hubFilterRevenueSaveAccountIds(projectKey, accounts) {
+  let out = [];
+  Object.keys(accounts || {}).forEach(function (id) {
+    if (!id) return;
+    if (hubRevenueAccountEntryHasSavedData(projectKey, accounts[id])) out.push(id);
+  });
+  out.sort();
+  return out;
+}
+
+function hubCaptureRevenueSaveSnapshotFromMeta(meta) {
+  hubClearRevenueSavePendingSnapshot();
+  if (!meta || !meta.projectKey || !meta.dateKey) return null;
+  let accountMapKey = HUB_REVENUE_PROJECT_ACCOUNT_KEYS[meta.projectKey];
+  if (!accountMapKey) return null;
+  if (typeof getRevenueEntry !== 'function') return null;
+  let entry = getRevenueEntry(meta.dateKey);
+  if (!entry || typeof entry !== 'object') entry = {};
+  let accounts = entry[accountMapKey] || {};
+  let accountIds = hubFilterRevenueSaveAccountIds(meta.projectKey, accounts);
+  let requireAccounts = accountIds.length > 0;
+  if (!requireAccounts) return null;
+  let expectedTotal = typeof pdSumProjectDayRevenue === 'function'
+    ? Number(pdSumProjectDayRevenue(entry, meta.projectKey, meta.dateKey)) || 0
+    : Number(entry[meta.projectKey]) || 0;
+  hubRevenueSavePendingSnapshot = {
+    projectKey: meta.projectKey,
+    dateKey: meta.dateKey,
+    accountMapKey: accountMapKey,
+    accountIds: accountIds.slice(),
+    accounts: JSON.parse(JSON.stringify(accounts)),
+    accountCount: accountIds.length,
+    expectedTotal: Math.round(expectedTotal * 10000) / 10000,
+    entry: JSON.parse(JSON.stringify(entry)),
+    requireAccounts: true
+  };
+  try {
+    console.log('[hubRevenueSave] snapshot captured', {
+      projectKey: meta.projectKey,
+      dateKey: meta.dateKey,
+      accountCount: accountIds.length,
+      expectedTotal: hubRevenueSavePendingSnapshot.expectedTotal
+    });
+  } catch (e) {}
+  return hubRevenueSavePendingSnapshot;
+}
+
+function hubPinRevenueSaveSnapshotToPayload(payload, snapshot) {
+  if (!payload || !snapshot || !snapshot.dateKey || !snapshot.entry) return payload;
+  payload.revenue = payload.revenue || { revenueLog: {}, salesLog: {} };
+  payload.revenue.revenueLog = payload.revenue.revenueLog || {};
+  let entry = JSON.parse(JSON.stringify(snapshot.entry));
+  if (typeof pdRecalculateRevenueEntry === 'function') {
+    entry = pdRecalculateRevenueEntry(entry, snapshot.dateKey);
+  }
+  payload.revenue.revenueLog[snapshot.dateKey] = entry;
+  return payload;
+}
+
+function hubRevenueSnapshotAccountValuesEqual(projectKey, expectedAe, actualAe) {
+  if (!expectedAe || !actualAe) return false;
+  function near(a, b) {
+    return Math.abs((Number(a) || 0) - (Number(b) || 0)) < 0.0001;
+  }
+  if (projectKey === 'ram') {
+    return near(expectedAe.todayRevenue, actualAe.todayRevenue) &&
+      near(expectedAe.addInvestment, actualAe.addInvestment) &&
+      near(expectedAe.operationRevenue, actualAe.operationRevenue);
+  }
+  if (projectKey === 'orca') {
+    return near(expectedAe.yesterdayAiProfit, actualAe.yesterdayAiProfit) &&
+      near(expectedAe.todayAffiliateProfit, actualAe.todayAffiliateProfit) &&
+      near(expectedAe.todayRevenue, actualAe.todayRevenue);
+  }
+  if (projectKey === 'eni') {
+    return near(expectedAe.dailyProfit, actualAe.dailyProfit) &&
+      near(expectedAe.todayRevenue, actualAe.todayRevenue) &&
+      near(expectedAe.referralProfit, actualAe.referralProfit) &&
+      near(expectedAe.titleProfit, actualAe.titleProfit);
+  }
+  if (projectKey === 'matrix') {
+    return near(expectedAe.revenueBonus, actualAe.revenueBonus) &&
+      near(expectedAe.matrixBonus, actualAe.matrixBonus);
+  }
+  if (projectKey === 'bitsync') {
+    return near(expectedAe.nftSaleReward, actualAe.nftSaleReward) &&
+      near(expectedAe.operationReward, actualAe.operationReward) &&
+      near(expectedAe.profitBonus, actualAe.profitBonus) &&
+      near(expectedAe.total, actualAe.total);
+  }
+  return JSON.stringify(expectedAe) === JSON.stringify(actualAe);
+}
+
+function hubPayloadMatchesRevenueSnapshot(payload, snapshot) {
+  if (!snapshot || !snapshot.requireAccounts) return true;
+  let day = payload && payload.revenue && payload.revenue.revenueLog
+    ? payload.revenue.revenueLog[snapshot.dateKey]
+    : null;
+  if (!day) return false;
+  let map = day[snapshot.accountMapKey] || {};
+  let ids = hubFilterRevenueSaveAccountIds(snapshot.projectKey, map);
+  if (ids.length !== snapshot.accountCount) return false;
+  for (let i = 0; i < snapshot.accountIds.length; i++) {
+    let id = snapshot.accountIds[i];
+    if (ids.indexOf(id) < 0) return false;
+    if (!hubRevenueSnapshotAccountValuesEqual(snapshot.projectKey, snapshot.accounts[id], map[id])) {
+      return false;
+    }
+  }
+  let total = typeof pdSumProjectDayRevenue === 'function'
+    ? Number(pdSumProjectDayRevenue(day, snapshot.projectKey, snapshot.dateKey)) || 0
+    : Number(day[snapshot.projectKey]) || 0;
+  total = Math.round(total * 10000) / 10000;
+  return Math.abs(total - snapshot.expectedTotal) < 0.0001;
+}
+
+function hubCloudDocMatchesRevenueSnapshot(doc, snapshot) {
+  if (!snapshot || !snapshot.requireAccounts) return { ok: true };
+  if (!doc || !doc.revenue || !doc.revenue.revenueLog) {
+    return { ok: false, reason: 'cloud-doc-missing-revenue' };
+  }
+  let day = doc.revenue.revenueLog[snapshot.dateKey];
+  if (!day) return { ok: false, reason: 'cloud-day-missing' };
+  let map = day[snapshot.accountMapKey] || {};
+  let ids = hubFilterRevenueSaveAccountIds(snapshot.projectKey, map);
+  if (ids.length !== snapshot.accountCount) {
+    return { ok: false, reason: 'account-count-mismatch', cloudCount: ids.length, expected: snapshot.accountCount };
+  }
+  for (let i = 0; i < snapshot.accountIds.length; i++) {
+    let id = snapshot.accountIds[i];
+    if (ids.indexOf(id) < 0) return { ok: false, reason: 'account-id-missing', accountId: id };
+    if (!hubRevenueSnapshotAccountValuesEqual(snapshot.projectKey, snapshot.accounts[id], map[id])) {
+      return { ok: false, reason: 'account-value-mismatch', accountId: id };
+    }
+  }
+  let total = typeof pdSumProjectDayRevenue === 'function'
+    ? Number(pdSumProjectDayRevenue(day, snapshot.projectKey, snapshot.dateKey)) || 0
+    : Number(day[snapshot.projectKey]) || 0;
+  total = Math.round(total * 10000) / 10000;
+  if (Math.abs(total - snapshot.expectedTotal) >= 0.0001) {
+    return { ok: false, reason: 'total-mismatch', cloudTotal: total, expectedTotal: snapshot.expectedTotal };
+  }
+  return { ok: true };
+}
+
+function hubRevenueSaveCloudVerifyFailMessage(snapshot) {
+  let labels = { ram: 'RAM', orca: 'ORCA', eni: 'ENI', matrix: 'MATRIX', bitsync: 'BITSYNC' };
+  let name = labels[snapshot && snapshot.projectKey] || '収益';
+  return name + 'のCloud保存を確認できませんでした';
+}
+
+/** During pull/merge: never drop pending local revenue-save account maps into empty cloud shells. */
+function hubProtectPendingRevenueSaveDayEntry(base, cloudEntry, localEntry) {
+  let snap = hubRevenueSavePendingSnapshot;
+  if (!snap || !snap.dateKey || !snap.accountMapKey || !snap.requireAccounts) return base;
+  let amKey = snap.accountMapKey;
+  let localMap = localEntry && localEntry[amKey];
+  let mergedMap = base && base[amKey];
+  let localIds = hubFilterRevenueSaveAccountIds(snap.projectKey, localMap || {});
+  let mergedIds = hubFilterRevenueSaveAccountIds(snap.projectKey, mergedMap || {});
+  let matchesSnap = snap.accountIds && snap.accountIds.length &&
+    snap.accountIds.every(function (id) { return localIds.indexOf(id) >= 0; });
+  if (!matchesSnap) return base;
+  if (localIds.length > 0 && mergedIds.length < localIds.length) {
+    base[amKey] = hubMergeAccountMapById(
+      cloudEntry && cloudEntry[amKey],
+      localMap,
+      true,
+      null
+    );
+    if (typeof pdRecalculateRevenueEntry === 'function') {
+      base = pdRecalculateRevenueEntry(base, snap.dateKey);
+    }
+  }
+  return base;
+}
+
 function hubCloudHasRevenueDay(doc, dateKey) {
   if (!doc || !dateKey) return false;
   if (doc.revenue && doc.revenue.revenueLog && doc.revenue.revenueLog[dateKey]) {
@@ -1976,25 +2234,35 @@ function hubSaveRevenueWithCloudConfirm(opts) {
   function fail(status, message, err, failOpts) {
     failOpts = failOpts || {};
     let refSetOk = failOpts.refSetCompleted === true || hubTraceRefSetSucceeded(hubRevenueSaveTraceLog);
+    let snapshot = opts.revenueSaveSnapshot || hubRevenueSavePendingSnapshot;
+    let strictVerifyFail = !!(snapshot && snapshot.requireAccounts &&
+      (status === 'verify-failed' || status === 'payload-missing-snapshot'));
     let diag = hubCollectRevenueSaveDiagnostics(savePath);
     hubLogRevenueSaveDiagnostics('fail:' + status, savePath, diag);
     hubRevenueSaveTrace('hubSaveRevenueWithCloudConfirm', 'ABORT', {
       status: status,
       refSetCompleted: refSetOk,
+      strictVerifyFail: strictVerifyFail,
       diagnostics: diag,
       errorMessage: err ? String(err.message || err) : null
     });
-    if (refSetOk) {
+    if (refSetOk && !strictVerifyFail) {
       hubClearPendingCloudWrite();
       hubSetSyncStatus('done', 'Cloud保存済み');
     } else {
       hubMarkPendingCloudWrite();
+      if (strictVerifyFail) hubSetSyncStatus('pending', 'Cloud同期待ち');
+    }
+    let userMessage = message;
+    if (strictVerifyFail && snapshot) {
+      userMessage = hubRevenueSaveCloudVerifyFailMessage(snapshot);
     }
     return {
       ok: false,
       status: status,
-      message: refSetOk ? (failOpts.successMessage || 'Cloud保存済み') : message,
-      refSetCompleted: refSetOk,
+      message: userMessage,
+      refSetCompleted: refSetOk && !strictVerifyFail,
+      strictVerifyFail: strictVerifyFail,
       diagnostics: diag,
       trace: hubRevenueSaveTraceLog.slice(),
       errorMessage: err ? String(err.message || err) : null
@@ -2053,51 +2321,53 @@ function hubSaveRevenueWithCloudConfirm(opts) {
         timing: typeof hubRevenueSaveTimingReport === 'function' ? hubRevenueSaveTimingReport() : null
       };
     }
+    let revenueSnapshot = opts.revenueSaveSnapshot || hubRevenueSavePendingSnapshot;
     if (cloudDateKey && typeof hubFetchCloudDocForSaveVerify === 'function') {
-      hubRevenueSaveTrace('cloudDateVerify', 'ENTER', { cloudDateKey: cloudDateKey });
+      hubRevenueSaveTrace('cloudDateVerify', 'ENTER', {
+        cloudDateKey: cloudDateKey,
+        strictSnapshot: !!(revenueSnapshot && revenueSnapshot.requireAccounts)
+      });
       let verifyOpts = {
         minUpdatedAt: hubRevenueSaveLastPushMeta && hubRevenueSaveLastPushMeta.updatedAt
           ? hubRevenueSaveLastPushMeta.updatedAt
-          : 0
+          : 0,
+        strictSnapshot: !!(revenueSnapshot && revenueSnapshot.requireAccounts)
       };
       return hubFetchCloudDocForSaveVerify(cloudDateKey, 0, verifyOpts).then(function (verified) {
+        if (revenueSnapshot && revenueSnapshot.requireAccounts) {
+          let match = hubCloudDocMatchesRevenueSnapshot(verified.doc, revenueSnapshot);
+          if (match.ok) {
+            hubRevenueSaveTrace('cloudDateVerify', 'SUCCESS', {
+              attempt: verified.attempt,
+              strictSnapshot: true,
+              accountCount: revenueSnapshot.accountCount
+            });
+            return finishCloudSuccess({
+              cloudDateKey: cloudDateKey,
+              attempt: verified.attempt,
+              strictSnapshot: true
+            });
+          }
+          hubRevenueSaveTrace('cloudDateVerify', 'ABORT', Object.assign({
+            attempt: verified.attempt,
+            strictSnapshot: true
+          }, match));
+          return fail('verify-failed', hubRevenueSaveCloudVerifyFailMessage(revenueSnapshot), null, {
+            refSetCompleted: hubTraceRefSetSucceeded(hubRevenueSaveTraceLog)
+          });
+        }
         if (verified.hasDay) {
           hubRevenueSaveTrace('cloudDateVerify', 'SUCCESS', { attempt: verified.attempt });
           return finishCloudSuccess({ cloudDateKey: cloudDateKey, attempt: verified.attempt });
         }
-        let refSetOk = hubTraceRefSetSucceeded(hubRevenueSaveTraceLog);
-        let localStillOk = typeof opts.verifyFn !== 'function' || opts.verifyFn();
-        let pushHadRam = hubPushMetaHasRamForDateKey(hubRevenueSaveLastPushMeta, cloudDateKey);
-        if (refSetOk && localStillOk && pushHadRam) {
-          hubRevenueSaveTrace('cloudDateVerify', 'SUCCESS', {
-            reason: verified.updatedAtOk ? 'soft-updated-at' : 'soft-after-ref-set',
-            attempt: verified.attempt,
-            updatedAtOk: !!verified.updatedAtOk,
-            docUpdatedAt: verified.docUpdatedAt,
-            pushHadRam: true
-          });
-          return finishCloudSuccess({
-            cloudDateKey: cloudDateKey,
-            attempt: verified.attempt,
-            verifySoft: true,
-            pushHadRam: true
-          });
-        }
-        if (refSetOk && localStillOk && !pushHadRam) {
-          hubRevenueSaveTrace('cloudDateVerify', 'ABORT', {
-            reason: 'soft-blocked-missing-ram-in-payload',
-            attempt: verified.attempt,
-            pushMeta: hubRevenueSaveLastPushMeta
-          });
-        }
         hubRevenueSaveTrace('cloudDateVerify', 'ABORT', {
           reason: 'cloud-day-missing',
           attempt: verified.attempt,
-          refSetOk: refSetOk,
-          localStillOk: localStillOk,
           updatedAtOk: !!verified.updatedAtOk
         });
-        return fail('verify-failed', pendingMessage, null, { refSetCompleted: refSetOk });
+        return fail('verify-failed', pendingMessage, null, {
+          refSetCompleted: hubTraceRefSetSucceeded(hubRevenueSaveTraceLog)
+        });
       });
     }
     return finishCloudSuccess(null);
@@ -2169,6 +2439,14 @@ if (typeof window !== 'undefined') {
   window.hubCollectPushRevenueMeta = hubCollectPushRevenueMeta;
   window.hubPushMetaHasRamForDateKey = hubPushMetaHasRamForDateKey;
   window.hubRevenueSaveLastPushMeta = hubRevenueSaveLastPushMeta;
+  window.hubGetRevenueSavePendingSnapshot = hubGetRevenueSavePendingSnapshot;
+  window.hubClearRevenueSavePendingSnapshot = hubClearRevenueSavePendingSnapshot;
+  window.hubCaptureRevenueSaveSnapshotFromMeta = hubCaptureRevenueSaveSnapshotFromMeta;
+  window.hubPinRevenueSaveSnapshotToPayload = hubPinRevenueSaveSnapshotToPayload;
+  window.hubPayloadMatchesRevenueSnapshot = hubPayloadMatchesRevenueSnapshot;
+  window.hubCloudDocMatchesRevenueSnapshot = hubCloudDocMatchesRevenueSnapshot;
+  window.hubProtectPendingRevenueSaveDayEntry = hubProtectPendingRevenueSaveDayEntry;
+  window.hubRevenueSaveCloudVerifyFailMessage = hubRevenueSaveCloudVerifyFailMessage;
   window.hubSuspendCloudWrites = hubSuspendCloudWrites;
   window.hubResumeCloudWrites = hubResumeCloudWrites;
   window.hubAllowAutomaticCloudWrites = hubAllowAutomaticCloudWrites;

@@ -1,5 +1,5 @@
 /* OUKEI HUB Local Storage + Cloud Save Hooks — Ver2.0.8 */
-var HUB_STORAGE_JS_BUILD = 'Ver2.0.62/Build20260929-v002';
+var HUB_STORAGE_JS_BUILD = 'Ver2.0.63/Build20260929-v003';
 
 var HUB_STORAGE_KEY = 'oukei_hub_v15_data';
 var HUB_STORAGE_LEGACY_KEY = 'okei_v14_data';
@@ -796,6 +796,10 @@ function hubMergeRevenueDayEntry(cloudEntry, localEntry, _preferLocalIgnored, re
   base.bitsyncAccounts = hubMergeAccountMapById(c.bitsyncAccounts, l.bitsyncAccounts, false, null);
   base.caryAccounts = hubMergeAccountMapById(c.caryAccounts, l.caryAccounts, false, null);
   base.accounts = hubMergeAccountMapById(c.accounts, l.accounts, false, removed.all);
+
+  if (typeof hubProtectPendingRevenueSaveDayEntry === 'function') {
+    base = hubProtectPendingRevenueSaveDayEntry(base, c, l);
+  }
   return base;
 }
 

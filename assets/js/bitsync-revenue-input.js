@@ -363,7 +363,9 @@ function saveBitsyncRevenueInput() {
         if (!hasRevenue) return true;
         let entry = typeof getRevenueEntry === 'function' ? getRevenueEntry(dateKey) : null;
         return !!(entry && entry.bitsyncAccounts && Object.keys(entry.bitsyncAccounts).length);
-      });
+      }, hasRevenue
+        ? (typeof hubRevenueSaveMeta === 'function' ? hubRevenueSaveMeta('bitsync', dateKey) : { projectKey: 'bitsync', dateKey: dateKey })
+        : null);
     } else if (typeof hubFinishRevenueInputSave === 'function') {
       if (hasRevenue) persistBitsyncRevenueEntry(revenueCollected.bitsyncAccounts);
       if (hasInvestment) persistBitsyncInvestmentEntry(investmentCollected.investments);

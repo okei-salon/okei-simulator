@@ -1,5 +1,5 @@
 /* OUKEI HUB Home UI — Ver2.0.7 */
-var HUB_HOME_JS_BUILD = 'Ver2.0.62/Build20260929-v002';
+var HUB_HOME_JS_BUILD = 'Ver2.0.63/Build20260929-v003';
 let homeCalView = { y: new Date().getFullYear(), m: new Date().getMonth() };
 let ramSavePending = null;
 let ramSalesDecreasePending = null;
@@ -2092,12 +2092,20 @@ function hubFinishUiAfterLocalSave() {
   hubShowLocalSaveToast();
 }
 
+function hubRevenueSaveMeta(projectKey, dateKey) {
+  return {
+    projectKey: projectKey,
+    dateKey: dateKey || (typeof todayKey === 'function' ? todayKey() : '')
+  };
+}
+
 function hubRunRevenueLocalPersistPhase(localPersistFn) {
   if (typeof hubRevenueSaveMark === 'function') hubRevenueSaveMark('LOCAL_PERSIST_PHASE_START');
   if (typeof localPersistFn === 'function') localPersistFn();
   if (typeof hubFlushRevenueSaveLocalPersist === 'function') {
     hubFlushRevenueSaveLocalPersist();
   }
+  if (typeof hubLocalUpdatedAt !== 'undefined') hubLocalUpdatedAt = Date.now();
   if (typeof hubRevenueSaveMark === 'function') hubRevenueSaveMark('LOCAL_PERSIST_PHASE_DONE');
 }
 
@@ -2109,7 +2117,10 @@ function hubFinishRevenueInputSaveCloudOnly(toastMessage, verifyFn) {
   return hubSaveRevenueWithCloudConfirm({
     successMessage: toastMessage || '✅ 保存しました',
     verifyFn: verifyFn,
-    cloudVerifyDateKey: typeof todayKey === 'function' ? todayKey() : ''
+    cloudVerifyDateKey: typeof todayKey === 'function' ? todayKey() : '',
+    revenueSaveSnapshot: typeof hubGetRevenueSavePendingSnapshot === 'function'
+      ? hubGetRevenueSavePendingSnapshot()
+      : null
   }).then(function (result) {
     if (typeof refreshHomeAfterRevenueSave === 'function') refreshHomeAfterRevenueSave();
     if (typeof hubRunDeferredRevenueDashboardRefresh === 'function') {
@@ -2118,12 +2129,9 @@ function hubFinishRevenueInputSaveCloudOnly(toastMessage, verifyFn) {
     if (result.ok) {
       hubShowDeferredCloudSyncToast();
       if (typeof hubSetSyncStatus === 'function') hubSetSyncStatus('done', 'Cloud同期済み');
-    } else if (result.refSetCompleted) {
-      hubShowDeferredCloudSyncToast();
-      if (typeof hubSetSyncStatus === 'function') hubSetSyncStatus('done', 'Cloud同期済み');
     } else {
       if (typeof showToast === 'function') {
-        showToast('端末に保存済み・Cloud同期待ち');
+        showToast(result.message || '端末に保存済み・Cloud同期待ち');
       }
       if (typeof hubPresentRevenueSaveFailureDiagnostic === 'function') {
         hubPresentRevenueSaveFailureDiagnostic(
@@ -2167,26 +2175,19 @@ function hubPersistThenCloudConfirm(localPersistFn, toastMessage, verifyFn, diag
     function runLocalAndCloud() {
       try {
         hubRunRevenueLocalPersistPhase(localPersistFn);
+        if (typeof hubCaptureRevenueSaveSnapshotFromMeta === 'function') {
+          hubCaptureRevenueSaveSnapshotFromMeta(hubRevenueSaveDiagnosticContext);
+        }
         if (typeof hubRevenueSaveMark === 'function') hubRevenueSaveMark('LOCAL_SAVE_DONE');
         hubFinishUiAfterLocalSave();
-        hubFinishRevenueInputSaveCloudOnly(toastMessage, verifyFn).then(function (result) {
-          return new Promise(function (resolveUi) {
-            requestAnimationFrame(function () {
-              requestAnimationFrame(function () {
-                resolveUi(result);
-              });
-            });
-          });
-        }).then(resolve).catch(reject);
+        hubFinishRevenueInputSaveCloudOnly(toastMessage, verifyFn).then(resolve).catch(reject);
       } catch (err) {
         hubHideRevenueSaveProgressOverlay();
         if (typeof hubEndRevenueInputSaveFlow === 'function') hubEndRevenueInputSaveFlow();
         reject(err);
       }
     }
-    requestAnimationFrame(function () {
-      requestAnimationFrame(runLocalAndCloud);
-    });
+    runLocalAndCloud();
   }).finally(function () {
     hubHideRevenueSaveProgressOverlay();
     hubSetRevenueInputSaveUiBusy(false);
@@ -2260,7 +2261,7 @@ function executeRamSave(collected) {
   }, '✅ 保存しました', function () {
     let entry = typeof getRevenueEntry === 'function' ? getRevenueEntry(dateKey) : null;
     return !!(entry && entry.ramAccounts && Object.keys(entry.ramAccounts).length);
-  });
+  }, hubRevenueSaveMeta('ram', dateKey));
 }
 
 function proceedRamSaveAfterSalesChecks(collected) {
@@ -2879,7 +2880,7 @@ function executeOrcaSave(collected) {
   }, '✅ 保存しました', function () {
     let entry = typeof getRevenueEntry === 'function' ? getRevenueEntry(dateKey) : null;
     return !!(entry && entry.orcaAccounts && Object.keys(entry.orcaAccounts).length);
-  });
+  }, hubRevenueSaveMeta('orca', dateKey));
 }
 
 function proceedOrcaSaveAfterSalesChecks(collected) {

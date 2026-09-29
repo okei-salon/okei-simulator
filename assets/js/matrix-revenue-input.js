@@ -223,7 +223,7 @@ function matrixSaveRevenueEntry() {
       }, '✅ MATRIX収益を保存しました', function () {
         let entry = typeof getRevenueEntry === 'function' ? getRevenueEntry(dateKey) : null;
         return !!(entry && entry.matrixAccounts && Object.keys(entry.matrixAccounts).length);
-      });
+      }, typeof hubRevenueSaveMeta === 'function' ? hubRevenueSaveMeta('matrix', dateKey) : { projectKey: 'matrix', dateKey: dateKey });
     } else if (typeof hubFinishRevenueInputSave === 'function') {
       Object.keys(collected.matrixAccounts).forEach(function (accountId) {
         let vals = collected.matrixAccounts[accountId];

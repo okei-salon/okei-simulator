@@ -157,7 +157,7 @@ async function main() {
       if (typeof hubFlushRevenueSaveLocalPersist === 'function') hubFlushRevenueSaveLocalPersist();
     }, '✅ 保存しました', function () {
       return !!(settings.revenueLog && settings.revenueLog[dateKey]);
-    });
+    }, typeof hubRevenueSaveMeta === 'function' ? hubRevenueSaveMeta('ram', dateKey) : { projectKey: 'ram', dateKey: dateKey });
     var log = window.__TOAST_LOG__ || [];
     var firstLocalIdx = log.findIndex(function (m) { return m.indexOf('保存しました') >= 0; });
     var firstCloudIdx = log.findIndex(function (m) { return m.indexOf('Cloud同期済み') >= 0; });

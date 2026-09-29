@@ -102,6 +102,13 @@ const SUITES = [
     needsServer: true
   },
   {
+    id: 'hub-revenue-save-ram-payload',
+    label: 'Revenue save RAM payload pin + strict Cloud verify',
+    category: 'Firestore',
+    cmd: ['node', 'scripts/verify-revenue-save-ram-payload.mjs'],
+    needsServer: true
+  },
+  {
     id: 'hub-destructive-guard',
     label: 'Destructive cloud push guard (kai2 wipe block)',
     category: 'Firestore',

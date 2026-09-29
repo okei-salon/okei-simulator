@@ -444,7 +444,7 @@ function saveEniRevenueInput() {
       }, '✅ 保存しました', function () {
         let entry = typeof getRevenueEntry === 'function' ? getRevenueEntry(dateKey) : null;
         return !!(entry && entry.eniAccounts && Object.keys(entry.eniAccounts).length);
-      });
+      }, typeof hubRevenueSaveMeta === 'function' ? hubRevenueSaveMeta('eni', dateKey) : { projectKey: 'eni', dateKey: dateKey });
     } else if (typeof hubFinishRevenueInputSave === 'function') {
       if (typeof aimPersistInputAccountMetaFromForm === 'function') {
         aimPersistInputAccountMetaFromForm('eni');

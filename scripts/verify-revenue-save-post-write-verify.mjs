@@ -108,7 +108,7 @@ async function main() {
       if (typeof hubFlushRevenueSaveLocalPersist === 'function') hubFlushRevenueSaveLocalPersist();
     }, '✅ 保存しました', function () {
       return !!(settings.revenueLog && settings.revenueLog[dateKey]);
-    });
+    }, typeof hubRevenueSaveMeta === 'function' ? hubRevenueSaveMeta('ram', dateKey) : { projectKey: 'ram', dateKey: dateKey });
     return {
       ok: result.ok,
       status: result.status,
@@ -125,7 +125,7 @@ async function main() {
   assert('LAG: dirty false', lagCase.dirty === false, 'dirty=' + lagCase.dirty);
   assert('LAG: multiple verify reads', lagCase.reads >= 2, 'reads=' + lagCase.reads);
 
-  const softCase = await runCase(desktop, 'soft', async () => {
+  const softCase = await runCase(desktop, 'strict-no-ram-write', async () => {
     var dateKey = typeof todayKey === 'function' ? todayKey() : '2026-09-29';
     var pushedAt = Date.now();
     var cloudPayload = {
@@ -184,23 +184,19 @@ async function main() {
       if (typeof hubFlushRevenueSaveLocalPersist === 'function') hubFlushRevenueSaveLocalPersist();
     }, '✅ 保存しました', function () {
       return !!(settings.revenueLog && settings.revenueLog[dateKey]);
-    });
+    }, typeof hubRevenueSaveMeta === 'function' ? hubRevenueSaveMeta('ram', dateKey) : { projectKey: 'ram', dateKey: dateKey });
     return {
       ok: result.ok,
       status: result.status,
-      verifySoft: !!result.verifySoft,
-      pending: hubSyncPendingWrites || 0,
-      traceSoft: (result.trace || []).some(function (e) {
-        return e && e.step === 'cloudDateVerify' && e.state === 'SUCCESS' &&
-          e.detail && String(e.detail.reason || '').indexOf('soft') >= 0;
-      })
+      message: result.message,
+      strictVerifyFail: !!result.strictVerifyFail
     };
   });
 
-  assert('SOFT: ref.set + stale read still ok', softCase.ok === true, JSON.stringify(softCase));
-  assert('SOFT: verifySoft flag', softCase.verifySoft === true, JSON.stringify(softCase));
-  assert('SOFT: pending 0 after soft verify', softCase.pending === 0, 'pending=' + softCase.pending);
-  assert('SOFT: trace records soft verify', softCase.traceSoft === true, '');
+  assert('STRICT: updatedAt-only ref.set fails', softCase.ok === false, JSON.stringify(softCase));
+  assert('STRICT: status verify-failed', softCase.status === 'verify-failed', softCase.status);
+  assert('STRICT: RAM verify message', String(softCase.message || '').indexOf('RAM') >= 0, softCase.message);
+  assert('STRICT: strictVerifyFail set', softCase.strictVerifyFail === true, '');
 
   const iphone = await browser.newContext({ ...devices['iPhone 13'] });
   const iphonePage = await iphone.newPage();
@@ -277,7 +273,7 @@ async function main() {
       if (typeof hubFlushRevenueSaveLocalPersist === 'function') hubFlushRevenueSaveLocalPersist();
     }, '✅ 保存しました', function () {
       return !!(settings.revenueLog && settings.revenueLog[dateKey]);
-    });
+    }, typeof hubRevenueSaveMeta === 'function' ? hubRevenueSaveMeta('ram', dateKey) : { projectKey: 'ram', dateKey: dateKey });
     var entry = settings.revenueLog && settings.revenueLog[dateKey];
     var panel = document.getElementById('hubRevenueSaveDiagnosticPanel');
     return {

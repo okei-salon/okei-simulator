@@ -1,5 +1,5 @@
 {
-  "minPassed": 799,
-  "note": "Baseline after iPhone home refresh + toast order fix (+11). verify:release Passed 799.",
+  "minPassed": 817,
+  "note": "Baseline after RAM payload pin + strict Cloud verify (+17 net). verify:release Passed 817.",
   "updatedAt": "2026-09-29"
 }
