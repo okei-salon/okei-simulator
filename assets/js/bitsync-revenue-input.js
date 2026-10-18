@@ -139,12 +139,74 @@ function renderBitsyncInvestmentBlock(acc) {
     '</div>';
 }
 
+function bitsyncRevenueFieldDefs() {
+  if (typeof PD_BITSYNC_REVENUE_FIELDS !== 'undefined' && Array.isArray(PD_BITSYNC_REVENUE_FIELDS)) {
+    return PD_BITSYNC_REVENUE_FIELDS;
+  }
+  return [
+    { dailyKey: 'operationReward', cumKey: 'operationRewardCumulative', label: 'VAULT 運用益' },
+    { dailyKey: 'profitBonus', cumKey: 'profitBonusCumulative', label: 'V BONUS' },
+    { dailyKey: 'stakingReward', cumKey: 'stakingRewardCumulative', label: 'ステーキング報酬' },
+    { dailyKey: 'nftSaleReward', cumKey: 'nftSaleRewardCumulative', label: 'N BONUS' }
+  ];
+}
+
+function bitsyncFieldInputId(cumKey, accountId) {
+  return 'bitsyncCum_' + cumKey + '_' + accountId;
+}
+
+function bitsyncGetEntryDateKey() {
+  if (typeof todayKey === 'function') return todayKey();
+  return '';
+}
+
+function bitsyncFormatUsdt(n) {
+  let num = Number(n);
+  if (!isFinite(num)) num = 0;
+  let rounded = Math.round(num * 100) / 100;
+  let text = String(rounded);
+  if (typeof eniFormatNum === 'function') {
+    try { text = eniFormatNum(rounded); } catch (e) {}
+  } else if (Math.abs(rounded - Math.round(rounded)) < 1e-9) {
+    text = String(Math.round(rounded));
+  }
+  return text + ' USDT';
+}
+
+function bitsyncGetPrevCumulativeForAccount(accountId, dateKey) {
+  dateKey = dateKey || bitsyncGetEntryDateKey();
+  if (typeof pdGetBitsyncPreviousCumulativeEntry !== 'function') return null;
+  return pdGetBitsyncPreviousCumulativeEntry(accountId, dateKey);
+}
+
+function bitsyncPrevHintForField(accountId, cumKey, dateKey) {
+  let prev = bitsyncGetPrevCumulativeForAccount(accountId, dateKey);
+  if (!prev) return '初回入力：基準値として保存';
+  let v = prev.entry && prev.entry[cumKey] != null && prev.entry[cumKey] !== ''
+    ? Number(prev.entry[cumKey]) || 0
+    : 0;
+  return '前回の累計額 ' + bitsyncFormatUsdt(v);
+}
+
 function renderBitsyncInputAccountCard(acc, existing) {
   let ae = existing ? getBitsyncAccountEntry(existing, acc.id) : null;
+  let dateKey = bitsyncGetEntryDateKey();
   let esc = typeof escapeHtml === 'function' ? escapeHtml : function (t) { return String(t || ''); };
-  let nftVal = ae && ae.nftSaleReward != null ? ae.nftSaleReward : '';
-  let opVal = ae && ae.operationReward != null ? ae.operationReward : '';
-  let bonusVal = ae && ae.profitBonus != null ? ae.profitBonus : '';
+  let fieldsHtml = bitsyncRevenueFieldDefs().map(function (f) {
+    let cumVal = '';
+    if (ae && ae[f.cumKey] != null && ae[f.cumKey] !== '') cumVal = ae[f.cumKey];
+    let inputId = bitsyncFieldInputId(f.cumKey, acc.id);
+    let hint = bitsyncPrevHintForField(acc.id, f.cumKey, dateKey);
+    return '<div class="ramInputRow ramInputRow--main">' +
+      '<span class="ramInputLabel ramInputLabel--hero">' + esc(f.label) + '</span>' +
+      '<div class="ramInputField ramInputField--hero">' +
+      '<input type="number" step="0.01" min="0" id="' + inputId +
+      '" class="ramInputMain bitsyncCumInput" data-cum-key="' + esc(f.cumKey) +
+      '" data-acc="' + esc(acc.id) + '" inputmode="decimal" value="' + esc(cumVal) + '">' +
+      '<span class="ramInputUnit">USDT</span>' +
+      '<span class="ramInputHint">' + esc(hint) + '</span>' +
+      '</div></div>';
+  }).join('');
 
   return '<section class="ramInputAccount bitsyncInputAccount" data-acc="' + acc.id + '">' +
     '<div class="ramInputAccountHead">' +
@@ -152,12 +214,12 @@ function renderBitsyncInputAccountCard(acc, existing) {
     '<span class="ramInputAccountName">' + esc(acc.username || acc.name) + '</span></div>' +
     '<div class="bitsyncSectionTitle">実績入力</div>' +
     '<div class="ramInputRows">' +
-    '<div class="ramInputRow ramInputRow--main"><span class="ramInputLabel ramInputLabel--hero">NFT販売報酬</span>' +
-    '<div class="ramInputField ramInputField--hero"><input type="number" step="0.01" min="0" id="bitsyncNft_' + acc.id + '" class="ramInputMain" inputmode="decimal" placeholder="0" value="' + esc(nftVal) + '"></div></div>' +
-    '<div class="ramInputRow ramInputRow--main"><span class="ramInputLabel ramInputLabel--hero">運用報酬</span>' +
-    '<div class="ramInputField ramInputField--hero"><input type="number" step="0.01" min="0" id="bitsyncOp_' + acc.id + '" class="ramInputMain" inputmode="decimal" placeholder="0" value="' + esc(opVal) + '"></div></div>' +
-    '<div class="ramInputRow ramInputRow--main"><span class="ramInputLabel ramInputLabel--hero">運用益ボーナス</span>' +
-    '<div class="ramInputField ramInputField--hero"><input type="number" step="0.01" min="0" id="bitsyncBonus_' + acc.id + '" class="ramInputMain" inputmode="decimal" placeholder="0" value="' + esc(bonusVal) + '"></div></div>' +
+    fieldsHtml +
+    '<div class="ramInputRow ramInputRow--readonly">' +
+    '<span class="ramInputLabel">本日の収益</span>' +
+    '<span class="ramInputVal ramInputVal--gold" id="bitsyncDailyProfit_' + acc.id + '">—</span>' +
+    '</div>' +
+    '<p class="help bitsyncDailyProfitHint" id="bitsyncDailyProfitHint_' + acc.id + '"></p>' +
     renderBitsyncInvestmentBlock(acc) +
     (typeof aimRenderInputAccountActions === 'function'
       ? aimRenderInputAccountActions('bitsync', acc.id, acc.username, 'openBitsyncRevenueInput')
@@ -166,14 +228,93 @@ function renderBitsyncInputAccountCard(acc, existing) {
 }
 
 function bitsyncReadAccountValues(accountId) {
-  let nftEl = document.getElementById('bitsyncNft_' + accountId);
-  let opEl = document.getElementById('bitsyncOp_' + accountId);
-  let bonusEl = document.getElementById('bitsyncBonus_' + accountId);
-  return {
-    nftSaleReward: nftEl ? nftEl.value : '',
-    operationReward: opEl ? opEl.value : '',
-    profitBonus: bonusEl ? bonusEl.value : ''
-  };
+  let out = {};
+  bitsyncRevenueFieldDefs().forEach(function (f) {
+    let el = document.getElementById(bitsyncFieldInputId(f.cumKey, accountId));
+    out[f.cumKey] = el ? el.value : '';
+  });
+  return out;
+}
+
+/** Build cumulatives for preview only when all 4 fields are valid non-negative numbers. */
+function bitsyncReadCumulativesForPreview(accountId) {
+  let vals = bitsyncReadAccountValues(accountId);
+  let cumulatives = {};
+  let incomplete = false;
+  let invalid = false;
+  bitsyncRevenueFieldDefs().forEach(function (f) {
+    let raw = String(vals[f.cumKey] == null ? '' : vals[f.cumKey]).trim();
+    if (raw === '') {
+      incomplete = true;
+      return;
+    }
+    let n = Number(raw);
+    if (!isFinite(n) || n < 0) {
+      invalid = true;
+      return;
+    }
+    cumulatives[f.cumKey] = n;
+  });
+  if (incomplete || invalid) {
+    return { ok: false, incomplete: incomplete, invalid: invalid, cumulatives: null };
+  }
+  if (typeof pdParseBitsyncCumulativeRaw === 'function') {
+    let parsed = pdParseBitsyncCumulativeRaw(cumulatives);
+    if (!parsed.ok) return { ok: false, incomplete: false, invalid: true, cumulatives: null };
+    return { ok: true, incomplete: false, invalid: false, cumulatives: parsed.cumulatives };
+  }
+  return { ok: true, incomplete: false, invalid: false, cumulatives: cumulatives };
+}
+
+function updateBitsyncDerivedPreview(accountId) {
+  let profitEl = document.getElementById('bitsyncDailyProfit_' + accountId);
+  let hintEl = document.getElementById('bitsyncDailyProfitHint_' + accountId);
+  if (!profitEl) return;
+  let dateKey = bitsyncGetEntryDateKey();
+  let read = bitsyncReadCumulativesForPreview(accountId);
+  if (!read.ok) {
+    profitEl.textContent = '—';
+    if (hintEl) {
+      hintEl.textContent = read.invalid
+        ? '累計額は0以上の数値で入力してください。'
+        : '';
+    }
+    return;
+  }
+  if (typeof pdCalcBitsyncDailyMetrics !== 'function') {
+    profitEl.textContent = '—';
+    return;
+  }
+  let calc = pdCalcBitsyncDailyMetrics(accountId, dateKey, read.cumulatives);
+  if (calc.hasDecrease) {
+    profitEl.textContent = '—';
+    if (hintEl) {
+      let lines = (calc.decreases || []).map(function (d) {
+        return d.label + 'が前回より減少（' + bitsyncFormatUsdt(d.previous) + ' → ' + bitsyncFormatUsdt(d.current) + '）';
+      });
+      hintEl.textContent = '累計額が前回より減っています。保存できません。 ' + lines.join(' / ');
+    }
+    return;
+  }
+  profitEl.textContent = bitsyncFormatUsdt(calc.total);
+  if (hintEl) {
+    hintEl.textContent = calc.isBaseline
+      ? '初回入力のため本日の収益は 0 USDT です（基準値として保存）。'
+      : '';
+  }
+}
+
+function bindBitsyncInputListeners() {
+  getBitsyncInputAccounts().forEach(function (acc) {
+    bitsyncRevenueFieldDefs().forEach(function (f) {
+      let el = document.getElementById(bitsyncFieldInputId(f.cumKey, acc.id));
+      if (!el || el.dataset.bitsyncPreviewBound === '1') return;
+      el.dataset.bitsyncPreviewBound = '1';
+      el.addEventListener('input', function () { updateBitsyncDerivedPreview(acc.id); });
+      el.addEventListener('change', function () { updateBitsyncDerivedPreview(acc.id); });
+    });
+    updateBitsyncDerivedPreview(acc.id);
+  });
 }
 
 function bitsyncReadInvestmentValues(accountId) {
@@ -189,18 +330,70 @@ function collectBitsyncRevenueFromForm() {
   let out = {};
   getBitsyncInputAccounts().forEach(function (acc) {
     let vals = bitsyncReadAccountValues(acc.id);
-    let hasAny = [vals.nftSaleReward, vals.operationReward, vals.profitBonus].some(function (v) {
-      return v != null && String(v).trim() !== '';
+    let hasAny = bitsyncRevenueFieldDefs().some(function (f) {
+      return vals[f.cumKey] != null && String(vals[f.cumKey]).trim() !== '';
     });
     if (!hasAny) return;
-    out[acc.id] = {
-      accountName: acc.username || acc.name,
-      nftSaleReward: vals.nftSaleReward,
-      operationReward: vals.operationReward,
-      profitBonus: vals.profitBonus
-    };
+    out[acc.id] = Object.assign({
+      accountName: acc.username || acc.name
+    }, vals);
   });
   return { bitsyncAccounts: out };
+}
+
+function bitsyncFormatImpactConfirm(impacts) {
+  if (!impacts || !impacts.length) return '';
+  return impacts.map(function (row) {
+    let tag = row.isBaseline ? '（基準日・収益0）' : '';
+    return row.dateKey + tag + ': 日次 ' + bitsyncFormatUsdDisplay(row.beforeTotal) +
+      ' → ' + bitsyncFormatUsdDisplay(row.afterTotal);
+  }).join('\n');
+}
+
+function bitsyncConfirmCumulativeSave(accountId, dateKey, cumulatives) {
+  if (typeof pdPreviewBitsyncCumulativeSave !== 'function') {
+    return { ok: true, preview: null };
+  }
+  let preview = pdPreviewBitsyncCumulativeSave(accountId, dateKey, cumulatives);
+  if (!preview.ok) {
+    if (preview.reason === 'decrease') {
+      let lines = (preview.errors || preview.calc && preview.calc.decreases || []).map(function (d) {
+        return '・' + d.label + ': 前回 ' + bitsyncFormatUsdDisplay(d.previous) +
+          '（' + (d.previousDateKey || '') + '）→ 入力 ' + bitsyncFormatUsdDisplay(d.current);
+      });
+      alert('累計額が前回より減っています。自動では保存しません。\n入力値を確認してください。\n\n' + lines.join('\n'));
+      return { ok: false, preview: preview };
+    }
+    if (preview.reason === 'inconsistency') {
+      let lines = (preview.inconsistencies || []).map(function (d) {
+        return '・' + d.dateKey + ' の ' + d.label + ' 累計 ' + bitsyncFormatUsdDisplay(d.laterCumulative) +
+          ' が、修正後の累計 ' + bitsyncFormatUsdDisplay(d.editedCumulative) + ' より小さくなります';
+      });
+      alert('後続の累計データと整合しないため保存を中止しました。\n\n' + lines.join('\n'));
+      return { ok: false, preview: preview };
+    }
+    if (preview.reason === 'invalid') {
+      let labels = (preview.errors || []).map(function (e) { return e.label || e.field; });
+      alert('累計額は0以上の数値で、4項目すべて入力してください。\n' + labels.join(' / '));
+      return { ok: false, preview: preview };
+    }
+    alert('保存できませんでした。入力内容を確認してください。');
+    return { ok: false, preview: preview };
+  }
+  let forward = (preview.impacts || []).filter(function (row) { return row.dateKey !== dateKey; });
+  let changedForward = forward.filter(function (row) {
+    return Math.abs((Number(row.beforeTotal) || 0) - (Number(row.afterTotal) || 0)) > 0.0001;
+  });
+  if (changedForward.length) {
+    let msg = '過去日の修正により、後続日の日次収益が再計算されます。\n' +
+      '後続の累計値自体は変更しません。\n\n' +
+      bitsyncFormatImpactConfirm(preview.impacts) +
+      '\n\n保存しますか？';
+    if (!confirm(msg)) return { ok: false, preview: preview };
+  } else if (preview.calc && preview.calc.isBaseline) {
+    // no confirm needed for baseline
+  }
+  return { ok: true, preview: preview };
 }
 
 function collectBitsyncInvestmentFromForm() {
@@ -240,14 +433,19 @@ function persistBitsyncRevenueEntry(bitsyncAccounts) {
   }
   Object.keys(bitsyncAccounts).forEach(function (accountId) {
     let vals = bitsyncAccounts[accountId];
-    pdSaveBitsyncPerformanceEntry(
-      dateKey,
-      accountId,
-      vals.accountName,
-      vals.nftSaleReward,
-      vals.operationReward,
-      vals.profitBonus
-    );
+    let cumulatives = {
+      operationRewardCumulative: vals.operationRewardCumulative,
+      profitBonusCumulative: vals.profitBonusCumulative,
+      stakingRewardCumulative: vals.stakingRewardCumulative,
+      nftSaleRewardCumulative: vals.nftSaleRewardCumulative
+    };
+    let gate = bitsyncConfirmCumulativeSave(accountId, dateKey, cumulatives);
+    if (!gate.ok) {
+      let err = new Error('bitsync-save-cancelled');
+      err.bitsyncCancelled = true;
+      throw err;
+    }
+    pdSaveBitsyncPerformanceEntry(dateKey, accountId, vals.accountName, cumulatives);
   });
   if (typeof pdNotifyPerformanceChanged === 'function') {
     pdNotifyPerformanceChanged({ type: 'save', projectKey: 'bitsync', dateKey: dateKey });
@@ -322,12 +520,13 @@ function openBitsyncRevenueInput(opts) {
   let existing = getTodayBitsyncRevenueEntry();
   modalContent.innerHTML =
     renderBitsyncInputProgress(existing) +
-    '<p class="help ramInputLead">【実績入力】は日次の収益、【追加投資】はNFT購入・運用額の元本追加です。混同しないよう別ブロックで管理します。</p>' +
+    '<p class="help ramInputLead">各項目に公式ダッシュボードの累計額を入力してください。「本日の収益」は前回累計との差額合計です。【追加投資】は元本追加で、収益とは別管理です。</p>' +
     '<div class="ramInputList">' + accounts.map(function (acc) {
       return renderBitsyncInputAccountCard(acc, existing);
     }).join('') + '</div>' + renderBitsyncInputFooter();
   modalBg.style.display = 'flex';
   bindBitsyncModalActionButtons();
+  bindBitsyncInputListeners();
 
   setTimeout(function () {
     let focusId = bitsyncFocusAccountId;
@@ -386,6 +585,11 @@ function saveBitsyncRevenueInput() {
       if (typeof showToast === 'function') showToast(toastMsg);
     }
   } catch (err) {
+    if (err && err.bitsyncCancelled) return;
+    if (err && err.bitsyncPreview) {
+      console.warn('[bitsync]', err.bitsyncPreview);
+      return;
+    }
     console.error('[bitsync]', err);
     alert('保存できませんでした。時間をおいて再度お試しください。');
   }
@@ -547,4 +751,6 @@ if (typeof window !== 'undefined') {
   window.isBitsyncFullyEntered = isBitsyncFullyEntered;
   window.hasBitsyncDataSavedForToday = hasBitsyncDataSavedForToday;
   window.bitsyncMigrateInputAccountsFromRevenueLog = bitsyncMigrateInputAccountsFromRevenueLog;
+  window.updateBitsyncDerivedPreview = updateBitsyncDerivedPreview;
+  window.bitsyncFormatUsdt = bitsyncFormatUsdt;
 }

@@ -1725,6 +1725,14 @@ function pdSaveMatrixPerformanceEntry(dateKey, accountId, accountName, revenueBo
   return entry.matrixAccounts[accountId];
 }
 
+/** BITSYNC revenue field defs — display order for input / manage / portfolio */
+var PD_BITSYNC_REVENUE_FIELDS = [
+  { dailyKey: 'operationReward', cumKey: 'operationRewardCumulative', label: 'VAULT 運用益', shortLabel: 'VAULT' },
+  { dailyKey: 'profitBonus', cumKey: 'profitBonusCumulative', label: 'V BONUS', shortLabel: 'V BONUS' },
+  { dailyKey: 'stakingReward', cumKey: 'stakingRewardCumulative', label: 'ステーキング報酬', shortLabel: 'ステーキング' },
+  { dailyKey: 'nftSaleReward', cumKey: 'nftSaleRewardCumulative', label: 'N BONUS', shortLabel: 'N BONUS' }
+];
+
 function pdNormalizeBitsyncValue(value) {
   if (value == null || value === '') return 0;
   let n = Number(value);
@@ -1732,25 +1740,329 @@ function pdNormalizeBitsyncValue(value) {
   return pdRound(n);
 }
 
+function pdParseBitsyncCumulativeNumber(value) {
+  if (value == null || value === '') {
+    return { ok: false, error: 'empty', value: null };
+  }
+  let raw = String(value).trim();
+  if (!raw) return { ok: false, error: 'empty', value: null };
+  if (!/^-?\d+(\.\d+)?$/.test(raw) && !/^\d+(\.\d+)?$/.test(raw)) {
+    let nTry = Number(raw);
+    if (isNaN(nTry)) return { ok: false, error: 'invalid', value: null };
+  }
+  let n = Number(raw);
+  if (isNaN(n)) return { ok: false, error: 'invalid', value: null };
+  if (n < 0) return { ok: false, error: 'negative', value: null };
+  return { ok: true, error: '', value: pdRound(n) };
+}
+
+function pdIsBitsyncCumulativeModeEntry(ae) {
+  if (!ae || typeof ae !== 'object') return false;
+  if (ae.inputMode === 'cumulative') return true;
+  return PD_BITSYNC_REVENUE_FIELDS.some(function (f) {
+    return ae[f.cumKey] != null && ae[f.cumKey] !== '';
+  });
+}
+
 function pdIsBitsyncAccountEntryPresent(ae) {
   if (!ae || typeof ae !== 'object') return false;
-  return ae.savedAt != null || ae.nftSaleReward != null ||
-    ae.operationReward != null || ae.profitBonus != null;
+  if (ae.savedAt != null) return true;
+  if (pdIsBitsyncCumulativeModeEntry(ae)) return true;
+  return ae.nftSaleReward != null || ae.operationReward != null ||
+    ae.profitBonus != null || ae.stakingReward != null || ae.total != null;
 }
 
 function pdBitsyncAccountRevenueTotal(ae) {
   if (!ae) return 0;
   if (ae.total != null && ae.total !== '') return pdRound(Number(ae.total) || 0);
   return pdRound(
-    pdNormalizeBitsyncValue(ae.nftSaleReward) +
     pdNormalizeBitsyncValue(ae.operationReward) +
-    pdNormalizeBitsyncValue(ae.profitBonus)
+    pdNormalizeBitsyncValue(ae.profitBonus) +
+    pdNormalizeBitsyncValue(ae.stakingReward) +
+    pdNormalizeBitsyncValue(ae.nftSaleReward)
   );
 }
 
+function pdGetBitsyncPreviousCumulativeEntry(accountId, dateKey) {
+  if (!accountId || !dateKey) return null;
+  ensurePerformanceLogs();
+  let keys = pdListRevenueDateKeys().filter(function (k) { return k < dateKey; });
+  for (let i = keys.length - 1; i >= 0; i--) {
+    let entry = settings.revenueLog[keys[i]];
+    let ae = entry && entry.bitsyncAccounts ? entry.bitsyncAccounts[accountId] : null;
+    if (!pdIsBitsyncAccountEntryPresent(ae)) continue;
+    if (!pdIsBitsyncCumulativeModeEntry(ae)) continue;
+    return { dateKey: keys[i], entry: ae };
+  }
+  return null;
+}
+
+function pdReadBitsyncCumulativesFromEntry(ae) {
+  let out = {};
+  PD_BITSYNC_REVENUE_FIELDS.forEach(function (f) {
+    out[f.cumKey] = ae && ae[f.cumKey] != null && ae[f.cumKey] !== ''
+      ? pdNormalizeBitsyncValue(ae[f.cumKey])
+      : null;
+  });
+  return out;
+}
+
+/**
+ * Parse raw cumulative inputs. Rejects negatives / non-numeric.
+ * raw keys: operationRewardCumulative, profitBonusCumulative,
+ *           stakingRewardCumulative, nftSaleRewardCumulative
+ */
+function pdParseBitsyncCumulativeRaw(raw) {
+  raw = raw || {};
+  let cumulatives = {};
+  let errors = [];
+  PD_BITSYNC_REVENUE_FIELDS.forEach(function (f) {
+    let parsed = pdParseBitsyncCumulativeNumber(raw[f.cumKey]);
+    if (!parsed.ok) {
+      errors.push({ field: f.cumKey, label: f.label, error: parsed.error });
+      return;
+    }
+    cumulatives[f.cumKey] = parsed.value;
+  });
+  if (errors.length) {
+    return { ok: false, errors: errors, cumulatives: null };
+  }
+  return { ok: true, errors: [], cumulatives: cumulatives };
+}
+
+/**
+ * Compute daily deltas from cumulatives vs previous cumulative entry (not calendar yesterday).
+ * First cumulative entry → baseline (daily = 0).
+ */
+function pdCalcBitsyncDailyMetrics(accountId, dateKey, cumulatives) {
+  cumulatives = cumulatives || {};
+  let prev = pdGetBitsyncPreviousCumulativeEntry(accountId, dateKey);
+  let daily = {};
+  let decreases = [];
+  let isBaseline = !prev;
+  PD_BITSYNC_REVENUE_FIELDS.forEach(function (f) {
+    let cur = pdNormalizeBitsyncValue(cumulatives[f.cumKey]);
+    let prevVal = prev && prev.entry && prev.entry[f.cumKey] != null && prev.entry[f.cumKey] !== ''
+      ? pdNormalizeBitsyncValue(prev.entry[f.cumKey])
+      : 0;
+    if (!isBaseline && cur < prevVal) {
+      decreases.push({
+        field: f.cumKey,
+        dailyKey: f.dailyKey,
+        label: f.label,
+        previous: prevVal,
+        current: cur,
+        previousDateKey: prev.dateKey
+      });
+      daily[f.dailyKey] = 0;
+    } else if (isBaseline) {
+      daily[f.dailyKey] = 0;
+    } else {
+      daily[f.dailyKey] = pdRound(cur - prevVal);
+    }
+  });
+  let total = pdRound(
+    daily.operationReward + daily.profitBonus + daily.stakingReward + daily.nftSaleReward
+  );
+  return {
+    isBaseline: isBaseline,
+    hasDecrease: decreases.length > 0,
+    decreases: decreases,
+    previousDateKey: prev ? prev.dateKey : null,
+    previous: prev ? prev.entry : null,
+    daily: daily,
+    total: isBaseline ? 0 : total,
+    cumulatives: {
+      operationRewardCumulative: pdNormalizeBitsyncValue(cumulatives.operationRewardCumulative),
+      profitBonusCumulative: pdNormalizeBitsyncValue(cumulatives.profitBonusCumulative),
+      stakingRewardCumulative: pdNormalizeBitsyncValue(cumulatives.stakingRewardCumulative),
+      nftSaleRewardCumulative: pdNormalizeBitsyncValue(cumulatives.nftSaleRewardCumulative)
+    }
+  };
+}
+
+/**
+ * Preview impact of saving cumulatives on dateKey (including forward recalc of later cumulative days).
+ * Does not mutate. Stops with inconsistency when a later day cumulative < this day's new cumulative.
+ */
+function pdPreviewBitsyncCumulativeSave(accountId, dateKey, cumulatives) {
+  let parsed = pdParseBitsyncCumulativeRaw(cumulatives);
+  if (!parsed.ok) {
+    return { ok: false, reason: 'invalid', errors: parsed.errors, impacts: [], inconsistencies: [] };
+  }
+  let calc = pdCalcBitsyncDailyMetrics(accountId, dateKey, parsed.cumulatives);
+  if (calc.hasDecrease) {
+    return {
+      ok: false,
+      reason: 'decrease',
+      calc: calc,
+      errors: calc.decreases,
+      impacts: [],
+      inconsistencies: []
+    };
+  }
+
+  ensurePerformanceLogs();
+  let impacts = [{
+    dateKey: dateKey,
+    isBaseline: calc.isBaseline,
+    beforeTotal: (function () {
+      let cur = pdGetRevenueEntryRaw(dateKey);
+      let ae = cur && cur.bitsyncAccounts && cur.bitsyncAccounts[accountId];
+      return ae ? pdBitsyncAccountRevenueTotal(ae) : 0;
+    })(),
+    afterTotal: calc.total,
+    daily: calc.daily,
+    cumulatives: calc.cumulatives
+  }];
+
+  let inconsistencies = [];
+  let syntheticPrev = {
+    dateKey: dateKey,
+    entry: Object.assign({}, calc.cumulatives, {
+      inputMode: 'cumulative',
+      isBaseline: calc.isBaseline
+    })
+  };
+  let laterKeys = pdListRevenueDateKeys().filter(function (k) { return k > dateKey; });
+  for (let li = 0; li < laterKeys.length; li++) {
+    let laterKey = laterKeys[li];
+    let entry = settings.revenueLog[laterKey];
+    let ae = entry && entry.bitsyncAccounts ? entry.bitsyncAccounts[accountId] : null;
+    if (!ae || !pdIsBitsyncCumulativeModeEntry(ae)) continue;
+    let laterCums = pdReadBitsyncCumulativesFromEntry(ae);
+    let dayInconsistent = false;
+    PD_BITSYNC_REVENUE_FIELDS.forEach(function (f) {
+      let laterVal = laterCums[f.cumKey];
+      let baseVal = syntheticPrev.entry[f.cumKey];
+      if (laterVal == null || baseVal == null) return;
+      if (pdNormalizeBitsyncValue(laterVal) < pdNormalizeBitsyncValue(baseVal)) {
+        dayInconsistent = true;
+        inconsistencies.push({
+          dateKey: laterKey,
+          field: f.cumKey,
+          label: f.label,
+          laterCumulative: pdNormalizeBitsyncValue(laterVal),
+          editedCumulative: pdNormalizeBitsyncValue(baseVal)
+        });
+      }
+    });
+    if (dayInconsistent) break;
+    let daily = {};
+    let dayTotal = 0;
+    PD_BITSYNC_REVENUE_FIELDS.forEach(function (f) {
+      let cur = pdNormalizeBitsyncValue(laterCums[f.cumKey]);
+      let prevVal = pdNormalizeBitsyncValue(syntheticPrev.entry[f.cumKey]);
+      daily[f.dailyKey] = pdRound(cur - prevVal);
+      dayTotal = pdRound(dayTotal + daily[f.dailyKey]);
+    });
+    impacts.push({
+      dateKey: laterKey,
+      isBaseline: false,
+      beforeTotal: pdBitsyncAccountRevenueTotal(ae),
+      afterTotal: dayTotal,
+      daily: daily,
+      cumulatives: laterCums
+    });
+    syntheticPrev = {
+      dateKey: laterKey,
+      entry: Object.assign({}, laterCums, { inputMode: 'cumulative' })
+    };
+  }
+
+  if (inconsistencies.length) {
+    return {
+      ok: false,
+      reason: 'inconsistency',
+      calc: calc,
+      impacts: impacts,
+      inconsistencies: inconsistencies
+    };
+  }
+  return { ok: true, reason: '', calc: calc, impacts: impacts, inconsistencies: [] };
+}
+
+function pdApplyBitsyncAccountComputedFromCumulatives(accountId, dateKey, ae) {
+  if (!ae || !pdIsBitsyncCumulativeModeEntry(ae)) return ae;
+  let cums = pdReadBitsyncCumulativesFromEntry(ae);
+  let missing = PD_BITSYNC_REVENUE_FIELDS.some(function (f) { return cums[f.cumKey] == null; });
+  if (missing) return ae;
+  let calc = pdCalcBitsyncDailyMetrics(accountId, dateKey, cums);
+  ae.operationReward = calc.daily.operationReward;
+  ae.profitBonus = calc.daily.profitBonus;
+  ae.stakingReward = calc.daily.stakingReward;
+  ae.nftSaleReward = calc.daily.nftSaleReward;
+  ae.total = calc.total;
+  ae.isBaseline = !!calc.isBaseline;
+  ae.inputMode = 'cumulative';
+  return ae;
+}
+
+/** Recalc daily fields for cumulative-mode days from fromDateKey onward. Legacy days untouched. */
+function pdRecalculateBitsyncAccountFrom(accountId, fromDateKey) {
+  if (!accountId || !fromDateKey) return 0;
+  ensurePerformanceLogs();
+  let keys = pdListRevenueDateKeys().filter(function (k) { return k >= fromDateKey; });
+  let touched = 0;
+  keys.forEach(function (dateKey) {
+    let entry = settings.revenueLog[dateKey];
+    if (!entry || !entry.bitsyncAccounts || !entry.bitsyncAccounts[accountId]) return;
+    let ae = entry.bitsyncAccounts[accountId];
+    if (!pdIsBitsyncCumulativeModeEntry(ae)) return;
+    ae = pdApplyBitsyncAccountComputedFromCumulatives(accountId, dateKey, ae);
+    entry.bitsyncAccounts[accountId] = ae;
+    entry = pdRecalculateRevenueEntry(entry, dateKey);
+    pdWriteRevenueEntry(dateKey, entry);
+    touched += 1;
+  });
+  if (touched) pdPersist();
+  return touched;
+}
+
+/**
+ * Save BITSYNC performance.
+ * Preferred: raw object with *Cumulative fields (cumulative input mode).
+ * Legacy positional (nft, op, bonus) still writes legacy daily-only entries (no *Cumulative).
+ */
 function pdSaveBitsyncPerformanceEntry(dateKey, accountId, accountName, nftSaleReward, operationReward, profitBonus) {
   if (!dateKey || !accountId) return null;
   ensurePerformanceLogs();
+
+  // New cumulative API: 4th arg is raw object with cumulative fields
+  if (nftSaleReward && typeof nftSaleReward === 'object' && !Array.isArray(nftSaleReward)) {
+    let raw = nftSaleReward;
+    let preview = pdPreviewBitsyncCumulativeSave(accountId, dateKey, raw);
+    if (!preview.ok) {
+      let err = new Error(preview.reason || 'bitsync-save-blocked');
+      err.bitsyncPreview = preview;
+      throw err;
+    }
+    let calc = preview.calc;
+    let entry = pdGetRevenueEntryRaw(dateKey) || {};
+    entry.bitsyncAccounts = entry.bitsyncAccounts || {};
+    entry.bitsyncAccounts[accountId] = pdStampAccountRevision({
+      accountId: accountId,
+      accountName: accountName || accountId,
+      operationRewardCumulative: calc.cumulatives.operationRewardCumulative,
+      profitBonusCumulative: calc.cumulatives.profitBonusCumulative,
+      stakingRewardCumulative: calc.cumulatives.stakingRewardCumulative,
+      nftSaleRewardCumulative: calc.cumulatives.nftSaleRewardCumulative,
+      operationReward: calc.daily.operationReward,
+      profitBonus: calc.daily.profitBonus,
+      stakingReward: calc.daily.stakingReward,
+      nftSaleReward: calc.daily.nftSaleReward,
+      total: calc.total,
+      inputMode: 'cumulative',
+      isBaseline: !!calc.isBaseline,
+      savedAt: new Date().toLocaleString()
+    });
+    entry = pdRecalculateRevenueEntry(entry, dateKey);
+    pdWriteRevenueEntry(dateKey, entry);
+    pdRecalculateBitsyncAccountFrom(accountId, dateKey);
+    return entry.bitsyncAccounts[accountId];
+  }
+
+  // Legacy direct daily write (no cumulative fields — preserved for old callers / fixtures)
   let nft = pdNormalizeBitsyncValue(nftSaleReward);
   let op = pdNormalizeBitsyncValue(operationReward);
   let bonus = pdNormalizeBitsyncValue(profitBonus);
@@ -1762,7 +2074,10 @@ function pdSaveBitsyncPerformanceEntry(dateKey, accountId, accountName, nftSaleR
     nftSaleReward: nft,
     operationReward: op,
     profitBonus: bonus,
+    stakingReward: 0,
     total: pdRound(nft + op + bonus),
+    inputMode: 'legacy',
+    isBaseline: false,
     savedAt: new Date().toLocaleString()
   });
   entry = pdRecalculateRevenueEntry(entry, dateKey);
@@ -2908,9 +3223,16 @@ if (typeof window !== 'undefined') {
   window.pdSaveMatrixPerformanceEntry = pdSaveMatrixPerformanceEntry;
   window.pdMatrixAccountRevenueTotal = pdMatrixAccountRevenueTotal;
   window.pdIsMatrixAccountEntryPresent = pdIsMatrixAccountEntryPresent;
+  window.PD_BITSYNC_REVENUE_FIELDS = PD_BITSYNC_REVENUE_FIELDS;
   window.pdSaveBitsyncPerformanceEntry = pdSaveBitsyncPerformanceEntry;
   window.pdBitsyncAccountRevenueTotal = pdBitsyncAccountRevenueTotal;
   window.pdIsBitsyncAccountEntryPresent = pdIsBitsyncAccountEntryPresent;
+  window.pdIsBitsyncCumulativeModeEntry = pdIsBitsyncCumulativeModeEntry;
+  window.pdGetBitsyncPreviousCumulativeEntry = pdGetBitsyncPreviousCumulativeEntry;
+  window.pdParseBitsyncCumulativeRaw = pdParseBitsyncCumulativeRaw;
+  window.pdCalcBitsyncDailyMetrics = pdCalcBitsyncDailyMetrics;
+  window.pdPreviewBitsyncCumulativeSave = pdPreviewBitsyncCumulativeSave;
+  window.pdRecalculateBitsyncAccountFrom = pdRecalculateBitsyncAccountFrom;
   window.pdRecalculateEniAccountFrom = pdRecalculateEniAccountFrom;
   window.pdPreviewRamAccountRevenueTotal = pdPreviewRamAccountRevenueTotal;
   window.pdGetRamOperationRevenue = pdGetRamOperationRevenue;

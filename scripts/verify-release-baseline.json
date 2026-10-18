@@ -1,5 +1,5 @@
 {
-  "minPassed": 838,
-  "note": "Baseline after Ver2.0.65 Cloud pull as source of truth + cross-device merge (+7 net). verify:release Passed 838.",
-  "updatedAt": "2026-09-29"
+  "minPassed": 867,
+  "note": "Baseline after BITSYNC ENI-like cumulative UI (USDT units, prev hints, live today profit preview). verify:release Passed 867.",
+  "updatedAt": "2026-10-18"
 }

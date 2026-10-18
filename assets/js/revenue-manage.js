@@ -26,9 +26,10 @@ var RM_ACCOUNT_DETAIL_DEFS = {
     { key: 'total', label: '合計' }
   ],
   bitsync: [
-    { key: 'nftSaleReward', label: 'NFT販売報酬' },
-    { key: 'operationReward', label: '運用報酬' },
-    { key: 'profitBonus', label: '運用益ボーナス' },
+    { key: 'operationReward', label: 'VAULT 運用益' },
+    { key: 'profitBonus', label: 'V BONUS' },
+    { key: 'stakingReward', label: 'ステーキング報酬' },
+    { key: 'nftSaleReward', label: 'N BONUS' },
     { key: 'total', label: '合計' }
   ]
 };
@@ -341,12 +342,18 @@ function rmReadStoredEntryValues(projectKey, accountId, dateKey) {
   } else if (projectKey === 'bitsync' && entry.bitsyncAccounts && entry.bitsyncAccounts[accountId]) {
     let ae = entry.bitsyncAccounts[accountId];
     return {
-      nftSaleReward: ae.nftSaleReward != null ? Number(ae.nftSaleReward) : 0,
       operationReward: ae.operationReward != null ? Number(ae.operationReward) : 0,
       profitBonus: ae.profitBonus != null ? Number(ae.profitBonus) : 0,
+      stakingReward: ae.stakingReward != null ? Number(ae.stakingReward) : 0,
+      nftSaleReward: ae.nftSaleReward != null ? Number(ae.nftSaleReward) : 0,
+      operationRewardCumulative: ae.operationRewardCumulative != null ? Number(ae.operationRewardCumulative) : '',
+      profitBonusCumulative: ae.profitBonusCumulative != null ? Number(ae.profitBonusCumulative) : '',
+      stakingRewardCumulative: ae.stakingRewardCumulative != null ? Number(ae.stakingRewardCumulative) : '',
+      nftSaleRewardCumulative: ae.nftSaleRewardCumulative != null ? Number(ae.nftSaleRewardCumulative) : '',
       total: typeof pdBitsyncAccountRevenueTotal === 'function'
         ? pdBitsyncAccountRevenueTotal(ae)
-        : ((Number(ae.nftSaleReward) || 0) + (Number(ae.operationReward) || 0) + (Number(ae.profitBonus) || 0))
+        : ((Number(ae.nftSaleReward) || 0) + (Number(ae.operationReward) || 0) +
+          (Number(ae.profitBonus) || 0) + (Number(ae.stakingReward) || 0))
     };
   } else if (entry.accounts && entry.accounts[accountId]) {
     let ae = entry.accounts[accountId];
@@ -606,29 +613,142 @@ function rmSaveMatrixRevenueEntry() {
   }
 }
 
+function rmBitsyncFormatUsdt(n) {
+  if (typeof bitsyncFormatUsdt === 'function') return bitsyncFormatUsdt(n);
+  let num = Math.round((Number(n) || 0) * 100) / 100;
+  return String(num) + ' USDT';
+}
+
+function rmBitsyncPrevHint(accountId, dateVal, cumKey) {
+  let prev = typeof pdGetBitsyncPreviousCumulativeEntry === 'function'
+    ? pdGetBitsyncPreviousCumulativeEntry(accountId, dateVal)
+    : null;
+  if (!prev) return '初回入力：基準値として保存';
+  let v = prev.entry && prev.entry[cumKey] != null && prev.entry[cumKey] !== ''
+    ? Number(prev.entry[cumKey]) || 0
+    : 0;
+  return '前回の累計額 ' + rmBitsyncFormatUsdt(v);
+}
+
+function rmBitsyncCumField(label, id, value, prevHint) {
+  let v = value != null && value !== '' ? value : '';
+  return '<label class="pfEntryLabel" for="' + id + '">' + label + '</label>' +
+    '<div class="rmBitsyncCumField">' +
+    '<input type="number" id="' + id + '" class="pfEntryInput rmBitsyncCumInput" min="0" step="0.01" value="' + v + '">' +
+    '<span class="rmBitsyncUnit">USDT</span></div>' +
+    '<p class="pfEntryHelp">' + prevHint + '</p>';
+}
+
+function rmUpdateBitsyncDerivedPreview() {
+  let profitEl = document.getElementById('rmBitsyncDailyProfit');
+  let hintEl = document.getElementById('rmBitsyncDailyProfitHint');
+  let accountIdEl = document.getElementById('rmEntryAccountId');
+  let dateEl = document.getElementById('rmEntryDate');
+  if (!profitEl || !accountIdEl) return;
+  let accountId = accountIdEl.value;
+  let dateKey = dateEl && dateEl.value
+    ? dateEl.value
+    : (typeof todayKey === 'function' ? todayKey() : '');
+  let fields = [
+    { id: 'rmEntryBitsyncVaultCum', cumKey: 'operationRewardCumulative' },
+    { id: 'rmEntryBitsyncVBonusCum', cumKey: 'profitBonusCumulative' },
+    { id: 'rmEntryBitsyncStakeCum', cumKey: 'stakingRewardCumulative' },
+    { id: 'rmEntryBitsyncNBonusCum', cumKey: 'nftSaleRewardCumulative' }
+  ];
+  let cumulatives = {};
+  let incomplete = false;
+  let invalid = false;
+  fields.forEach(function (f) {
+    let el = document.getElementById(f.id);
+    let raw = el ? String(el.value || '').trim() : '';
+    if (raw === '') { incomplete = true; return; }
+    let n = Number(raw);
+    if (!isFinite(n) || n < 0) { invalid = true; return; }
+    cumulatives[f.cumKey] = n;
+  });
+  if (incomplete || invalid || typeof pdCalcBitsyncDailyMetrics !== 'function') {
+    profitEl.textContent = '—';
+    if (hintEl) hintEl.textContent = invalid ? '累計額は0以上の数値で入力してください。' : '';
+    return;
+  }
+  if (typeof pdParseBitsyncCumulativeRaw === 'function') {
+    let parsed = pdParseBitsyncCumulativeRaw(cumulatives);
+    if (!parsed.ok) {
+      profitEl.textContent = '—';
+      if (hintEl) hintEl.textContent = '累計額は0以上の数値で入力してください。';
+      return;
+    }
+    cumulatives = parsed.cumulatives;
+  }
+  let calc = pdCalcBitsyncDailyMetrics(accountId, dateKey, cumulatives);
+  if (calc.hasDecrease) {
+    profitEl.textContent = '—';
+    if (hintEl) hintEl.textContent = '累計額が前回より減っています。保存できません。';
+    return;
+  }
+  profitEl.textContent = rmBitsyncFormatUsdt(calc.total);
+  if (hintEl) {
+    hintEl.textContent = calc.isBaseline
+      ? '初回入力のため本日の収益は 0 USDT です（基準値として保存）。'
+      : '';
+  }
+}
+
+function rmBindBitsyncPreviewListeners() {
+  ['rmEntryBitsyncVaultCum', 'rmEntryBitsyncVBonusCum', 'rmEntryBitsyncStakeCum', 'rmEntryBitsyncNBonusCum', 'rmEntryDate']
+    .forEach(function (id) {
+      let el = document.getElementById(id);
+      if (!el || el.dataset.rmBitsyncBound === '1') return;
+      el.dataset.rmBitsyncBound = '1';
+      el.addEventListener('input', rmUpdateBitsyncDerivedPreview);
+      el.addEventListener('change', rmUpdateBitsyncDerivedPreview);
+    });
+  rmUpdateBitsyncDerivedPreview();
+}
+
 function rmOpenBitsyncRevenueEntryModal(accountId, accountName, dateVal) {
   let stored = rmReadStoredEntryValues('bitsync', accountId, dateVal);
-  let nftVal = stored.nftSaleReward != null ? stored.nftSaleReward : '';
-  let opVal = stored.operationReward != null ? stored.operationReward : '';
-  let bonusVal = stored.profitBonus != null ? stored.profitBonus : '';
+  let vaultCum = stored.operationRewardCumulative !== '' && stored.operationRewardCumulative != null
+    ? stored.operationRewardCumulative : '';
+  let vBonusCum = stored.profitBonusCumulative !== '' && stored.profitBonusCumulative != null
+    ? stored.profitBonusCumulative : '';
+  let stakeCum = stored.stakingRewardCumulative !== '' && stored.stakingRewardCumulative != null
+    ? stored.stakingRewardCumulative : '';
+  let nBonusCum = stored.nftSaleRewardCumulative !== '' && stored.nftSaleRewardCumulative != null
+    ? stored.nftSaleRewardCumulative : '';
   let body =
     '<input type="hidden" id="rmEntryProjectKey" value="bitsync">' +
     '<input type="hidden" id="rmEntryAccountId" value="' + pfEscapeAttr(accountId) + '">' +
     pfEntryDateField('日付', 'rmEntryDate', dateVal) +
     pfEntryReadonlyField('プロジェクト', 'BITSYNC') +
     pfEntryReadonlyField('アカウント', accountName || accountId) +
-    pfEntryNumberField('NFT販売報酬', 'rmEntryBitsyncNft', nftVal, 'NFT販売報酬（0でも保存可）') +
-    pfEntryNumberField('運用報酬', 'rmEntryBitsyncOp', opVal, '運用額に対する日次報酬') +
-    pfEntryNumberField('運用益ボーナス', 'rmEntryBitsyncBonus', bonusVal, 'グループ運用等のボーナス（0でも保存可）');
+    '<p class="help">公式ダッシュボードの累計額を入力してください。本日の収益は前回累計との差額合計です。</p>' +
+    rmBitsyncCumField('VAULT 運用益', 'rmEntryBitsyncVaultCum', vaultCum,
+      rmBitsyncPrevHint(accountId, dateVal, 'operationRewardCumulative')) +
+    rmBitsyncCumField('V BONUS', 'rmEntryBitsyncVBonusCum', vBonusCum,
+      rmBitsyncPrevHint(accountId, dateVal, 'profitBonusCumulative')) +
+    rmBitsyncCumField('ステーキング報酬', 'rmEntryBitsyncStakeCum', stakeCum,
+      rmBitsyncPrevHint(accountId, dateVal, 'stakingRewardCumulative')) +
+    rmBitsyncCumField('N BONUS', 'rmEntryBitsyncNBonusCum', nBonusCum,
+      rmBitsyncPrevHint(accountId, dateVal, 'nftSaleRewardCumulative')) +
+    '<div class="rmBitsyncTodayRow"><span class="rmBitsyncTodayLabel">本日の収益</span>' +
+    '<b class="rmBitsyncTodayVal ramInputVal--gold" id="rmBitsyncDailyProfit">—</b></div>' +
+    '<p class="pfEntryHelp" id="rmBitsyncDailyProfitHint"></p>';
   pfOpenEntryModal('実績入力', body, 'rmSaveBitsyncRevenueEntry');
+  rmBindBitsyncPreviewListeners();
+}
+
+function rmBitsyncFormatUsd(n) {
+  return rmBitsyncFormatUsdt(n);
 }
 
 function rmSaveBitsyncRevenueEntry() {
   let dateEl = document.getElementById('rmEntryDate');
   let accountIdEl = document.getElementById('rmEntryAccountId');
-  let nftEl = document.getElementById('rmEntryBitsyncNft');
-  let opEl = document.getElementById('rmEntryBitsyncOp');
-  let bonusEl = document.getElementById('rmEntryBitsyncBonus');
+  let vaultEl = document.getElementById('rmEntryBitsyncVaultCum');
+  let vBonusEl = document.getElementById('rmEntryBitsyncVBonusCum');
+  let stakeEl = document.getElementById('rmEntryBitsyncStakeCum');
+  let nBonusEl = document.getElementById('rmEntryBitsyncNBonusCum');
   if (!accountIdEl) return;
 
   let accountId = accountIdEl.value;
@@ -641,17 +761,65 @@ function rmSaveBitsyncRevenueEntry() {
     if (acc) accountName = acc.username || acc.name || accountId;
   }
 
+  let cumulatives = {
+    operationRewardCumulative: vaultEl ? vaultEl.value : '',
+    profitBonusCumulative: vBonusEl ? vBonusEl.value : '',
+    stakingRewardCumulative: stakeEl ? stakeEl.value : '',
+    nftSaleRewardCumulative: nBonusEl ? nBonusEl.value : ''
+  };
+
+  if (typeof pdPreviewBitsyncCumulativeSave === 'function') {
+    let preview = pdPreviewBitsyncCumulativeSave(accountId, dateKey, cumulatives);
+    if (!preview.ok) {
+      if (preview.reason === 'decrease') {
+        let lines = (preview.errors || (preview.calc && preview.calc.decreases) || []).map(function (d) {
+          return '・' + d.label + ': 前回 ' + rmBitsyncFormatUsd(d.previous) +
+            ' → 入力 ' + rmBitsyncFormatUsd(d.current);
+        });
+        alert('累計額が前回より減っています。自動では保存しません。\n\n' + lines.join('\n'));
+        return;
+      }
+      if (preview.reason === 'inconsistency') {
+        let lines = (preview.inconsistencies || []).map(function (d) {
+          return '・' + d.dateKey + ' の ' + d.label + ' が整合しません';
+        });
+        alert('後続の累計データと整合しないため保存を中止しました。\n\n' + lines.join('\n'));
+        return;
+      }
+      if (preview.reason === 'invalid') {
+        alert('累計額は0以上の数値で、4項目すべて入力してください。');
+        return;
+      }
+      alert('保存できませんでした。入力内容を確認してください。');
+      return;
+    }
+    let forward = (preview.impacts || []).filter(function (row) { return row.dateKey !== dateKey; });
+    let changedForward = forward.filter(function (row) {
+      return Math.abs((Number(row.beforeTotal) || 0) - (Number(row.afterTotal) || 0)) > 0.0001;
+    });
+    if (changedForward.length) {
+      let msg = '過去日の修正により、後続日の日次収益が再計算されます。\n' +
+        '後続の累計値自体は変更しません。\n\n' +
+        (preview.impacts || []).map(function (row) {
+          return row.dateKey + ': ' + rmBitsyncFormatUsd(row.beforeTotal) + ' → ' + rmBitsyncFormatUsd(row.afterTotal);
+        }).join('\n') +
+        '\n\n保存しますか？';
+      if (!confirm(msg)) return;
+    }
+  }
+
   pfRegisterManageDisplayFromEntry('bitsync', accountId);
 
-  if (typeof pdSaveBitsyncPerformanceEntry === 'function') {
-    pdSaveBitsyncPerformanceEntry(
-      dateKey,
-      accountId,
-      accountName,
-      nftEl ? nftEl.value : '',
-      opEl ? opEl.value : '',
-      bonusEl ? bonusEl.value : ''
-    );
+  try {
+    if (typeof pdSaveBitsyncPerformanceEntry === 'function') {
+      pdSaveBitsyncPerformanceEntry(dateKey, accountId, accountName, cumulatives);
+    }
+  } catch (err) {
+    if (err && err.bitsyncPreview) {
+      alert('保存できませんでした。入力内容を確認してください。');
+      return;
+    }
+    throw err;
   }
 
   pfCloseEntryModal();
@@ -1062,7 +1230,7 @@ function rmGetAccountDirectAmount(entry, projectKey, accountId, dateKey) {
         !pdIsBitsyncAccountEntryPresent(ae)) return null;
     if (typeof pdBitsyncAccountRevenueTotal === 'function') return pdBitsyncAccountRevenueTotal(ae);
     return Math.round(((Number(ae.nftSaleReward) || 0) + (Number(ae.operationReward) || 0) +
-      (Number(ae.profitBonus) || 0)) * 100) / 100;
+      (Number(ae.profitBonus) || 0) + (Number(ae.stakingReward) || 0)) * 100) / 100;
   }
   if (projectKey === 'cary' && typeof getCaryAccountEntry === 'function') {
     let ae = getCaryAccountEntry(entry, accountId);
@@ -1298,11 +1466,13 @@ function rmGetAccountBreakdown(projectKey, accountId, y, m, d) {
         if (ae && (!pdIsBitsyncAccountEntryPresent || pdIsBitsyncAccountEntryPresent(ae))) {
           let total = typeof pdBitsyncAccountRevenueTotal === 'function'
             ? pdBitsyncAccountRevenueTotal(ae)
-            : ((Number(ae.nftSaleReward) || 0) + (Number(ae.operationReward) || 0) + (Number(ae.profitBonus) || 0));
+            : ((Number(ae.nftSaleReward) || 0) + (Number(ae.operationReward) || 0) +
+              (Number(ae.profitBonus) || 0) + (Number(ae.stakingReward) || 0));
           return {
-            nftSaleReward: ae.nftSaleReward != null ? Number(ae.nftSaleReward) : 0,
             operationReward: ae.operationReward != null ? Number(ae.operationReward) : 0,
             profitBonus: ae.profitBonus != null ? Number(ae.profitBonus) : 0,
+            stakingReward: ae.stakingReward != null ? Number(ae.stakingReward) : 0,
+            nftSaleReward: ae.nftSaleReward != null ? Number(ae.nftSaleReward) : 0,
             total: total
           };
         }

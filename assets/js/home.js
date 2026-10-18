@@ -1,5 +1,5 @@
 /* OUKEI HUB Home UI — Ver2.0.7 */
-var HUB_HOME_JS_BUILD = 'Ver2.0.65/Build20260929-v005';
+var HUB_HOME_JS_BUILD = 'Ver2.0.66/Build20261018-v001';
 let homeCalView = { y: new Date().getFullYear(), m: new Date().getMonth() };
 let ramSavePending = null;
 let ramSalesDecreasePending = null;
@@ -200,7 +200,7 @@ var REVENUE_PROJECT_META = {
   orca: { desc: '昨日AI利益＋本日AF収益', ready: true },
   eni: { desc: 'USDT残高と総実績から自動計算', ready: true },
   matrix: { desc: '収益ボーナス・MATRIXボーナス', ready: true },
-  bitsync: { desc: 'NFT販売報酬・運用報酬・運用益ボーナス', ready: true },
+  bitsync: { desc: 'VAULT運用益・V BONUS・ステーキング報酬・N BONUS（公式累計）', ready: true },
   cary: { desc: 'ブロックチェーン／報酬入力', ready: false }
 };
 
@@ -293,7 +293,8 @@ function getProjectInputSavedTotal(projectKey, entry) {
       let ae = entry.bitsyncAccounts[acc.id];
       if (!ae) return sum;
       if (typeof pdBitsyncAccountRevenueTotal === 'function') return sum + pdBitsyncAccountRevenueTotal(ae);
-      return sum + (Number(ae.nftSaleReward) || 0) + (Number(ae.operationReward) || 0) + (Number(ae.profitBonus) || 0);
+      return sum + (Number(ae.nftSaleReward) || 0) + (Number(ae.operationReward) || 0) +
+        (Number(ae.profitBonus) || 0) + (Number(ae.stakingReward) || 0);
     }, 0);
   }
   if (projectKey === 'cary') {
@@ -932,7 +933,7 @@ function getHomeActionPendingText(projectKey, projectName) {
   if (projectKey === 'orca') return projectName + 'の昨日AI利益・本日AF収益を入力してください';
   if (projectKey === 'eni') return projectName + 'の収益を入力してください';
   if (projectKey === 'matrix') return projectName + 'の収益ボーナス・MATRIXボーナスを入力してください';
-  if (projectKey === 'bitsync') return projectName + 'のNFT販売報酬・運用報酬・運用益ボーナスを入力してください';
+  if (projectKey === 'bitsync') return projectName + 'のVAULT運用益・V BONUS・ステーキング報酬・N BONUS（公式累計）を入力してください';
   if (projectKey === 'cary') return projectName + 'の報酬を入力してください';
   return projectName + 'の収益を入力してください';
 }

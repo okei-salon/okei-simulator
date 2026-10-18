@@ -160,6 +160,12 @@ function bitsyncAccumulateAccountProfit(ae, totals) {
   if (!ae) return false;
   if (typeof pdIsBitsyncAccountEntryPresent === 'function' &&
       !pdIsBitsyncAccountEntryPresent(ae)) return false;
+  // Daily revenue keys (legacy + cumulative modes share these)
+  totals.vaultProfit += Number(ae.operationReward) || 0;
+  totals.vBonusProfit += Number(ae.profitBonus) || 0;
+  totals.stakingProfit += Number(ae.stakingReward) || 0;
+  totals.nBonusProfit += Number(ae.nftSaleReward) || 0;
+  // Backward-compatible aliases used by existing portfolio card metrics
   totals.nftSaleProfit += Number(ae.nftSaleReward) || 0;
   totals.personalOperationProfit += Number(ae.operationReward) || 0;
   totals.groupOperationProfit += Number(ae.profitBonus) || 0;
@@ -167,16 +173,28 @@ function bitsyncAccumulateAccountProfit(ae, totals) {
 }
 
 function bitsyncRoundProfitBreakdown(totals) {
+  totals.vaultProfit = Math.round(totals.vaultProfit * 100) / 100;
+  totals.vBonusProfit = Math.round(totals.vBonusProfit * 100) / 100;
+  totals.stakingProfit = Math.round(totals.stakingProfit * 100) / 100;
+  totals.nBonusProfit = Math.round(totals.nBonusProfit * 100) / 100;
   totals.nftSaleProfit = Math.round(totals.nftSaleProfit * 100) / 100;
   totals.personalOperationProfit = Math.round(totals.personalOperationProfit * 100) / 100;
   totals.groupOperationProfit = Math.round(totals.groupOperationProfit * 100) / 100;
-  totals.operationProfit = Math.round((totals.personalOperationProfit + totals.groupOperationProfit) * 100) / 100;
-  totals.totalProfit = Math.round((totals.nftSaleProfit + totals.personalOperationProfit + totals.groupOperationProfit) * 100) / 100;
+  totals.operationProfit = Math.round(
+    (totals.vaultProfit + totals.vBonusProfit + totals.stakingProfit) * 100
+  ) / 100;
+  totals.totalProfit = Math.round(
+    (totals.vaultProfit + totals.vBonusProfit + totals.stakingProfit + totals.nBonusProfit) * 100
+  ) / 100;
   return totals;
 }
 
 function bitsyncEmptyProfitBreakdown() {
   return {
+    vaultProfit: 0,
+    vBonusProfit: 0,
+    stakingProfit: 0,
+    nBonusProfit: 0,
     nftSaleProfit: 0,
     personalOperationProfit: 0,
     groupOperationProfit: 0,

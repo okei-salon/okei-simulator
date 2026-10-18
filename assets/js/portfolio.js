@@ -1122,20 +1122,25 @@ function pfGetBitsyncProfitBreakdown(viewY, viewM) {
     ? bitsyncCalcPersonalMonthlyYield(viewY, viewM) : null;
   let bitsyncTheme = typeof pjGetTheme === 'function' ? pjGetTheme('bitsync') : {};
   let chartSegments = [
-    { key: 'nftSale', label: 'NFT販売利益', amount: month.nftSaleProfit, color: bitsyncTheme.accentLight || '#e9d5ff' },
-    { key: 'personalOp', label: '個人運用利益', amount: month.personalOperationProfit, color: bitsyncTheme.accent || '#a855f7' },
-    { key: 'groupOp', label: 'グループ運用利益', amount: month.groupOperationProfit, color: bitsyncTheme.accentDeep || '#7e22ce' }
+    { key: 'vault', label: 'VAULT 運用益', amount: month.vaultProfit || month.personalOperationProfit, color: bitsyncTheme.accent || '#a855f7' },
+    { key: 'vBonus', label: 'V BONUS', amount: month.vBonusProfit || month.groupOperationProfit, color: bitsyncTheme.accentDeep || '#7e22ce' },
+    { key: 'staking', label: 'ステーキング報酬', amount: month.stakingProfit || 0, color: bitsyncTheme.accentGlow || '#c084fc' },
+    { key: 'nBonus', label: 'N BONUS', amount: month.nBonusProfit || month.nftSaleProfit, color: bitsyncTheme.accentLight || '#e9d5ff' }
   ];
   return {
     projectKey: 'bitsync',
     theme: 'bitsync',
     nftPurchaseUsd: nftPurchaseUsd,
-    nftSaleProfit: allTime.nftSaleProfit,
+    nftSaleProfit: allTime.nBonusProfit != null ? allTime.nBonusProfit : allTime.nftSaleProfit,
+    nBonusProfit: allTime.nBonusProfit != null ? allTime.nBonusProfit : allTime.nftSaleProfit,
+    vaultProfit: allTime.vaultProfit != null ? allTime.vaultProfit : allTime.personalOperationProfit,
+    vBonusProfit: allTime.vBonusProfit != null ? allTime.vBonusProfit : allTime.groupOperationProfit,
+    stakingProfit: allTime.stakingProfit || 0,
     personalOperatingUsd: personalOperatingUsd,
-    personalOperationProfit: allTime.personalOperationProfit,
+    personalOperationProfit: allTime.vaultProfit != null ? allTime.vaultProfit : allTime.personalOperationProfit,
     personalMonthlyYield: personalMonthlyYield,
     hasPersonalOperating: personalOperatingUsd > 0,
-    groupOperationProfit: allTime.groupOperationProfit,
+    groupOperationProfit: allTime.vBonusProfit != null ? allTime.vBonusProfit : allTime.groupOperationProfit,
     monthTotal: month.totalProfit,
     monthHasData: month.hasData,
     chartSegments: chartSegments
@@ -1196,25 +1201,24 @@ function pfRenderBitsyncProfitDetailBody(breakdown) {
     '</b></div></section>';
   return '<div class="pfProfitDetail pfProfitDetail--bitsync">' +
     '<section class="pfProfitDetailSection">' +
-    '<div class="pfProfitDetailSectionTitle">NFT</div>' +
+    '<div class="pfProfitDetailSectionTitle">元本（収益とは別管理）</div>' +
     '<div class="pfProfitDetailRow"><span class="pfProfitDetailLabel">NFT購入金額</span>' +
     '<b class="pfProfitDetailVal">' + pfDisplayUsd(breakdown.nftPurchaseUsd, breakdown.nftPurchaseUsd > 0) + '</b></div>' +
-    '<div class="pfProfitDetailRow"><span class="pfProfitDetailLabel">NFT販売利益</span>' +
-    '<b class="pfProfitDetailVal">' + pfDisplayUsd(breakdown.nftSaleProfit, breakdown.nftSaleProfit > 0) + '</b></div>' +
-    '</section>' + divider +
-    '<section class="pfProfitDetailSection">' +
-    '<div class="pfProfitDetailSectionTitle">個人運用</div>' +
-    '<div class="pfProfitDetailRow"><span class="pfProfitDetailLabel">個人運用額</span>' +
+    '<div class="pfProfitDetailRow"><span class="pfProfitDetailLabel">運用額</span>' +
     '<b class="pfProfitDetailVal">' + pfDisplayUsd(breakdown.personalOperatingUsd, breakdown.personalOperatingUsd > 0) + '</b></div>' +
-    '<div class="pfProfitDetailRow"><span class="pfProfitDetailLabel">個人運用利益</span>' +
-    '<b class="pfProfitDetailVal">' + pfDisplayUsd(breakdown.personalOperationProfit, breakdown.personalOperationProfit > 0) + '</b></div>' +
-    '<div class="pfProfitDetailRow"><span class="pfProfitDetailLabel">個人運用月利</span>' +
+    '<div class="pfProfitDetailRow"><span class="pfProfitDetailLabel">個人運用月利（VAULT基準）</span>' +
     '<b class="pfProfitDetailVal">' + personalYieldDisplay + '</b></div>' +
     '</section>' + divider +
     '<section class="pfProfitDetailSection">' +
-    '<div class="pfProfitDetailSectionTitle">グループ運用</div>' +
-    '<div class="pfProfitDetailRow"><span class="pfProfitDetailLabel">グループ運用利益</span>' +
-    '<b class="pfProfitDetailVal">' + pfDisplayUsd(breakdown.groupOperationProfit, breakdown.groupOperationProfit > 0) + '</b></div>' +
+    '<div class="pfProfitDetailSectionTitle">累計利益内訳</div>' +
+    '<div class="pfProfitDetailRow"><span class="pfProfitDetailLabel">VAULT 運用益</span>' +
+    '<b class="pfProfitDetailVal">' + pfDisplayUsd(breakdown.vaultProfit, breakdown.vaultProfit > 0) + '</b></div>' +
+    '<div class="pfProfitDetailRow"><span class="pfProfitDetailLabel">V BONUS</span>' +
+    '<b class="pfProfitDetailVal">' + pfDisplayUsd(breakdown.vBonusProfit, breakdown.vBonusProfit > 0) + '</b></div>' +
+    '<div class="pfProfitDetailRow"><span class="pfProfitDetailLabel">ステーキング報酬</span>' +
+    '<b class="pfProfitDetailVal">' + pfDisplayUsd(breakdown.stakingProfit, breakdown.stakingProfit > 0) + '</b></div>' +
+    '<div class="pfProfitDetailRow"><span class="pfProfitDetailLabel">N BONUS</span>' +
+    '<b class="pfProfitDetailVal">' + pfDisplayUsd(breakdown.nBonusProfit != null ? breakdown.nBonusProfit : breakdown.nftSaleProfit, (breakdown.nBonusProfit != null ? breakdown.nBonusProfit : breakdown.nftSaleProfit) > 0) + '</b></div>' +
     '</section>' + divider + pie + '</div>';
 }
 
@@ -1664,9 +1668,9 @@ function pfRenderBitsyncProjectCard(row) {
     '<span class="pfStatusBadge pfStatusBadge--' + row.statusCls + '">' + pfEscape(row.status) + '</span></div>' +
     '<div class="pfProjectMetrics pfProjectMetrics--bitsync">' +
     '<div class="pfProjectMetric"><span class="pfProjectMetricLabel">NFT購入</span><span class="pfProjectMetricVal">' + row.bitsyncNftDisplay + '</span></div>' +
-    '<div class="pfProjectMetric"><span class="pfProjectMetricLabel">NFT販売利益</span><span class="pfProjectMetricVal isProfit">' + row.bitsyncNftSaleProfitDisplay + '</span></div>' +
+    '<div class="pfProjectMetric"><span class="pfProjectMetricLabel">N BONUS</span><span class="pfProjectMetricVal isProfit">' + row.bitsyncNftSaleProfitDisplay + '</span></div>' +
     '<div class="pfProjectMetric"><span class="pfProjectMetricLabel">運用額</span><span class="pfProjectMetricVal">' + row.bitsyncOperatingDisplay + '</span></div>' +
-    '<div class="pfProjectMetric"><span class="pfProjectMetricLabel">運用利益</span><span class="pfProjectMetricVal isProfit">' + row.bitsyncOperationProfitDisplay + '</span></div>' +
+    '<div class="pfProjectMetric"><span class="pfProjectMetricLabel">VAULT等利益</span><span class="pfProjectMetricVal isProfit">' + row.bitsyncOperationProfitDisplay + '</span></div>' +
     '<div class="pfProjectMetric"><span class="pfProjectMetricLabel">累計利益</span><span class="pfProjectMetricVal isProfit">' + row.profit + '</span></div>' +
     '</div>' +
     '<div class="pfRecoveryBlock">' +

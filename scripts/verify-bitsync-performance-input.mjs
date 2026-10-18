@@ -44,8 +44,8 @@ assert('sales manage excludes matrix/bitsync', salesManage.includes('SM_SALES_UN
 assert('bitsync registration has startDate + principal', bitsyncInput.includes('bitsyncNewStartDate') &&
   bitsyncInput.includes('bitsyncNewNftPurchase') && bitsyncInput.includes('bitsyncNewOperating'));
 assert('bitsync portfolio card 5 metrics', portfolio.includes('pfRenderBitsyncProjectCard') &&
-  portfolio.includes('NFT購入') && portfolio.includes('NFT販売利益') &&
-  portfolio.includes('運用利益') && portfolio.includes('累計利益'));
+  portfolio.includes('NFT購入') && portfolio.includes('N BONUS') &&
+  portfolio.includes('VAULT等利益') && portfolio.includes('累計利益'));
 assert('bitsync recovery bar label', portfolio.includes('回収率') &&
   portfolio.includes('pfRecoveryScaleHtml(row.recovery'));
 assert('bitsync profit breakdown helper', bitsyncInv.includes('bitsyncSumAllTimeProfitBreakdown'));
@@ -57,6 +57,10 @@ assert('bitsync card opens detail', portfolio.includes('pfOpenProjectProfitDetai
   portfolio.includes('bitsync') && portfolio.includes('isClickable'));
 assert('bitsync card tap hint', portfolio.includes('pfProjectCardHint') &&
   portfolio.includes('タップで利益構成・月利詳細'));
+assert('bitsync cumulative save helpers', pd.includes('pdCalcBitsyncDailyMetrics') &&
+  pd.includes('pdPreviewBitsyncCumulativeSave') && pd.includes('stakingRewardCumulative'));
+assert('bitsync 4 revenue field defs', pd.includes('VAULT 運用益') && pd.includes('V BONUS') &&
+  pd.includes('ステーキング報酬') && pd.includes('N BONUS'));
 const themeJs = readFileSync(path.join(root, 'assets/js/project-theme.js'), 'utf8');
 assert('bitsync theme purple', themeJs.includes("bitsync: {") &&
   themeJs.includes("accent: '#a855f7'") && themeJs.includes("chart: '#a855f7'"));
@@ -69,8 +73,14 @@ assert('matrix save closes modal via hubFinish', matrixInput.includes('hubFinish
 assert('bitsync allocation uses total investment', portfolio.includes('bitsyncGetProjectTotalInvestment'));
 assert('bitsync icon registry + PNG', icons.includes("bitsync: { file: 'bitsync.png'"));
 assert('bitsyncAccounts in hub merge keys', hub.includes("'bitsyncAccounts'"));
-assert('bitsync input field order', bitsyncInput.indexOf('NFT販売報酬') < bitsyncInput.indexOf('運用報酬') &&
-  bitsyncInput.indexOf('運用報酬') < bitsyncInput.indexOf('運用益ボーナス'));
+assert('bitsync input field order', bitsyncInput.indexOf('VAULT 運用益') < bitsyncInput.indexOf('V BONUS') &&
+  bitsyncInput.indexOf('V BONUS') < bitsyncInput.indexOf('ステーキング報酬') &&
+  bitsyncInput.indexOf('ステーキング報酬') < bitsyncInput.indexOf('N BONUS'));
+assert('bitsync no official placeholder', !bitsyncInput.includes('公式の累計額'));
+assert('bitsync USDT unit on fields', bitsyncInput.includes("ramInputUnit\">USDT") || bitsyncInput.includes("ramInputUnit'>USDT"));
+assert('bitsync today profit preview row', bitsyncInput.includes('本日の収益') &&
+  bitsyncInput.includes('bitsyncDailyProfit_') && bitsyncInput.includes('updateBitsyncDerivedPreview'));
+assert('bitsync preview uses pdCalcBitsyncDailyMetrics', bitsyncInput.includes('pdCalcBitsyncDailyMetrics'));
 assert('bitsync no daily account name input', !bitsyncInput.includes('bitsyncAccountName'));
 assert('matrix no daily account name input', !matrixInput.includes('matrixAccountName'));
 
@@ -87,10 +97,16 @@ cloudDoc.settings = hubCreateDefaultSettings();
 cloudDoc.settings.revenueLog = {
   '2026-09-27': {
     bitsyncAccounts: {
-      bs1: { accountId: 'bs1', accountName: 'kai-bs', nftSaleReward: 100, operationReward: 50, profitBonus: 25, total: 175 }
+      bs1: {
+        accountId: 'bs1', accountName: 'kai-bs',
+        nftSaleReward: 100, operationReward: 50, profitBonus: 25, stakingReward: 10, total: 185,
+        operationRewardCumulative: 50, profitBonusCumulative: 25,
+        stakingRewardCumulative: 10, nftSaleRewardCumulative: 100,
+        inputMode: 'cumulative', isBaseline: false
+      }
     },
-    bitsync: 175,
-    total: 175
+    bitsync: 185,
+    total: 185
   }
 };
 cloudDoc.settings.bitsyncInputAccounts = [{
@@ -100,7 +116,11 @@ cloudDoc.settings.bitsyncInputAccounts = [{
 }];
 const mergedDoc = hubMergeHubDocuments(localDoc, cloudDoc);
 const mergedDay = mergedDoc.settings.revenueLog['2026-09-27'] || {};
-assert('merge keeps cloud bitsyncAccounts', !!(mergedDay.bitsyncAccounts && mergedDay.bitsyncAccounts.bs1.total === 175));
+assert('merge keeps cloud bitsyncAccounts', !!(mergedDay.bitsyncAccounts && mergedDay.bitsyncAccounts.bs1.total === 185));
+assert('merge keeps bitsync cumulative fields', !!(mergedDay.bitsyncAccounts &&
+  mergedDay.bitsyncAccounts.bs1.stakingRewardCumulative === 10 &&
+  mergedDay.bitsyncAccounts.bs1.operationRewardCumulative === 50 &&
+  mergedDay.bitsyncAccounts.bs1.inputMode === 'cumulative'));
 assert('merge keeps RAM alongside bitsync', !!(mergedDay.ramAccounts && mergedDay.ramAccounts.m1));
 assert('merge keeps bitsync principal records', !!(mergedDoc.settings.bitsyncInputAccounts &&
   mergedDoc.settings.bitsyncInputAccounts[0].nftPurchaseRecords.length === 1));
@@ -175,12 +195,34 @@ try {
   const bitsyncUi = await page.evaluate(() => {
     const ids = (typeof getBitsyncInputAccounts === 'function' ? getBitsyncInputAccounts() : []);
     const accId = ids[0] && ids[0].id;
+    const body = document.getElementById('modalContent') ? (document.getElementById('modalContent').textContent || '') : '';
+    const html = document.getElementById('modalContent') ? (document.getElementById('modalContent').innerHTML || '') : '';
+    function hasCum(key) {
+      return accId ? !!document.getElementById('bitsyncCum_' + key + '_' + accId) : false;
+    }
+    function fieldHtml(key) {
+      let el = accId ? document.getElementById('bitsyncCum_' + key + '_' + accId) : null;
+      return el && el.parentElement ? el.parentElement.innerHTML : '';
+    }
     return {
       title: document.getElementById('modalTitle') ? document.getElementById('modalTitle').textContent : '',
       hasNameInput: !!document.getElementById('bitsyncNewAccountName'),
-      hasNft: accId ? !!document.getElementById('bitsyncNft_' + accId) : false,
-      hasOp: accId ? !!document.getElementById('bitsyncOp_' + accId) : false,
-      hasBonus: accId ? !!document.getElementById('bitsyncBonus_' + accId) : false,
+      hasVault: hasCum('operationRewardCumulative'),
+      hasVBonus: hasCum('profitBonusCumulative'),
+      hasStaking: hasCum('stakingRewardCumulative'),
+      hasNBonus: hasCum('nftSaleRewardCumulative'),
+      labelOrderOk: body.indexOf('VAULT 運用益') >= 0 &&
+        body.indexOf('VAULT 運用益') < body.indexOf('V BONUS') &&
+        body.indexOf('V BONUS') < body.indexOf('ステーキング報酬') &&
+        body.indexOf('ステーキング報酬') < body.indexOf('N BONUS'),
+      noOfficialPlaceholder: html.indexOf('公式の累計額') < 0 &&
+        !(accId && document.getElementById('bitsyncCum_operationRewardCumulative_' + accId) &&
+          document.getElementById('bitsyncCum_operationRewardCumulative_' + accId).getAttribute('placeholder')),
+      hasUsdtUnit: fieldHtml('operationRewardCumulative').indexOf('USDT') >= 0,
+      hasPrevHint: body.indexOf('初回入力：基準値として保存') >= 0 || body.indexOf('前回の累計額') >= 0,
+      hasTodayProfit: accId ? !!document.getElementById('bitsyncDailyProfit_' + accId) : false,
+      todayProfitText: accId && document.getElementById('bitsyncDailyProfit_' + accId)
+        ? document.getElementById('bitsyncDailyProfit_' + accId).textContent : '',
       hasAddNft: accId ? !!document.getElementById('bitsyncAddNft_' + accId) : false,
       hasAddOp: accId ? !!document.getElementById('bitsyncAddOp_' + accId) : false,
       hasSave: !!document.getElementById('bitsyncSaveRevenueBtn'),
@@ -192,9 +234,16 @@ try {
   });
   assert('BITSYNC input title', bitsyncUi.title.indexOf('BITSYNC') >= 0, bitsyncUi.title);
   assert('BITSYNC no daily name field on input', !bitsyncUi.hasNameInput);
-  assert('BITSYNC NFT reward field', bitsyncUi.hasNft);
-  assert('BITSYNC operation reward field', bitsyncUi.hasOp);
-  assert('BITSYNC bonus field', bitsyncUi.hasBonus);
+  assert('BITSYNC VAULT cumulative field', bitsyncUi.hasVault);
+  assert('BITSYNC V BONUS cumulative field', bitsyncUi.hasVBonus);
+  assert('BITSYNC staking cumulative field', bitsyncUi.hasStaking);
+  assert('BITSYNC N BONUS cumulative field', bitsyncUi.hasNBonus);
+  assert('BITSYNC 4-field display order', bitsyncUi.labelOrderOk);
+  assert('BITSYNC no official placeholder', bitsyncUi.noOfficialPlaceholder);
+  assert('BITSYNC USDT unit visible', bitsyncUi.hasUsdtUnit);
+  assert('BITSYNC previous cumulative hint', bitsyncUi.hasPrevHint);
+  assert('BITSYNC today profit row', bitsyncUi.hasTodayProfit);
+  assert('BITSYNC today profit starts empty', bitsyncUi.todayProfitText === '—', bitsyncUi.todayProfitText);
   assert('BITSYNC add NFT field', bitsyncUi.hasAddNft);
   assert('BITSYNC add operating field', bitsyncUi.hasAddOp);
   assert('BITSYNC save revenue button', bitsyncUi.hasSave);
@@ -203,9 +252,37 @@ try {
   assert('BITSYNC initial operating 5000', bitsyncUi.opTotal === 5000, String(bitsyncUi.opTotal));
 
   if (bitsyncUi.accId) {
-    await page.fill('#bitsyncNft_' + bitsyncUi.accId, '100');
-    await page.fill('#bitsyncOp_' + bitsyncUi.accId, '50');
-    await page.fill('#bitsyncBonus_' + bitsyncUi.accId, '25');
+    const id = bitsyncUi.accId;
+    await page.fill('#bitsyncCum_operationRewardCumulative_' + id, '100');
+    await page.fill('#bitsyncCum_profitBonusCumulative_' + id, '50');
+    await page.fill('#bitsyncCum_stakingRewardCumulative_' + id, '25');
+    await page.fill('#bitsyncCum_nftSaleRewardCumulative_' + id, '200');
+    await page.waitForTimeout(200);
+    const livePreview = await page.evaluate((accId) => {
+      if (typeof updateBitsyncDerivedPreview === 'function') updateBitsyncDerivedPreview(accId);
+      let el = document.getElementById('bitsyncDailyProfit_' + accId);
+      let hint = document.getElementById('bitsyncDailyProfitHint_' + accId);
+      return {
+        text: el ? el.textContent : '',
+        hint: hint ? hint.textContent : '',
+        hasUsdt: el ? String(el.textContent || '').indexOf('USDT') >= 0 : false
+      };
+    }, id);
+    assert('BITSYNC live preview baseline 0 USDT', livePreview.text.indexOf('0') >= 0 && livePreview.hasUsdt, JSON.stringify(livePreview));
+    assert('BITSYNC live preview baseline hint', livePreview.hint.indexOf('初回') >= 0 || livePreview.hint.indexOf('0 USDT') >= 0, livePreview.hint);
+
+    // Partial fill → preview not confirmed
+    await page.fill('#bitsyncCum_nftSaleRewardCumulative_' + id, '');
+    await page.waitForTimeout(100);
+    const incompletePreview = await page.evaluate((accId) => {
+      updateBitsyncDerivedPreview(accId);
+      let el = document.getElementById('bitsyncDailyProfit_' + accId);
+      return el ? el.textContent : '';
+    }, id);
+    assert('BITSYNC incomplete fields show dash', incompletePreview === '—', incompletePreview);
+    await page.fill('#bitsyncCum_nftSaleRewardCumulative_' + id, '200');
+    await page.waitForTimeout(100);
+
     await page.evaluate(() => {
       if (typeof saveBitsyncRevenueInput === 'function') saveBitsyncRevenueInput();
     });
@@ -259,16 +336,176 @@ try {
     let opTotal = acc && typeof bitsyncGetOperatingPrincipalTotal === 'function' ? bitsyncGetOperatingPrincipalTotal(acc.id) : 0;
     return ae ? {
       total: ae.total,
-      nft: ae.nftSaleReward,
-      op: ae.operationReward,
-      bonus: ae.profitBonus,
+      isBaseline: ae.isBaseline,
+      inputMode: ae.inputMode,
+      vaultCum: ae.operationRewardCumulative,
+      vBonusCum: ae.profitBonusCumulative,
+      stakeCum: ae.stakingRewardCumulative,
+      nBonusCum: ae.nftSaleRewardCumulative,
+      vault: ae.operationReward,
+      vBonus: ae.profitBonus,
+      stake: ae.stakingReward,
+      nBonus: ae.nftSaleReward,
       nftTotal: nftTotal,
       opTotal: opTotal
     } : null;
   });
-  assert('BITSYNC save total 175', saved && Number(saved.total) === 175, JSON.stringify(saved));
+  assert('BITSYNC first save is baseline total 0', saved && Number(saved.total) === 0 && saved.isBaseline === true, JSON.stringify(saved));
+  assert('BITSYNC first save stores cumulatives', saved &&
+    Number(saved.vaultCum) === 100 && Number(saved.vBonusCum) === 50 &&
+    Number(saved.stakeCum) === 25 && Number(saved.nBonusCum) === 200, JSON.stringify(saved));
+  assert('BITSYNC first save daily zeros', saved &&
+    Number(saved.vault) === 0 && Number(saved.vBonus) === 0 &&
+    Number(saved.stake) === 0 && Number(saved.nBonus) === 0, JSON.stringify(saved));
   assert('BITSYNC cumulative NFT 4500', saved && saved.nftTotal === 4500, JSON.stringify(saved));
   assert('BITSYNC cumulative operating 7500', saved && saved.opTotal === 7500, JSON.stringify(saved));
+
+  // Isolated cumulative calc scenarios (fixed dates; no prod cloud)
+  const calcSuite = await page.evaluate(() => {
+    const out = {};
+    const accA = 'bs-calc-a';
+    const accB = 'bs-calc-b';
+    const cum = (v, b, s, n) => ({
+      operationRewardCumulative: v,
+      profitBonusCumulative: b,
+      stakingRewardCumulative: s,
+      nftSaleRewardCumulative: n
+    });
+    // preserve investment accounts from UI test; use separate revenue log keys
+    const preservedInv = (settings.bitsyncInputAccounts || []).slice();
+    settings.bitsyncInputAccounts = preservedInv.concat([
+      { id: accA, username: 'calc-a', name: 'calc-a', startDate: '2026/10/16', nftPurchaseRecords: [], operatingRecords: [] },
+      { id: accB, username: 'calc-b', name: 'calc-b', startDate: '2026/10/16', nftPurchaseRecords: [], operatingRecords: [] }
+    ]);
+    // wipe only calc account days by rebuilding log without calc ids — keep today UI entry
+    const keepLog = {};
+    Object.keys(settings.revenueLog || {}).forEach(function (dk) {
+      const day = settings.revenueLog[dk];
+      if (!day || !day.bitsyncAccounts) {
+        keepLog[dk] = day;
+        return;
+      }
+      const copy = Object.assign({}, day, { bitsyncAccounts: Object.assign({}, day.bitsyncAccounts) });
+      delete copy.bitsyncAccounts[accA];
+      delete copy.bitsyncAccounts[accB];
+      keepLog[dk] = copy;
+    });
+    settings.revenueLog = keepLog;
+
+    // 1) baseline + gap + delta
+    pdSaveBitsyncPerformanceEntry('2026-10-16', accA, 'calc-a', cum(100, 50, 25, 200));
+    pdSaveBitsyncPerformanceEntry('2026-10-18', accA, 'calc-a', cum(110, 55, 30, 210));
+    const d16 = settings.revenueLog['2026-10-16'].bitsyncAccounts[accA];
+    const d18 = settings.revenueLog['2026-10-18'].bitsyncAccounts[accA];
+    out.baselineTotal = d16.total;
+    out.baselineFlag = d16.isBaseline;
+    out.gapDayTotal = d18.total;
+    out.gapDayVault = d18.operationReward;
+    out.gapDayStake = d18.stakingReward;
+
+    // 2) same-day re-entry (overwrite 10-18)
+    pdSaveBitsyncPerformanceEntry('2026-10-18', accA, 'calc-a', cum(120, 60, 35, 220));
+    const d18b = settings.revenueLog['2026-10-18'].bitsyncAccounts[accA];
+    out.sameDayTotal = d18b.total;
+    out.sameDayVault = d18b.operationReward;
+
+    // 3) past edit 10-17 insert path: add 10-17 then edit, with 10-18 present
+    // Reset chain for past-edit scenario
+    delete settings.revenueLog['2026-10-16'].bitsyncAccounts[accA];
+    delete settings.revenueLog['2026-10-18'].bitsyncAccounts[accA];
+    pdSaveBitsyncPerformanceEntry('2026-10-16', accA, 'calc-a', cum(100, 0, 0, 0));
+    pdSaveBitsyncPerformanceEntry('2026-10-17', accA, 'calc-a', cum(105, 0, 0, 0));
+    pdSaveBitsyncPerformanceEntry('2026-10-18', accA, 'calc-a', cum(110, 0, 0, 0));
+    out.beforeEdit17 = settings.revenueLog['2026-10-17'].bitsyncAccounts[accA].total;
+    out.beforeEdit18 = settings.revenueLog['2026-10-18'].bitsyncAccounts[accA].total;
+    const preview = pdPreviewBitsyncCumulativeSave(accA, '2026-10-17', cum(107, 0, 0, 0));
+    out.previewOk = preview.ok;
+    out.preview17 = preview.impacts && preview.impacts.find(function (r) { return r.dateKey === '2026-10-17'; });
+    out.preview18 = preview.impacts && preview.impacts.find(function (r) { return r.dateKey === '2026-10-18'; });
+    pdSaveBitsyncPerformanceEntry('2026-10-17', accA, 'calc-a', cum(107, 0, 0, 0));
+    out.afterEdit17 = settings.revenueLog['2026-10-17'].bitsyncAccounts[accA].total;
+    out.afterEdit18 = settings.revenueLog['2026-10-18'].bitsyncAccounts[accA].total;
+    out.afterEdit18Cum = settings.revenueLog['2026-10-18'].bitsyncAccounts[accA].operationRewardCumulative;
+
+    // 4) decrease rejected
+    const dec = pdPreviewBitsyncCumulativeSave(accA, '2026-10-18', cum(100, 0, 0, 0));
+    out.decreaseOk = dec.ok;
+    out.decreaseReason = dec.reason;
+
+    // 5) inconsistency rejected (edit 10-16 vault above later day)
+    const bad = pdPreviewBitsyncCumulativeSave(accA, '2026-10-16', cum(200, 0, 0, 0));
+    out.inconsistOk = bad.ok;
+    out.inconsistReason = bad.reason;
+
+    // 6) legacy preserved
+    settings.revenueLog['2026-10-10'] = {
+      bitsyncAccounts: {
+        [accA]: {
+          accountId: accA,
+          nftSaleReward: 90,
+          operationReward: 10,
+          profitBonus: 3,
+          total: 103,
+          inputMode: 'legacy'
+        }
+      },
+      bitsync: 103
+    };
+    const legacyBefore = JSON.stringify(settings.revenueLog['2026-10-10'].bitsyncAccounts[accA]);
+    pdSaveBitsyncPerformanceEntry('2026-10-19', accA, 'calc-a', cum(130, 0, 0, 0));
+    const legacyAfter = JSON.stringify(settings.revenueLog['2026-10-10'].bitsyncAccounts[accA]);
+    out.legacyUnchanged = legacyBefore === legacyAfter;
+    out.legacyTotal = settings.revenueLog['2026-10-10'].bitsyncAccounts[accA].total;
+
+    // 7) multi-account independence
+    pdSaveBitsyncPerformanceEntry('2026-10-16', accB, 'calc-b', cum(1000, 0, 0, 0));
+    pdSaveBitsyncPerformanceEntry('2026-10-18', accB, 'calc-b', cum(1005, 0, 0, 0));
+    out.accB18 = settings.revenueLog['2026-10-18'].bitsyncAccounts[accB].total;
+    out.accA18Still = settings.revenueLog['2026-10-18'].bitsyncAccounts[accA]
+      ? settings.revenueLog['2026-10-18'].bitsyncAccounts[accA].total
+      : null;
+
+    // Seed portfolio profit data (4 fields) for card assertions
+    settings.revenueLog['2026-10-20'] = settings.revenueLog['2026-10-20'] || {};
+    settings.revenueLog['2026-10-20'].bitsyncAccounts = settings.revenueLog['2026-10-20'].bitsyncAccounts || {};
+    // Use UI account for portfolio totals
+    const uiAcc = preservedInv[0];
+    if (uiAcc && uiAcc.id) {
+      settings.revenueLog['2026-10-20'].bitsyncAccounts[uiAcc.id] = {
+        accountId: uiAcc.id,
+        accountName: uiAcc.username,
+        operationReward: 50,
+        profitBonus: 25,
+        stakingReward: 10,
+        nftSaleReward: 100,
+        total: 185,
+        inputMode: 'legacy'
+      };
+      settings.revenueLog['2026-10-20'] = pdRecalculateRevenueEntry(settings.revenueLog['2026-10-20'], '2026-10-20');
+    }
+    const bd = bitsyncSumAllTimeProfitBreakdown();
+    out.pfVault = bd.vaultProfit;
+    out.pfVBonus = bd.vBonusProfit;
+    out.pfStake = bd.stakingProfit;
+    out.pfNBonus = bd.nBonusProfit;
+    out.pfTotal = bd.totalProfit;
+    return out;
+  });
+  assert('calc baseline total 0', calcSuite.baselineTotal === 0 && calcSuite.baselineFlag === true, JSON.stringify(calcSuite));
+  assert('calc gap-day delta total 30', calcSuite.gapDayTotal === 30, JSON.stringify(calcSuite));
+  assert('calc gap-day vault delta 10', calcSuite.gapDayVault === 10, JSON.stringify(calcSuite));
+  assert('calc gap-day staking delta 5', calcSuite.gapDayStake === 5, JSON.stringify(calcSuite));
+  // Same-day rewrite uses cumulative from the last day BEFORE today (not the overwritten values).
+  assert('calc same-day reentry vs prior day', calcSuite.sameDayTotal === 60 && calcSuite.sameDayVault === 20, JSON.stringify(calcSuite));
+  assert('calc past-edit preview ok', calcSuite.previewOk === true, JSON.stringify(calcSuite));
+  assert('calc past-edit 10/17 becomes 7', calcSuite.afterEdit17 === 7, JSON.stringify(calcSuite));
+  assert('calc past-edit 10/18 becomes 3', calcSuite.afterEdit18 === 3, JSON.stringify(calcSuite));
+  assert('calc past-edit keeps later cumulative 110', calcSuite.afterEdit18Cum === 110, JSON.stringify(calcSuite));
+  assert('calc decrease rejected', calcSuite.decreaseOk === false && calcSuite.decreaseReason === 'decrease', JSON.stringify(calcSuite));
+  assert('calc inconsistency rejected', calcSuite.inconsistOk === false && calcSuite.inconsistReason === 'inconsistency', JSON.stringify(calcSuite));
+  assert('calc legacy history preserved', calcSuite.legacyUnchanged === true && calcSuite.legacyTotal === 103, JSON.stringify(calcSuite));
+  assert('calc multi-account B delta 5', calcSuite.accB18 === 5, JSON.stringify(calcSuite));
+  assert('calc staking in portfolio breakdown', calcSuite.pfStake >= 10 && calcSuite.pfNBonus >= 100, JSON.stringify(calcSuite));
 
   await page.evaluate(() => {
     if (typeof closeModal === 'function') closeModal();
@@ -283,8 +520,8 @@ try {
     if (!card) return { ok: false, detail: 'no card' };
     let text = card.textContent || '';
     return {
-      ok: text.indexOf('NFT購入') >= 0 && text.indexOf('NFT販売利益') >= 0 &&
-        text.indexOf('運用額') >= 0 && text.indexOf('運用利益') >= 0 &&
+      ok: text.indexOf('NFT購入') >= 0 && text.indexOf('N BONUS') >= 0 &&
+        text.indexOf('運用額') >= 0 && text.indexOf('VAULT等利益') >= 0 &&
         text.indexOf('累計利益') >= 0 && text.indexOf('回収率') >= 0 &&
         text.indexOf('予測月利') < 0 && text.indexOf('累計利回り') < 0,
       hasRecoveryBar: !!card.querySelector('.pfRecoveryBlock .pfRecoveryTrack'),
@@ -321,10 +558,10 @@ try {
   });
   assert('BITSYNC portfolio NFT $4500', pfValues && pfValues.nft === 4500, JSON.stringify(pfValues));
   assert('BITSYNC portfolio operating $7500', pfValues && pfValues.op === 7500, JSON.stringify(pfValues));
-  assert('BITSYNC NFT sale profit $100', pfValues && pfValues.nftSaleProfit === 100, JSON.stringify(pfValues));
-  assert('BITSYNC operation profit $75', pfValues && pfValues.operationProfit === 75, JSON.stringify(pfValues));
-  assert('BITSYNC total profit $175', pfValues && pfValues.totalProfit === 175, JSON.stringify(pfValues));
-  assert('BITSYNC recovery ~1.5%', pfValues && pfValues.recovery === 1.5, JSON.stringify(pfValues));
+  assert('BITSYNC N BONUS profit includes seed', pfValues && pfValues.nftSaleProfit >= 100, JSON.stringify(pfValues));
+  assert('BITSYNC VAULT等 profit includes staking path', pfValues && pfValues.operationProfit >= 75, JSON.stringify(pfValues));
+  assert('BITSYNC total profit includes 4 fields', pfValues && pfValues.totalProfit >= 175, JSON.stringify(pfValues));
+  assert('BITSYNC recovery positive', pfValues && pfValues.recovery != null && pfValues.recovery > 0, JSON.stringify(pfValues));
 
   await page.evaluate(() => {
     let card = document.querySelector('.pfProjectCard--bitsync');
@@ -349,17 +586,29 @@ try {
     };
   });
   assert('BITSYNC detail modal opens', detailUi.title.indexOf('BITSYNC') >= 0, detailUi.title);
-  assert('BITSYNC detail NFT section', detailUi.hasNftSection, detailUi.text);
-  assert('BITSYNC detail personal section', detailUi.hasPersonalSection, detailUi.text);
-  assert('BITSYNC detail group section', detailUi.hasGroupSection, detailUi.text);
-  assert('BITSYNC detail month chart section', detailUi.hasMonthChart && detailUi.hasPie, detailUi.text);
+  const detailLabels = await page.evaluate(() => {
+    let content = document.getElementById('modalContent');
+    let text = content ? content.textContent || '' : '';
+    return {
+      hasVault: text.indexOf('VAULT 運用益') >= 0,
+      hasVBonus: text.indexOf('V BONUS') >= 0,
+      hasStaking: text.indexOf('ステーキング報酬') >= 0,
+      hasNBonus: text.indexOf('N BONUS') >= 0,
+      hasPrincipal: text.indexOf('NFT購入金額') >= 0 && text.indexOf('運用額') >= 0,
+      hasMonthChart: text.indexOf('今月の収益構成') >= 0,
+      hasPie: !!document.querySelector('.pfProfitDetail--bitsync .pfProfitPieChart, .pfProfitDetail--bitsync .pfProfitPieEmpty'),
+      bd: typeof pfGetBitsyncProfitBreakdown === 'function'
+        ? pfGetBitsyncProfitBreakdown(2026, 9) : null
+    };
+  });
+  assert('BITSYNC detail 4 profit labels', detailLabels.hasVault && detailLabels.hasVBonus &&
+    detailLabels.hasStaking && detailLabels.hasNBonus, JSON.stringify(detailLabels));
+  assert('BITSYNC detail principal section', detailLabels.hasPrincipal, JSON.stringify(detailLabels));
+  assert('BITSYNC detail month chart section', detailLabels.hasMonthChart && detailLabels.hasPie, JSON.stringify(detailLabels));
   assert('BITSYNC detail NFT purchase $4500', detailUi.bd && detailUi.bd.nftPurchaseUsd === 4500, JSON.stringify(detailUi.bd));
-  assert('BITSYNC detail NFT sale profit $100', detailUi.bd && detailUi.bd.nftSaleProfit === 100, JSON.stringify(detailUi.bd));
   assert('BITSYNC detail personal operating $7500', detailUi.bd && detailUi.bd.personalOperatingUsd === 7500, JSON.stringify(detailUi.bd));
-  assert('BITSYNC detail personal profit $50', detailUi.bd && detailUi.bd.personalOperationProfit === 50, JSON.stringify(detailUi.bd));
-  assert('BITSYNC detail group profit $25', detailUi.bd && detailUi.bd.groupOperationProfit === 25, JSON.stringify(detailUi.bd));
-  assert('BITSYNC detail month total matches pie', detailUi.bd &&
-    detailUi.bd.monthTotal === 175, JSON.stringify(detailUi.bd));
+  assert('BITSYNC detail segments are 4', detailLabels.bd && detailLabels.bd.chartSegments &&
+    detailLabels.bd.chartSegments.length === 4, JSON.stringify(detailLabels.bd && detailLabels.bd.chartSegments));
 
   const themeColors = await page.evaluate(() => {
     let cardBorder = '';

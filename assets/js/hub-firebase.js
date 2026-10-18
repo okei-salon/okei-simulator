@@ -2,7 +2,7 @@
  * Google 認証後に LocalStorage / Firestore を同期
  * 組織図・ポートフォリオはフィールド単位でマージして端末間の上書きを防ぐ
  */
-var HUB_FIREBASE_JS_BUILD = 'Ver2.0.65/Build20260929-v005';
+var HUB_FIREBASE_JS_BUILD = 'Ver2.0.66/Build20261018-v001';
 
 var HUB_REVENUE_CLOUD_SYNC_FAIL_MSG = 'Cloud同期に失敗しました。端末には保存されています';
 
@@ -2122,7 +2122,10 @@ function hubRevenueAccountEntryHasSavedData(projectKey, accountEntry) {
   }
   if (projectKey === 'bitsync') {
     return accountEntry.nftSaleReward != null || accountEntry.operationReward != null ||
-      accountEntry.profitBonus != null || accountEntry.total != null;
+      accountEntry.profitBonus != null || accountEntry.stakingReward != null ||
+      accountEntry.operationRewardCumulative != null || accountEntry.profitBonusCumulative != null ||
+      accountEntry.stakingRewardCumulative != null || accountEntry.nftSaleRewardCumulative != null ||
+      accountEntry.total != null;
   }
   return Object.keys(accountEntry).length > 0;
 }
@@ -2234,6 +2237,11 @@ function hubRevenueSnapshotAccountValuesEqual(projectKey, expectedAe, actualAe) 
     return near(expectedAe.nftSaleReward, actualAe.nftSaleReward) &&
       near(expectedAe.operationReward, actualAe.operationReward) &&
       near(expectedAe.profitBonus, actualAe.profitBonus) &&
+      near(expectedAe.stakingReward, actualAe.stakingReward) &&
+      near(expectedAe.operationRewardCumulative, actualAe.operationRewardCumulative) &&
+      near(expectedAe.profitBonusCumulative, actualAe.profitBonusCumulative) &&
+      near(expectedAe.stakingRewardCumulative, actualAe.stakingRewardCumulative) &&
+      near(expectedAe.nftSaleRewardCumulative, actualAe.nftSaleRewardCumulative) &&
       near(expectedAe.total, actualAe.total);
   }
   return JSON.stringify(expectedAe) === JSON.stringify(actualAe);
