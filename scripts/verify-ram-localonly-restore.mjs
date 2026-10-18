@@ -1,9 +1,12 @@
 /**
  * Verify safe RAM-only localOnly restore:
- * - members → 148 from RESTORED_SUCCESS
+ * - members → 148 from CI-safe synthetic fixture
  * - ORCA / ENI / revenueLog / scenarios / non-RAM settings unchanged
  * - Firestore / hubPushCloudDoc writes = 0 even if orcaRender/hubSaveToStorage fire
  * - visibility / schedule / sync paths blocked while suspended
+ *
+ * Fixture: scripts/fixtures/ram-localonly-restore-success.hub.json
+ * (synthetic; no production PII — not merge-input restore dumps)
  *
  * Does NOT touch production. localhost only.
  */
@@ -14,7 +17,12 @@ import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
-const SUCCESS_HUB = path.join(ROOT, 'merge-input', 'OUKEI_HUB_SAFARI_RAM_RESTORED_SUCCESS_20260915.hub');
+const SUCCESS_HUB = path.join(
+  ROOT,
+  'scripts',
+  'fixtures',
+  'ram-localonly-restore-success.hub.json'
+);
 const BASE_URL = process.env.OUKEI_BASE_URL || 'http://127.0.0.1:5050';
 
 function assert(cond, msg) {
