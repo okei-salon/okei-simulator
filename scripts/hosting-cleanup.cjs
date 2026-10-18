@@ -3,8 +3,13 @@
 
 /**
  * Prune old Firebase Hosting versions and set retainedReleaseCount.
- * Uses the same credentials as `firebase login`.
+ *
+ * Auth (prefer CI service account ADC, fall back to local firebase login):
+ *   1. GOOGLE_APPLICATION_CREDENTIALS → Application Default Credentials
+ *      (same service-account approach as FirebaseExtended/action-hosting-deploy)
+ *   2. Else local `firebase login` refresh token
  */
+const fs = require('fs');
 const { Client } = require('firebase-tools/lib/apiv2');
 const { hostingApiOrigin } = require('firebase-tools/lib/api');
 const hostingApi = require('firebase-tools/lib/hosting/api');
@@ -12,8 +17,63 @@ const auth = require('firebase-tools/lib/auth');
 const apiv2 = require('firebase-tools/lib/apiv2');
 const { requireAuth } = require('firebase-tools/lib/requireAuth');
 
+function assertServiceAccountFile(gacPath) {
+  if (!gacPath) {
+    throw new Error('GOOGLE_APPLICATION_CREDENTIALS is empty');
+  }
+  if (!fs.existsSync(gacPath)) {
+    throw new Error(
+      'GOOGLE_APPLICATION_CREDENTIALS file not found: ' + gacPath +
+      ' (Write Firebase service account step may have failed or path mismatch)'
+    );
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(fs.readFileSync(gacPath, 'utf8'));
+  } catch (err) {
+    throw new Error(
+      'GOOGLE_APPLICATION_CREDENTIALS is not valid JSON at ' + gacPath
+    );
+  }
+  if (!parsed || parsed.type !== 'service_account' || !parsed.client_email || !parsed.private_key) {
+    throw new Error(
+      'GOOGLE_APPLICATION_CREDENTIALS is not a service_account key JSON'
+    );
+  }
+  return parsed;
+}
+
 async function bootstrapAuth() {
-  const options = { project: PROJECT_ID, cwd: process.cwd() };
+  const options = {
+    project: PROJECT_ID,
+    projectId: PROJECT_ID,
+    cwd: process.cwd()
+  };
+
+  // Align with Hosting deploy action: service account via ADC in CI
+  const gac = process.env.GOOGLE_APPLICATION_CREDENTIALS;
+  if (gac) {
+    assertServiceAccountFile(gac);
+    if (!process.env.GOOGLE_CLOUD_PROJECT) {
+      process.env.GOOGLE_CLOUD_PROJECT = PROJECT_ID;
+    }
+    if (!process.env.GCLOUD_PROJECT) {
+      process.env.GCLOUD_PROJECT = PROJECT_ID;
+    }
+    try {
+      // Do not pass stale local user/tokens — force google-auth-library ADC path
+      await requireAuth(options);
+    } catch (err) {
+      const orig = err && err.original && (err.original.message || String(err.original));
+      const tip = orig ? ' (' + orig + ')' : '';
+      throw new Error(
+        'Hosting cleanup ADC auth failed via GOOGLE_APPLICATION_CREDENTIALS' + tip
+      );
+    }
+    return;
+  }
+
+  // Local developer path: firebase login
   const account = auth.getProjectDefaultAccount(process.cwd());
   if (account && account.tokens && account.tokens.refresh_token) {
     auth.setActiveAccount(options, account);
@@ -167,6 +227,10 @@ async function main() {
 }
 
 main().catch((err) => {
-  console.error(err && err.message ? err.message : err);
+  const message = err && err.message ? err.message : String(err);
+  console.error(message);
+  if (err && err.original && err.original.message && err.original.message !== message) {
+    console.error('cause:', err.original.message);
+  }
   process.exit(1);
 });

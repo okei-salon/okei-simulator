@@ -36,6 +36,12 @@ jobs:
   deploy:
     needs: verify
     runs-on: ubuntu-latest
+    env:
+      # Single path for cleanup ADC; Hosting deploy action uses the same secret via its input
+      GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/firebase-sa.json
+      GOOGLE_CLOUD_PROJECT: oukei-hub
+      GCLOUD_PROJECT: oukei-hub
+      FIREBASE_PROJECT: oukei-hub
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -44,12 +50,10 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Write Firebase service account
-        run: echo "$FIREBASE_SERVICE_ACCOUNT" > "${RUNNER_TEMP}/firebase-sa.json"
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_OUKEI_HUB }}
+        run: node scripts/write-ci-firebase-sa.cjs
       - name: Prune old Hosting releases
-        env:
-          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/firebase-sa.json
         run: npm run hosting:cleanup
       - uses: FirebaseExtended/action-hosting-deploy@v0
         with:
