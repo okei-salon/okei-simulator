@@ -4,10 +4,14 @@
 /**
  * Prune old Firebase Hosting versions and set retainedReleaseCount.
  *
- * Auth (prefer CI service account ADC, fall back to local firebase login):
+ * Auth (prefer CI ADC, fall back to local firebase login):
  *   1. GOOGLE_APPLICATION_CREDENTIALS → Application Default Credentials
- *      (same service-account approach as FirebaseExtended/action-hosting-deploy)
+ *      - CI: Workload Identity Federation (type: external_account) via
+ *        google-github-actions/auth
+ *      - Optional: classic service_account key JSON (local/legacy)
  *   2. Else local `firebase login` refresh token
+ *
+ * Does not print credential file contents.
  */
 const fs = require('fs');
 const { Client } = require('firebase-tools/lib/apiv2');
@@ -17,14 +21,18 @@ const auth = require('firebase-tools/lib/auth');
 const apiv2 = require('firebase-tools/lib/apiv2');
 const { requireAuth } = require('firebase-tools/lib/requireAuth');
 
-function assertServiceAccountFile(gacPath) {
+/**
+ * Validate ADC credential file shape without logging secrets.
+ * @returns {'service_account'|'external_account'}
+ */
+function assertAdcCredentialsFile(gacPath) {
   if (!gacPath) {
     throw new Error('GOOGLE_APPLICATION_CREDENTIALS is empty');
   }
   if (!fs.existsSync(gacPath)) {
     throw new Error(
       'GOOGLE_APPLICATION_CREDENTIALS file not found: ' + gacPath +
-      ' (Write Firebase service account step may have failed or path mismatch)'
+      ' (google-github-actions/auth may have failed to create credentials)'
     );
   }
   let parsed;
@@ -35,12 +43,34 @@ function assertServiceAccountFile(gacPath) {
       'GOOGLE_APPLICATION_CREDENTIALS is not valid JSON at ' + gacPath
     );
   }
-  if (!parsed || parsed.type !== 'service_account' || !parsed.client_email || !parsed.private_key) {
-    throw new Error(
-      'GOOGLE_APPLICATION_CREDENTIALS is not a service_account key JSON'
-    );
+  if (!parsed || typeof parsed !== 'object') {
+    throw new Error('GOOGLE_APPLICATION_CREDENTIALS JSON must be an object');
   }
-  return parsed;
+
+  if (parsed.type === 'service_account') {
+    if (typeof parsed.client_email !== 'string' || !parsed.client_email) {
+      throw new Error('service_account credentials missing client_email');
+    }
+    if (typeof parsed.private_key !== 'string' || parsed.private_key.length < 32) {
+      throw new Error('service_account credentials missing private_key');
+    }
+    return 'service_account';
+  }
+
+  // WIF / OIDC credentials file from google-github-actions/auth
+  if (parsed.type === 'external_account') {
+    if (typeof parsed.audience !== 'string' || !parsed.audience) {
+      throw new Error('external_account credentials missing audience');
+    }
+    if (!parsed.credential_source || typeof parsed.credential_source !== 'object') {
+      throw new Error('external_account credentials missing credential_source');
+    }
+    return 'external_account';
+  }
+
+  throw new Error(
+    'GOOGLE_APPLICATION_CREDENTIALS type must be service_account or external_account (WIF)'
+  );
 }
 
 async function bootstrapAuth() {
@@ -50,10 +80,10 @@ async function bootstrapAuth() {
     cwd: process.cwd()
   };
 
-  // Align with Hosting deploy action: service account via ADC in CI
+  // CI (WIF) and local ADC: prefer GOOGLE_APPLICATION_CREDENTIALS
   const gac = process.env.GOOGLE_APPLICATION_CREDENTIALS;
   if (gac) {
-    assertServiceAccountFile(gac);
+    const kind = assertAdcCredentialsFile(gac);
     if (!process.env.GOOGLE_CLOUD_PROJECT) {
       process.env.GOOGLE_CLOUD_PROJECT = PROJECT_ID;
     }
@@ -61,13 +91,13 @@ async function bootstrapAuth() {
       process.env.GCLOUD_PROJECT = PROJECT_ID;
     }
     try {
-      // Do not pass stale local user/tokens — force google-auth-library ADC path
+      // Force google-auth-library ADC (service_account or external_account)
       await requireAuth(options);
     } catch (err) {
       const orig = err && err.original && (err.original.message || String(err.original));
       const tip = orig ? ' (' + orig + ')' : '';
       throw new Error(
-        'Hosting cleanup ADC auth failed via GOOGLE_APPLICATION_CREDENTIALS' + tip
+        'Hosting cleanup ADC auth failed (' + kind + ') via GOOGLE_APPLICATION_CREDENTIALS' + tip
       );
     }
     return;

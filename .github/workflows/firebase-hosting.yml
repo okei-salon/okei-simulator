@@ -33,10 +33,15 @@ jobs:
       - name: Release verify gate
         run: npm run verify:release
 
+  # Deploy only from main (push or workflow_dispatch on main).
+  # GCP WIF attribute conditions should also restrict repository + refs/heads/main.
   deploy:
     needs: verify
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    # NOTE: `runner` context is NOT available in jobs.<id>.env — only in steps.
+    permissions:
+      contents: read
+      id-token: write
     env:
       GOOGLE_CLOUD_PROJECT: oukei-hub
       GCLOUD_PROJECT: oukei-hub
@@ -48,19 +53,15 @@ jobs:
           node-version: '20'
           cache: npm
       - run: npm ci
-      - name: Write Firebase service account
-        env:
-          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_OUKEI_HUB }}
-          # runner.temp is valid in step env (not job env)
-          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/firebase-sa.json
-        run: node scripts/write-ci-firebase-sa.cjs
-      - name: Prune old Hosting releases
-        env:
-          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/firebase-sa.json
-        run: npm run hosting:cleanup
-      - uses: FirebaseExtended/action-hosting-deploy@v0
+      - name: Authenticate to Google Cloud (WIF / OIDC)
+        uses: google-github-actions/auth@v2
         with:
-          repoToken: ${{ secrets.GITHUB_TOKEN }}
-          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_OUKEI_HUB }}
-          channelId: live
-          projectId: oukei-hub
+          project_id: oukei-hub
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+          create_credentials_file: true
+          export_environment_variables: true
+      - name: Prune old Hosting releases
+        run: npm run hosting:cleanup
+      - name: Deploy Firebase Hosting
+        run: npx firebase deploy --only hosting --project oukei-hub --non-interactive
