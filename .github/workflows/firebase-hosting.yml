@@ -36,9 +36,8 @@ jobs:
   deploy:
     needs: verify
     runs-on: ubuntu-latest
+    # NOTE: `runner` context is NOT available in jobs.<id>.env — only in steps.
     env:
-      # Single path for cleanup ADC; Hosting deploy action uses the same secret via its input
-      GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/firebase-sa.json
       GOOGLE_CLOUD_PROJECT: oukei-hub
       GCLOUD_PROJECT: oukei-hub
       FIREBASE_PROJECT: oukei-hub
@@ -52,8 +51,12 @@ jobs:
       - name: Write Firebase service account
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_OUKEI_HUB }}
+          # runner.temp is valid in step env (not job env)
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/firebase-sa.json
         run: node scripts/write-ci-firebase-sa.cjs
       - name: Prune old Hosting releases
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/firebase-sa.json
         run: npm run hosting:cleanup
       - uses: FirebaseExtended/action-hosting-deploy@v0
         with:
